@@ -1,0 +1,264 @@
+package chat
+
+import (
+	"bytes"
+	"context"
+	json "encoding/json/v2"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/providers"
+)
+
+func TestHandleModelLookup_Kind(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	repo := db.NewRepo(database)
+	handler := NewChatHandler(repo)
+
+	// Test kind: image should return list with at least one (if provider has ImageURL)
+	req := httptest.NewRequest("GET", "/v1/models/image", nil)
+	w := httptest.NewRecorder()
+	handler.HandleModelLookup(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for kind image, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp["object"] != "list" {
+		t.Errorf("expected list, got %v", resp["object"])
+	}
+}
+
+func TestHandleModelLookup_ProviderModel(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	// Upstream parity: an alias target is only listed through a connected
+	// provider, so seed the claude (cc) connection it points at.
+	if _, err := database.Exec(`INSERT INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES
+		('conn-cc-alias', 'claude', 'apikey', 'Claude Alias', 1, 1, '{"apiKey":"sk-test-cc"}', '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`); err != nil {
+		t.Fatalf("seed claude connection: %v", err)
+	}
+	if _, err := database.Exec(`INSERT INTO kv (scope, key, value) VALUES ('modelAliases', 'cc/claude-sonnet-4-6', '"cc/claude-sonnet-4-6"')`); err != nil {
+		t.Fatalf("seed alias: %v", err)
+	}
+	repo := db.NewRepo(database)
+	handler := NewChatHandler(repo)
+
+	req := httptest.NewRequest("GET", "/v1/models/cc/claude-sonnet-4-6", nil)
+	w := httptest.NewRecorder()
+	handler.HandleModelLookup(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for provider/model, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp["id"] != "cc/claude-sonnet-4-6" {
+		t.Errorf("expected id cc/claude-sonnet-4-6, got %v", resp["id"])
+	}
+	// Test encoded slash
+	req2 := httptest.NewRequest("GET", "/v1/models/cc%2Fclaude-sonnet-4-6", nil)
+	w2 := httptest.NewRecorder()
+	handler.HandleModelLookup(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for encoded, got %d: %s", w2.Code, w2.Body.String())
+	}
+}
+
+func TestHandleModelLookup_NotFound(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	repo := db.NewRepo(database)
+	handler := NewChatHandler(repo)
+
+	req := httptest.NewRequest("GET", "/v1/models/cc/missing-model-xyz", nil)
+	w := httptest.NewRecorder()
+	handler.HandleModelLookup(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if errObj, ok := resp["error"].(map[string]any); ok {
+		if errObj["code"] != "model_not_found" {
+			t.Errorf("expected model_not_found, got %v", errObj["code"])
+		}
+	} else {
+		t.Error("expected error object")
+	}
+}
+
+func TestHandleModels_CustomModels(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	// Upstream parity: customs surface under an active credentialed
+	// connection, so seed one for the cc provider first.
+	if _, err := database.Exec(`INSERT INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES
+		('conn-cc-test', 'claude', 'apikey', 'Claude Test', 1, 1, '{"apiKey":"sk-test-cc"}', '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`); err != nil {
+		t.Fatalf("seed claude connection: %v", err)
+	}
+	customJSON := `{"providerAlias":"cc","id":"my-custom-vision","type":"llm","name":"my-custom-vision","caps":{"vision":true,"reasoning":true}}`
+	if _, err := database.Exec(`INSERT INTO kv (scope, key, value) VALUES ('customModels', 'cc/my-custom-vision/llm', ?)`, customJSON); err != nil {
+		t.Fatalf("seed custom: %v", err)
+	}
+	repo := db.NewRepo(database)
+	handler := NewChatHandler(repo)
+
+	req := httptest.NewRequest("GET", "/models", nil)
+	w := httptest.NewRecorder()
+	handler.HandleModels(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !bytes.Contains([]byte(body), []byte("cc/my-custom-vision")) {
+		t.Errorf("expected custom model cc/my-custom-vision in list, got %s", body)
+	}
+	// Check caps applied
+	caps := providers.GetCapabilitiesForModel("cc", "my-custom-vision")
+	if !caps.Vision || !caps.Reasoning {
+		t.Errorf("custom caps should be Vision+Reasoning, got %+v", caps)
+	}
+	// Cleanup
+	providers.ClearCustomModelCaps()
+}
+
+func TestHandleModels_MapsProviderNodeRowIDToPrefix(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+
+	// Seed providerNode with row ID "openai-compatible-chat-0489217b" and prefix "nara"
+	nodeData := `{"prefix":"nara","apiType":"openai-compatible","baseUrl":"https://nara.example.com/v1"}`
+	_, err := database.Exec(`INSERT INTO providerNodes (id, type, name, data, createdAt, updatedAt) VALUES
+		('openai-compatible-chat-0489217b', 'openai-compatible', 'Nara AI', ?, '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`, nodeData)
+	if err != nil {
+		t.Fatalf("seed providerNode: %v", err)
+	}
+
+	// Seed customModel in kv with providerAlias set to internal node ID
+	customJSON := `{"providerAlias":"openai-compatible-chat-0489217b","id":"glm-5.3","type":"chat","name":"GLM 5.3","caps":{"vision":true}}`
+	_, err = database.Exec(`INSERT INTO kv (scope, key, value) VALUES ('customModels', 'openai-compatible-chat-0489217b|glm-5.3|chat', ?)`, customJSON)
+	if err != nil {
+		t.Fatalf("seed customModels: %v", err)
+	}
+	// Upstream parity: the node row makes its connection routable — seed a
+	// matching connection so the custom surfaces under the node prefix. The
+	// connection-level prefix ("nara") wins over the node row generic type,
+	// so the custom resolves to nara/glm-5.3.
+	if _, err := database.Exec(`INSERT INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES
+		('conn-nara-test', 'openai-compatible-chat-0489217b', 'apikey', 'Nara ID', 1, 1, '{"apiKey":"sk-test-nara","providerSpecificData":{"prefix":"nara"}}', '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`); err != nil {
+		t.Fatalf("seed nara connection: %v", err)
+	}
+
+	repo := db.NewRepo(database)
+	handler := NewChatHandler(repo)
+
+	// 1. Verify GET /v1/models publishes "nara/glm-5.3" and NOT internal row ID
+	req := httptest.NewRequest("GET", "/v1/models", nil)
+	w := httptest.NewRecorder()
+	handler.HandleModels(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"id":"nara/glm-5.3"`) {
+		t.Errorf("expected mapped model id 'nara/glm-5.3', got %s", body)
+	}
+	if strings.Contains(body, "openai-compatible-chat-0489217b/glm-5.3") {
+		t.Errorf("leaked internal node row id in /v1/models: %s", body)
+	}
+	if !strings.Contains(body, `"owned_by":"nara"`) {
+		t.Errorf("expected owned_by 'nara', got %s", body)
+	}
+
+	// 2. Verify GET /v1/models/nara/glm-5.3 succeeds
+	reqLookup := httptest.NewRequest("GET", "/v1/models/nara/glm-5.3", nil)
+	wLookup := httptest.NewRecorder()
+	handler.HandleModelLookup(wLookup, reqLookup)
+	if wLookup.Code != http.StatusOK {
+		t.Fatalf("expected 200 for lookup nara/glm-5.3, got %d: %s", wLookup.Code, wLookup.Body.String())
+	}
+	lookupBody := wLookup.Body.String()
+	if !strings.Contains(lookupBody, `"id":"nara/glm-5.3"`) {
+		t.Errorf("expected lookup id 'nara/glm-5.3', got %s", lookupBody)
+	}
+}
+
+func TestAntigravityQuota_StrikeReassert(t *testing.T) {
+	ClearAntigravityQuotaCache()
+	connID := "test-conn-strike"
+	model := "gemini-3.8-flash-high"
+	ClearAntigravityStrikes(connID, model)
+
+	// Mock server that returns optimistic 90% remaining
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"models":{"` + model + `":{"quotaInfo":{"remainingFraction":0.9,"resetTime":"2099-01-01T00:00:00Z"}}}}`))
+	}))
+	defer srv.Close()
+
+	// Temporarily override URL
+	oldURL := antigravityQuotaBaseURL
+	antigravityQuotaBaseURL = srv.URL
+	defer func() { antigravityQuotaBaseURL = oldURL }()
+
+	// 3 consecutive explicit-quota 429s with optimistic quota should trigger strike block
+	// NOTE: upstream #4197's tests use "RATE_LIMIT_EXHAUSTED" (typo) which
+	// matches no marker; the real marker is "RATE_LIMIT_EXCEEDED".
+	for i := 0; i < 3; i++ {
+		res := HandleAntigravityQuotaError(AntigravityQuotaError{
+			Ctx: context.Background(), Client: srv.Client(), ConnectionID: connID,
+			Status: 429, Model: model, AccessToken: "token", ProjectID: "proj",
+			ErrorMessage: "RATE_LIMIT_EXCEEDED",
+		})
+		t.Logf("strike %d: res=%v", i+1, res)
+		if i < 2 && res != nil {
+			t.Fatalf("expected nil for first 2 strikes, got %v", *res)
+		}
+		if i == 2 && res == nil {
+			// Debug: check agStrikes
+			t.Logf("agStrikes for %s: %v", connID+"|"+model, agStrikes[connID+"|"+model])
+			t.Fatalf("expected block on 3rd strike")
+		}
+	}
+
+	t.Logf("after 3 strikes, IsBlocked=%v", IsAntigravityModelBlocked(connID, model))
+	for k, v := range agStrikes {
+		t.Logf("agStrikes[%q] = %v len=%d", k, v, len(v))
+	}
+	for k, v := range agStrikeBlocks {
+		t.Logf("agStrikeBlocks[%q] = %v", k, v)
+	}
+	// Also check quota cache
+	if quotas, err := RefreshAntigravityQuota(context.Background(), srv.Client(), connID, "token", "proj"); err == nil {
+		t.Logf("quotas after refresh: %v", quotas)
+		for mk, q := range quotas {
+			t.Logf("quota %q: %+v", mk, q)
+		}
+	}
+	if !IsAntigravityModelBlocked(connID, model) {
+		t.Error("should be blocked after 3 strikes")
+	}
+
+	// Refresh should re-assert the block even though upstream says 90%
+	_, err := RefreshAntigravityQuota(nil, srv.Client(), connID, "token", "proj")
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if !IsAntigravityModelBlocked(connID, model) {
+		t.Error("block should be re-asserted after optimistic refresh")
+	}
+
+	ClearAntigravityStrikes(connID, model)
+	ClearAntigravityQuotaCache()
+	if IsAntigravityModelBlocked(connID, model) {
+		t.Error("should not be blocked after clear")
+	}
+}

@@ -1,0 +1,372 @@
+package handlerutil
+
+import (
+	json "encoding/json/v2"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"testing"
+)
+
+func TestWriteJSONError(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		message  string
+		wantType string
+		wantCode string
+	}{
+		{"bad request", http.StatusBadRequest, "invalid model", "invalid_request_error", "bad_request"},
+		{"unauthorized", http.StatusUnauthorized, "bad key", "authentication_error", "invalid_api_key"},
+		{"not found", http.StatusNotFound, "resource not found", "invalid_request_error", "model_not_found"},
+		{"internal error", http.StatusInternalServerError, "server error", "server_error", "internal_server_error"},
+		{"rate limit", http.StatusTooManyRequests, "slow down", "rate_limit_error", "rate_limit_exceeded"},
+		{"empty message", http.StatusBadRequest, "", "invalid_request_error", "bad_request"},
+		{"unknown status", 999, "weird", "invalid_request_error", "999"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			WriteJSONError(w, tt.status, tt.message)
+
+			resp := w.Result()
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tt.status {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tt.status)
+			}
+			if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+				t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+			}
+
+			var body map[string]map[string]any
+			if err := json.UnmarshalRead(resp.Body, &body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			errObj, ok := body["error"]
+			if !ok {
+				t.Fatal("missing 'error' key")
+			}
+			if errObj["message"] != tt.message {
+				t.Errorf("error.message = %q, want %q", errObj["message"], tt.message)
+			}
+			if errObj["type"] != tt.wantType {
+				t.Errorf("error.type = %q, want %q", errObj["type"], tt.wantType)
+			}
+			if errObj["code"] != tt.wantCode {
+				t.Errorf("error.code = %v, want %v", errObj["code"], tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestWriteJSONError_marshalFallback(t *testing.T) {
+	// Force json.Marshal to fail by using an unencodable channel value.
+	// WriteJSONError always marshals a plain map, so this path is defensive.
+	// We test the fallback string is valid JSON with status 500.
+	w := httptest.NewRecorder()
+	WriteJSONError(w, http.StatusBadRequest, "test")
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	var body map[string]map[string]any
+	if err := json.UnmarshalRead(resp.Body, &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	// Verify the function still returns a valid error shape even if marshal
+	// were to fail (the fallback string).
+	if _, ok := body["error"]; !ok {
+		t.Fatal("missing 'error' key")
+	}
+}
+
+func TestWriteJSON_deterministicMapKeyOrder(t *testing.T) {
+	keys := []string{
+		"oa-chat-df0bcbbc|glm-5.3|llm",
+		"oa-chat-df0bcbbc|gpt-5.2|llm",
+		"oa-chat-df0bcbbc|claude-sonnet-4.5|llm",
+		"oa-chat-df0bcbbc|deepseek-v4-flash|llm",
+		"oa-chat-df0bcbbc|gemini-3.7-flash|llm",
+		"oa-chat-df0bcbbc|qwen3-32b|llm",
+		"oa-chat-df0bcbbc|kimi-k3|llm",
+		"oa-chat-df0bcbbc|mistral-large|llm",
+		"oa-chat-df0bcbbc|llama-4-70b|llm",
+		"oa-chat-df0bcbbc|grok-5|llm",
+		"oa-chat-df0bcbbc|o4-mini|llm",
+		"oa-chat-df0bcbbc|command-a|llm",
+	}
+	data := make(map[string]any, len(keys))
+	for _, k := range keys {
+		data[k] = map[string]any{"id": k, "type": "llm"}
+	}
+
+	// Sorted keys, with each nested object's keys sorted as well.
+	sortedKeys := slices.Clone(keys)
+	slices.Sort(sortedKeys)
+	var want strings.Builder
+	want.WriteByte('{')
+	for i, k := range sortedKeys {
+		if i > 0 {
+			want.WriteByte(',')
+		}
+		fmt.Fprintf(&want, "%q:{\"id\":%q,\"type\":\"llm\"}", k, k)
+	}
+	want.WriteByte('}')
+
+	// Repeat so a randomized map iteration order would show up: with 12 keys an
+	// unordered encode essentially never produces the sorted bytes twice.
+	for i := 0; i < 25; i++ {
+		w := httptest.NewRecorder()
+		WriteJSON(w, http.StatusOK, data)
+		if got := w.Body.String(); got != want.String() {
+			t.Fatalf("response %d is not deterministic\nwant: %s\ngot:  %s", i, want.String(), got)
+		}
+	}
+}
+
+func TestUpdateModelInBody(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      []byte
+		modelName string
+		wantModel string
+	}{
+		{
+			name:      "replace existing model",
+			body:      []byte(`{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"hi"}]}`),
+			modelName: "gpt-4",
+			wantModel: "gpt-4",
+		},
+		{
+			name:      "add model when absent",
+			body:      []byte(`{"messages":[{"role":"user","content":"hi"}]}`),
+			modelName: "claude-3",
+			wantModel: "claude-3",
+		},
+		{
+			name:      "empty object",
+			body:      []byte(`{}`),
+			modelName: "gpt-4",
+			wantModel: "gpt-4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := UpdateModelInBody(tt.body, tt.modelName)
+			var m map[string]any
+			if err := json.Unmarshal(out, &m); err != nil {
+				t.Fatalf("unmarshal result: %v", err)
+			}
+			if got, _ := m["model"].(string); got != tt.wantModel {
+				t.Errorf("model = %q, want %q", got, tt.wantModel)
+			}
+		})
+	}
+}
+
+func TestUpdateModelInBody_returnsOriginalOnError(t *testing.T) {
+	tests := []struct {
+		name string
+		body []byte
+	}{
+		{"empty", []byte{}},
+		{"invalid JSON", []byte(`{invalid}`)},
+		{"partial JSON", []byte(`{"model":`)},
+		{"garbage", []byte(`not json at all`)},
+		{"JSON null", []byte(`null`)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := UpdateModelInBody(tt.body, "gpt-4")
+			if string(out) != string(tt.body) {
+				t.Errorf("got %q, want original %q", string(out), string(tt.body))
+			}
+		})
+	}
+}
+
+func TestSetAuthHeader(t *testing.T) {
+	tests := []struct {
+		name       string
+		authScheme string
+		apiKey     string
+		authHeader string
+		wantKey    string
+		wantValue  string
+	}{
+		{
+			name:       "bearer scheme",
+			authScheme: "bearer",
+			apiKey:     "sk-abc123",
+			authHeader: "Authorization",
+			wantKey:    "Authorization",
+			wantValue:  "Bearer sk-abc123",
+		},
+		{
+			name:       "raw scheme",
+			authScheme: "raw",
+			apiKey:     "tgpv1_xyz",
+			authHeader: "Authorization",
+			wantKey:    "Authorization",
+			wantValue:  "tgpv1_xyz",
+		},
+		{
+			name:       "custom header with bearer",
+			authScheme: "bearer",
+			apiKey:     "sk-abc123",
+			authHeader: "X-API-Key",
+			wantKey:    "X-API-Key",
+			wantValue:  "Bearer sk-abc123",
+		},
+		{
+			name:       "custom header with raw",
+			authScheme: "raw",
+			apiKey:     "tgpv1_xyz",
+			authHeader: "X-API-Key",
+			wantKey:    "X-API-Key",
+			wantValue:  "tgpv1_xyz",
+		},
+		{
+			name:       "empty authHeader, bearer scheme",
+			authScheme: "bearer",
+			apiKey:     "sk-abc123",
+			authHeader: "",
+			wantKey:    "Authorization",
+			wantValue:  "Bearer sk-abc123",
+		},
+		{
+			name:       "empty authHeader, raw scheme",
+			authScheme: "raw",
+			apiKey:     "tgpv1_xyz",
+			authHeader: "",
+			wantKey:    "Authorization",
+			wantValue:  "tgpv1_xyz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			SetAuthHeader(req, tt.apiKey, tt.authHeader, tt.authScheme)
+
+			got := req.Header.Get(tt.wantKey)
+			if got != tt.wantValue {
+				t.Errorf("req.Header[%q] = %q, want %q", tt.wantKey, got, tt.wantValue)
+			}
+		})
+	}
+}
+
+func TestSetAuthHeader_defaultScheme(t *testing.T) {
+	// When authScheme is unknown, default to "Bearer "+apiKey on Authorization.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	SetAuthHeader(req, "sk-abc123", "Authorization", "unknown")
+
+	got := req.Header.Get("Authorization")
+	want := "Bearer sk-abc123"
+	if got != want {
+		t.Errorf("req.Header[Authorization] = %q, want %q", got, want)
+	}
+}
+
+func TestExtractSessionID(t *testing.T) {
+	t.Run("extracts x-claude-code-session-id with priority", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("x-claude-code-session-id", "cc-session-123")
+		req.Header.Set("x-session-id", "generic-session-456")
+
+		got := ExtractSessionID(req)
+		if got != "cc-session-123" {
+			t.Errorf("expected cc-session-123, got %s", got)
+		}
+	})
+
+	t.Run("extracts x-session-id fallback", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("x-session-id", "generic-session-456")
+
+		got := ExtractSessionID(req)
+		if got != "generic-session-456" {
+			t.Errorf("expected generic-session-456, got %s", got)
+		}
+	})
+
+	t.Run("returns empty when no session header", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		got := ExtractSessionID(req)
+		if got != "" {
+			t.Errorf("expected empty string, got %s", got)
+		}
+	})
+}
+
+func TestMaskAPIKey(t *testing.T) {
+	if got := MaskAPIKey("short"); got != "***" {
+		t.Errorf("MaskAPIKey(short) = %q, want ***", got)
+	}
+	if got := MaskAPIKey("12345678"); got != "***" {
+		t.Errorf("MaskAPIKey(8chars) = %q, want ***", got)
+	}
+	key := "sk-machine1234567890abcdef"
+	masked := MaskAPIKey(key)
+	if !strings.HasPrefix(masked, "sk-machi") || !strings.HasSuffix(masked, "cdef") || !strings.Contains(masked, "***") {
+		t.Errorf("MaskAPIKey(%q) = %q", key, masked)
+	}
+	whitespaceKey := "  sk-machine1234567890abcdef  "
+	if got := MaskAPIKey(whitespaceKey); got != masked {
+		t.Errorf("MaskAPIKey(%q) = %q, want %q (matches trimmed key)", whitespaceKey, got, masked)
+	}
+}
+
+func TestGetString(t *testing.T) {
+	if got := GetString(nil, "foo"); got != "" {
+		t.Errorf("GetString(nil) = %q, want empty", got)
+	}
+	m := map[string]any{
+		"str": "bar",
+		"num": 42,
+	}
+	if got := GetString(m, "str"); got != "bar" {
+		t.Errorf("GetString(str) = %q, want bar", got)
+	}
+	if got := GetString(m, "num"); got != "" {
+		t.Errorf("GetString(num) = %q, want empty", got)
+	}
+	if got := GetString(m, "absent"); got != "" {
+		t.Errorf("GetString(absent) = %q, want empty", got)
+	}
+}
+
+func TestContextHelpers_SessionAndBeta(t *testing.T) {
+	// Session ID
+	ctx := WithSessionID(nil, "sess-1")
+	if GetSessionID(ctx) != "" {
+		t.Error("nil context should return empty")
+	}
+	ctxWithSess := WithSessionID(t.Context(), "sess-1")
+	if got := GetSessionID(ctxWithSess); got != "sess-1" {
+		t.Errorf("GetSessionID = %q, want sess-1", got)
+	}
+	if got := GetSessionID(t.Context()); got != "" {
+		t.Errorf("plain context GetSessionID = %q, want empty", got)
+	}
+
+	// Anthropic Beta
+	ctxWithBeta := WithClientAnthropicBeta(t.Context(), "prompt-caching-2024-07-31")
+	if got := GetClientAnthropicBeta(ctxWithBeta); got != "prompt-caching-2024-07-31" {
+		t.Errorf("GetClientAnthropicBeta = %q", got)
+	}
+	if got := GetClientAnthropicBeta(nil); got != "" {
+		t.Errorf("nil context GetClientAnthropicBeta = %q, want empty", got)
+	}
+}

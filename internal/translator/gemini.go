@@ -1,0 +1,1188 @@
+package translator
+
+import (
+	"bytes"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// ─── OpenAI → Gemini Native Format ───
+
+// GeminiStreamState holds translation state for Gemini stream chunks.
+type GeminiStreamState struct {
+	MessageStartSent     bool
+	MessageId            string
+	// SessionID is the conversation this stream belongs to, taken from the
+	// client's session header. A thought signature is only valid for the call
+	// it was issued for, so the store is namespaced by the conversation that
+	// produced it rather than by the per-response MessageId — two parallel
+	// conversations on one account mint the same tool_call ids often enough
+	// that a global key replays the other one's signature.
+	SessionID            string
+	Model                string
+	Usage                *OpenAIUsage
+	FinishReason         string
+	LastThoughtSignature string
+	// ToolCallCount counts functionCall parts emitted so far. It gives each
+	// OpenAI tool_call its own index (parallel calls must not share index 0)
+	// and turns a Gemini STOP into finish_reason "tool_calls" so clients like
+	// Zed run the tools instead of ending the turn.
+	ToolCallCount int
+}
+
+// GeminiFileData represents remote or uploaded files referenced by URI.
+type GeminiFileData struct {
+	FileUri  string `json:"fileUri"`
+	MimeType string `json:"mimeType"`
+}
+
+// GeminiPart is a single part in a Gemini content block.
+type GeminiPart struct {
+	Text             string              `json:"text,omitempty"`
+	Thought          *bool               `json:"thought,omitempty"`
+	ThoughtSignature string              `json:"thoughtSignature,omitempty"`
+	FunctionCall     *GeminiFunctionCall `json:"functionCall,omitempty"`
+	FunctionResponse *GeminiFunctionResp `json:"functionResponse,omitempty"`
+	InlineData       *GeminiInlineData   `json:"inlineData,omitempty"`
+	FileData         *GeminiFileData     `json:"fileData,omitempty"`
+}
+
+// UnmarshalJSON handles both thoughtSignature (camelCase) and thought_signature (snake_case).
+func (p *GeminiPart) UnmarshalJSON(data []byte) error {
+	type Alias GeminiPart
+	aux := &struct {
+		ThoughtSignatureSnake string `json:"thought_signature"`
+		*Alias
+	}{
+		Alias: (*Alias)(p),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if aux.ThoughtSignatureSnake != "" && p.ThoughtSignature == "" {
+		p.ThoughtSignature = aux.ThoughtSignatureSnake
+	}
+	return nil
+}
+
+type GeminiFunctionCall struct {
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
+	// ID correlates a call with its response. Gemini rejects a functionResponse
+	// whose id does not match an open call, so the terminal-turn guard below has
+	// to be able to echo it.
+	ID string `json:"id,omitempty"`
+}
+
+// DefaultThinkingSignature is the hardcoded thought signature the Next.js
+// reference backfills onto functionCall parts that arrive without one
+// (DEFAULT_THINKING_AG_SIGNATURE from open-sse/config/defaultThinkingSignature.js).
+// Gemini thinking models reject a current-turn function call that carries no
+// thought_signature; this keeps combos mixing Gemini with non-Gemini models
+// from 400ing. The real signature (via __ts__ transport) is preferred whenever
+// it exists.
+const DefaultThinkingSignature = "EuwGCukGAXLI2nxwZIq54WWSoL/YN0P3TsDZ7zRnLi8g0S4aVr2HUGxvaHKySuY6HAVzcE0GPGjXrytLIldxthSvfxgUlJh6Qa9Z+Oj5QZBlYdg6HaJ6yuY5R7waE6rdwBsRf7Ft2j3DJ9rMi9qhWFqApewYtPhls3VHtuvND3l8Rm09+lbAXQs6KKWEWrxNLKTBkfpMgXhRERc/TQRMZu1twAablm6/Zk1tsYRvfWKLsNbeKF+CCojJdXJKvnR/8Ouuoa+Y2Ti20hcW7aZIIjZDFYPU//k6Ybmhg69J/imbFai2ckhfLaisqdDkdoIiBJScTOUvYqP6AE9d4MsydSC+UlhIMk4hoP76R8vUSCZRMkjOaDXstf/QoVZKbt94wyRZgAJ1G0BqI8L5ow86kLpA4wJEtxsRGymOE4bKUvApveBakYDNM9APkf+LbtbzWSseGjoZcSlycF9iN8Q2XNYKRrHbv3Lr5Y8JjdH/5y/6SHkNehTEZugaeGnSPSyCTWto1kQgHpxdWmhkLfJGNUGLmue7Mesj4TSms4J33mRpYVhNB/J333FCqIP0hr/E7BkkjEn7yZ4X7SQlh+xKPurapsnHRwiKmtsilmEFrnTE9iQr+pMr6M29qqFNv1tr5yumbaJw8JW9sB15tNsRv+dW6BjNanbsKz7HCgKUBc8tGy+7YuhXzAfViyRefcjK7eZW0Fbyt7AbybJTKz78W8NH7ye6LAwzOebXpeZ4D43fNIt8bKh26qgduSQv/7o+pAflkuqHZ99YWgHQ8h8OkZFi3eOiSYjsjhdZ/czWOdoPI/OnqIldzMPF5YlrKBLFX8VhRKVmqgsmWf5PHGulHhMkVlS+XG2UIseGy69ARa93D78Gsa+1n1kJr7EEB7Rh+27vUMxVYLdz1yMSvE5nalTAlg/ZeG8+XQ0cHuAI3KbQpHW2Q++RdXfm5JzD5WdJZUU+Zn8t8UUn85BH4RxZLeE0qJikgSsKoYVBc6YhiMjhPgkR95ReimY4Z0xCJdRo1gjexOFeODZMpQF6Yxnoic7IrdgsFA3iePTbFnPp3IAM1fAThWhXJUn3QInUOTd5o1qmTmn6REbL15g/JQNl+dqUoPkhleeb2V3kjqp1okmO3wMZbPknR3S1LZNmlS72/iBQUm+n2b/RCn4PjmM2"
+
+type GeminiFunctionResp struct {
+	Name     string          `json:"name"`
+	ID       string          `json:"id,omitempty"`
+	Response *GeminiFuncResp `json:"response,omitempty"`
+}
+
+type GeminiFuncResp struct {
+	Result any `json:"result,omitempty"`
+}
+
+type GeminiInlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"`
+}
+
+// GeminiContent is one message in Gemini's contents array.
+type GeminiContent struct {
+	Role  string       `json:"role"`
+	Parts []GeminiPart `json:"parts"`
+}
+
+// GeminiTool is the tool definition format Gemini expects.
+type GeminiTool struct {
+	FunctionDeclarations []GeminiFunctionDecl `json:"functionDeclarations"`
+}
+
+type GeminiFunctionDecl struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Parameters  any    `json:"parameters,omitempty"`
+}
+
+// GeminiRequest is the full Gemini API request body.
+type GeminiRequest struct {
+	SystemInstruction *GeminiContent  `json:"system_instruction,omitempty"`
+	Contents          []GeminiContent `json:"contents"`
+	Tools             []GeminiTool    `json:"tools,omitempty"`
+	ToolConfig        any             `json:"toolConfig,omitempty"`
+	GenerationConfig  jsontext.Value  `json:"generationConfig,omitempty"`
+}
+
+// GeminiResponse is the Gemini API response body (non-stream).
+type GeminiResponse struct {
+	Candidates []struct {
+		Content      *GeminiContent `json:"content,omitempty"`
+		FinishReason string         `json:"finishReason,omitempty"`
+	} `json:"candidates"`
+	UsageMetadata *struct {
+		PromptTokenCount        int `json:"promptTokenCount"`
+		CandidatesTokenCount    int `json:"candidatesTokenCount"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+		CachedContentToken      int `json:"cachedContentToken,omitempty"`
+		CandidatesTokenDetails  *struct {
+			ReasoningTokens int `json:"reasoningTokens"`
+		} `json:"candidatesTokenDetails,omitempty"`
+	} `json:"usageMetadata,omitempty"`
+}
+
+// GeminiStreamChunk represents one SSE chunk from Gemini stream.
+type GeminiStreamChunk struct {
+	Candidates []struct {
+		Content      *GeminiContent `json:"content,omitempty"`
+		FinishReason string         `json:"finishReason,omitempty"`
+		Index        int            `json:"index"`
+	} `json:"candidates"`
+	UsageMetadata *struct {
+		PromptTokenCount        int `json:"promptTokenCount"`
+		CandidatesTokenCount    int `json:"candidatesTokenCount"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+		CachedContentToken      int `json:"cachedContentToken,omitempty"`
+	} `json:"usageMetadata,omitempty"`
+}
+
+// TranslateOpenAIToGemini converts an OpenAI-compatible request body to Gemini native format.
+func TranslateOpenAIToGemini(openaiBody []byte) ([]byte, error) {
+	return TranslateOpenAIToGeminiWithSession(openaiBody, "")
+}
+
+// TranslateOpenAIToGeminiWithSession is TranslateOpenAIToGemini for a request
+// that carries a conversation id. sessionID scopes the thought-signature
+// lookup, so a signature stored by another conversation on the same account is
+// never replayed here.
+func TranslateOpenAIToGeminiWithSession(openaiBody []byte, sessionID string) ([]byte, error) {
+	var oreq struct {
+		Model               string         `json:"model"`
+		Messages            jsontext.Value `json:"messages"`
+		Temperature         *float64       `json:"temperature,omitempty"`
+		MaxTokens           *int           `json:"max_tokens,omitempty"`
+		MaxCompletionTokens *int           `json:"max_completion_tokens,omitempty"`
+		TopP                *float64       `json:"top_p,omitempty"`
+		TopK                *int           `json:"top_k,omitempty"`
+		Stream              bool           `json:"stream,omitempty"`
+		Tools               jsontext.Value `json:"tools,omitempty"`
+		ReasoningEffort     string         `json:"reasoning_effort,omitempty"`
+		Thinking            *struct {
+			Type         string `json:"type"`
+			BudgetTokens int    `json:"budget_tokens"`
+		} `json:"thinking,omitempty"`
+		ThinkingBudget *int `json:"thinking_budget,omitempty"`
+	}
+	if err := json.Unmarshal(openaiBody, &oreq); err != nil {
+		return nil, fmt.Errorf("parse OpenAI request: %w", err)
+	}
+
+	var req GeminiRequest
+
+	// Parse messages
+	var msgs []struct {
+		Role             string           `json:"role"`
+		Content          any              `json:"content"`
+		ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`
+		ToolCallID       string           `json:"tool_call_id,omitempty"`
+		ReasoningContent string           `json:"reasoning_content,omitempty"`
+	}
+	if err := json.Unmarshal(oreq.Messages, &msgs); err != nil {
+		return nil, fmt.Errorf("parse messages: %w", err)
+	}
+
+	// Pre-map tool_call_id -> function names from assistant messages, queued per
+	// id. An OpenAI tool_call_id is only unique within its own assistant turn, so
+	// a long agent session can reuse one id for two different tools; a plain
+	// id->name map keeps only the LAST name and an earlier turn's tool result
+	// would then be renamed to the later tool. Each tool result consumes the
+	// oldest unconsumed name for its id, so a functionResponse always answers the
+	// functionCall it belongs to. Parity with decolua/9router #4273 / #4589.
+	tcID2Names := make(map[string][]string)
+	tcID2Name := make(map[string]string)
+	for _, msg := range msgs {
+		if msg.Role != "assistant" {
+			continue
+		}
+		for _, tc := range msg.ToolCalls {
+			if tc.ID == "" || tc.Function.Name == "" {
+				continue
+			}
+			cleanID := geminiCleanToolCallID(tc.ID)
+			tcID2Names[tc.ID] = append(tcID2Names[tc.ID], tc.Function.Name)
+			if cleanID != tc.ID {
+				tcID2Names[cleanID] = append(tcID2Names[cleanID], tc.Function.Name)
+			}
+			tcID2Name[tc.ID] = tc.Function.Name
+			if cleanID != tc.ID {
+				tcID2Name[cleanID] = tc.Function.Name
+			}
+		}
+	}
+
+	// Cursor into tcID2Names: each tool result takes the oldest unconsumed name
+	// for its id, so a reused tool_call_id cannot rename an earlier turn.
+	tcNameCursor := make(map[string]int)
+
+	// Gemini rejects a request whose functionCall ids repeat anywhere in the
+	// history, while an OpenAI tool_call_id is only unique within its own
+	// assistant turn. The uniquifier rewrites a repeated id to `<id>-2`, `-3`…
+	// as it is emitted, and geminiToolCallIDs queues those emitted ids per
+	// original id so the matching functionResponse answers with the same one.
+	//
+	// Uniqueness is per OCCURRENCE, not per id: two calls sharing an id must
+	// end up with different emitted ids, so the mapping is consumed in document
+	// order rather than memoised by id. Ids that were already unique pass
+	// through untouched, leaving a valid conversation byte-identical.
+	toolCallIDUniquifier := newToolCallIDUniquifier()
+	geminiToolCallIDs := make(map[string][]string)
+	toolIDCursor := make(map[string]int)
+
+	var systemParts []GeminiPart
+	for _, msg := range msgs {
+		switch msg.Role {
+		case "system":
+			content := extractContentString(msg.Content)
+			if strings.TrimSpace(content) != "" {
+				systemParts = append(systemParts, GeminiPart{Text: content})
+			}
+		case "user":
+			parts := convertContentToGeminiParts(msg.Content)
+			if len(parts) > 0 {
+				req.Contents = append(req.Contents, GeminiContent{Role: "user", Parts: parts})
+			}
+
+		case "assistant":
+			var parts []GeminiPart
+
+			// Text content
+			hasText := false
+			if contentStr, ok := msg.Content.(string); ok && contentStr != "" {
+				parts = append(parts, GeminiPart{Text: contentStr})
+				hasText = true
+			} else if contentArr, ok := msg.Content.([]any); ok {
+				for _, item := range contentArr {
+					if m, ok := item.(map[string]any); ok {
+						if text, ok := m["text"].(string); ok && text != "" {
+							parts = append(parts, GeminiPart{Text: text})
+							hasText = true
+						}
+					}
+				}
+			}
+
+			// If there is no text content and no tool calls, use reasoning_content as plain text.
+			// Do NOT emit reasoning_content as a thought: true part in history because Gemini
+			// requires valid cryptographic signatures on thought: true parts and rejects unsigned
+			// thoughts with "Corrupted thought signature".
+			if !hasText && len(msg.ToolCalls) == 0 && msg.ReasoningContent != "" {
+				parts = append(parts, GeminiPart{Text: msg.ReasoningContent})
+			}
+
+			// Tool calls → functionCall parts
+			firstFunctionCallSeen := false
+			for _, tc := range msg.ToolCalls {
+				var args map[string]any
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+					args = make(map[string]any)
+				}
+				ts := extractThoughtSig(tc.ID)
+				if ts == "" {
+					ts = GetGeminiThoughtSignature(tc.ID, sessionID, oreq.Model)
+				}
+				if ts == "" && !firstFunctionCallSeen {
+					ts = DefaultThinkingSignature
+				}
+				firstFunctionCallSeen = true
+				// Gemini validates functionCall id uniqueness across the WHOLE
+				// history and rejects the entire request with 400
+				// INVALID_ARGUMENT when one repeats. An OpenAI tool_call_id is
+				// only unique within its own assistant turn, so a long agent
+				// session can legitimately emit call_51859 at turn 14 and
+				// again at turn 22. Parity with openai-to-gemini.js.
+				//
+				// The uniquifier keys on the CLEAN id: the "__ts__<sig>"
+				// suffix is this gateway's private transport and must never
+				// reach the wire. Uniqueness is a property of the id Gemini
+				// sees, so that is the id to make unique.
+				cleanToolID := geminiCleanToolCallID(tc.ID)
+				emitID := toolCallIDUniquifier.next(cleanToolID)
+				geminiToolCallIDs[cleanToolID] = append(geminiToolCallIDs[cleanToolID], emitID)
+				if tc.ID != cleanToolID {
+					geminiToolCallIDs[tc.ID] = append(geminiToolCallIDs[tc.ID], emitID)
+				}
+				gp := GeminiPart{FunctionCall: &GeminiFunctionCall{
+					Name: tc.Function.Name,
+					Args: args,
+					ID:   emitID,
+				}, ThoughtSignature: ts}
+				parts = append(parts, gp)
+			}
+
+			if len(parts) > 0 {
+				req.Contents = append(req.Contents, GeminiContent{Role: "model", Parts: parts})
+			}
+
+		case "tool":
+			content := extractContentString(msg.Content)
+			cleanID := geminiCleanToolCallID(msg.ToolCallID)
+			// Prefer what the request itself proves (the assistant turn that
+			// made the call), then this gateway's own record of ids it minted.
+			// The id is never parsed: it may be Gemini's opaque token, in which
+			// case a "call_<name>_<n>" reading would invent a tool name.
+			name := nextToolNameForID(tcID2Names, tcID2Name, tcNameCursor, msg.ToolCallID, cleanID)
+			if name == "" {
+				name = GetGeminiToolCallName(msg.ToolCallID, "")
+			}
+			if name == "" {
+				name = cleanID
+			}
+			// Tool result content may be plain text or JSON.
+			// Gemini requires the result to be valid JSON.
+			var resultValue any
+			if jsontext.Value(content).IsValid() {
+				resultValue = jsontext.Value(content)
+			} else {
+				// Wrap plain text as a JSON object
+				resultValue = map[string]string{"output": content}
+			}
+			// The response must carry the id the CALL was emitted with, or
+			// Gemini pairs it with nothing. Consume the queue in the same
+			// document order the calls were emitted in.
+			respID := cleanID
+			for _, key := range [2]string{msg.ToolCallID, cleanID} {
+				queued := geminiToolCallIDs[key]
+				i := toolIDCursor[key]
+				if i < len(queued) {
+					respID = queued[i]
+					toolIDCursor[key] = i + 1
+					break
+				}
+			}
+			parts := []GeminiPart{{
+				FunctionResponse: &GeminiFunctionResp{
+					Name:     name,
+					ID:       respID,
+					Response: &GeminiFuncResp{Result: resultValue},
+				},
+			}}
+			parts = append(parts, geminiToolMediaParts(msg.Content)...)
+			req.Contents = append(req.Contents, GeminiContent{Role: "user", Parts: parts})
+		}
+	}
+	if len(systemParts) > 0 {
+		req.SystemInstruction = &GeminiContent{
+			Role:  "user",
+			Parts: systemParts,
+		}
+	}
+
+	// Normalize Gemini contents: merge adjacent same-role messages, strip empty parts,
+	// and ensure first turn is "user" (parity with decolua/9router v0.5.75 #e7b5f09).
+	req.Contents = NormalizeGeminiContentsForModel(req.Contents, oreq.Model)
+
+	// Tools
+	if len(oreq.Tools) > 0 {
+		var openaiTools []OpenAITool
+		if err := json.Unmarshal(oreq.Tools, &openaiTools); err != nil {
+			return nil, fmt.Errorf("parse tools: %w", err)
+		}
+		var decls []GeminiFunctionDecl
+		for _, t := range openaiTools {
+			params := t.Function.Parameters
+			params = CleanParametersSchema(params)
+			decls = append(decls, GeminiFunctionDecl{
+				Name:        t.Function.Name,
+				Description: t.Function.Description,
+				Parameters:  params,
+			})
+		}
+		if len(decls) > 0 {
+			req.Tools = []GeminiTool{{FunctionDeclarations: decls}}
+			req.ToolConfig = map[string]any{
+				"functionCallingConfig": map[string]any{
+					"mode": "VALIDATED",
+				},
+			}
+		}
+	}
+
+	// Generation config
+	genConfig := make(map[string]any)
+	isGemini4 := isGemini4Model(oreq.Model)
+	if !isGemini4 {
+		if oreq.Temperature != nil {
+			genConfig["temperature"] = *oreq.Temperature
+		}
+		if oreq.TopP != nil {
+			genConfig["topP"] = *oreq.TopP
+		}
+		if oreq.TopK != nil {
+			genConfig["topK"] = *oreq.TopK
+		}
+	}
+	maxTokens := oreq.MaxTokens
+	if maxTokens == nil {
+		maxTokens = oreq.MaxCompletionTokens
+	}
+
+	thinkingBudget := 0
+	if oreq.ReasoningEffort != "" {
+		thinkingBudget = effortToBudget(oreq.ReasoningEffort)
+	} else if oreq.Thinking != nil && oreq.Thinking.BudgetTokens > 0 {
+		thinkingBudget = oreq.Thinking.BudgetTokens
+	} else if oreq.ThinkingBudget != nil && *oreq.ThinkingBudget > 0 {
+		thinkingBudget = *oreq.ThinkingBudget
+	}
+
+	if thinkingBudget > 0 {
+		genConfig["thinkingConfig"] = map[string]any{
+			"thinkingBudget":  thinkingBudget,
+			"includeThoughts": true,
+		}
+		// Ensure maxOutputTokens strictly exceeds thinkingBudget to prevent 400 INVALID_ARGUMENT
+		if maxTokens == nil || *maxTokens <= thinkingBudget {
+			adjustedMax := thinkingBudget + thinkingHeadroomTokens
+			maxTokens = &adjustedMax
+		}
+	}
+	if maxTokens != nil {
+		genConfig["maxOutputTokens"] = *maxTokens
+	}
+	if len(genConfig) > 0 {
+		configJSON, err := json.Marshal(genConfig)
+		if err != nil {
+			return nil, fmt.Errorf("marshal generation config: %w", err)
+		}
+		req.GenerationConfig = configJSON
+	}
+
+	out, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal gemini request: %w", err)
+	}
+	return out, nil
+}
+
+func isGemini4Model(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "gemini-4") || strings.Contains(m, "gemini-argon")
+}
+
+// moveFunctionResponsesLast places all functionResponse parts at the end of the parts array for Gemini 4 models.
+func moveFunctionResponsesLast(parts []GeminiPart) []GeminiPart {
+	var nonResp []GeminiPart
+	var resp []GeminiPart
+	for _, p := range parts {
+		if p.FunctionResponse != nil {
+			resp = append(resp, p)
+		} else {
+			nonResp = append(nonResp, p)
+		}
+	}
+	if len(resp) == 0 {
+		return parts
+	}
+	return append(nonResp, resp...)
+}
+
+func extractThoughtSig(id string) string {
+	const sep = "__ts__"
+	if _, after, ok := strings.CutLast(id, sep); ok && after != "" {
+		return after
+	}
+	return ""
+}
+
+// geminiCleanToolCallID drops the "__ts__<sig>" transport suffix from a tool
+// call id, leaving the id the client actually sees. The suffix is a NOX9GO
+// encoding for carrying a thought signature back to Gemini, so it must never
+// reach the wire nor appear on one side of a call/response pair only.
+func geminiCleanToolCallID(id string) string {
+	if ts := strings.LastIndex(id, "__ts__"); ts != -1 {
+		return id[:ts]
+	}
+	return id
+}
+
+// toolCallIDUniquifier rewrites duplicate tool_call_ids so every emitted
+// functionCall id is unique across the whole request.
+//
+// Gemini validates id uniqueness over the entire history and answers
+// 400 INVALID_ARGUMENT otherwise, while an OpenAI tool_call_id is only unique
+// within its own assistant turn. Parity with createToolCallIdUniquifier in
+// open-sse/translator/request/openai-to-gemini.js.
+type toolCallIDUniquifier struct {
+	used map[string]bool
+}
+
+func newToolCallIDUniquifier() *toolCallIDUniquifier {
+	return &toolCallIDUniquifier{used: make(map[string]bool)}
+}
+
+// next returns an id unique among those already handed out. The state is
+// deliberately NOT a map from id to a fixed replacement: two calls sharing an
+// id must end up with two DIFFERENT emitted ids, so each call takes the next
+// free slot rather than looking up a memoised answer.
+func (u *toolCallIDUniquifier) next(id string) string {
+	if id == "" {
+		return id
+	}
+	if !u.used[id] {
+		u.used[id] = true
+		return id
+	}
+	// An id may already end in "-2"; keep counting rather than collide again.
+	for n := 2; ; n++ {
+		candidate := fmt.Sprintf("%s-%d", id, n)
+		if !u.used[candidate] {
+			u.used[candidate] = true
+			return candidate
+		}
+	}
+}
+
+// geminiToolCallID resolves the tool_call id for a functionCall part. Gemini's
+// own id wins when present: it is the only id Gemini will match a
+// functionResponse against. The generated form carries the tool name for
+// readability and the call's index for uniqueness — two parts in one chunk are
+// emitted inside a single clock tick, so UnixNano alone collides and the client
+// cannot match a result to its call.
+// Parity with `functionCall.id || \`${name}-${Date.now()}-${index}\`` in
+// open-sse/translator/response/gemini-to-openai.js.
+func geminiToolCallID(geminiID, name string, index int) string {
+	if geminiID != "" {
+		return geminiID
+	}
+	return fmt.Sprintf("call_%s_%d_%d", name, time.Now().UnixNano(), index)
+}
+
+// effortToBudget converts reasoning_effort string to thinking budget tokens.
+func effortToBudget(effort string) int {
+	switch effort {
+	case "high":
+		return 32000
+	case "medium":
+		return 16000
+	default:
+		return 8000
+	}
+}
+
+// ─── Gemini Response → OpenAI ───
+
+// TranslateGeminiResponseToOpenAI converts a non-stream Gemini response to OpenAI format.
+func TranslateGeminiResponseToOpenAI(geminiBody []byte) ([]byte, *OpenAIUsage, error) {
+	var geminiResp GeminiResponse
+	if err := json.Unmarshal(geminiBody, &geminiResp); err != nil {
+		return nil, nil, fmt.Errorf("parse Gemini response: %w", err)
+	}
+	if len(geminiResp.Candidates) == 0 {
+		return nil, nil, fmt.Errorf("no candidates in Gemini response")
+	}
+
+	content := geminiResp.Candidates[0].Content
+	finishReason := geminiResp.Candidates[0].FinishReason
+
+	// Build OpenAI response
+	var openaiContent string
+	var reasoningContent string
+	var toolCalls []OpenAIToolCall
+
+	if content != nil {
+		var lastSig string
+		for _, part := range content.Parts {
+			if part.ThoughtSignature != "" {
+				lastSig = part.ThoughtSignature
+			}
+			if part.Text != "" && (part.Thought == nil || !*part.Thought) {
+				if openaiContent != "" {
+					openaiContent += part.Text
+				} else {
+					openaiContent = part.Text
+				}
+			}
+			if part.Text != "" && part.Thought != nil && *part.Thought {
+				reasoningContent += part.Text
+			}
+			if part.FunctionCall != nil {
+				args, err := json.Marshal(part.FunctionCall.Args)
+				if err != nil {
+					args = []byte("{}")
+				}
+				fnName := UncloakToolName(part.FunctionCall.Name, nil)
+				id := geminiToolCallID(part.FunctionCall.ID, fnName, len(toolCalls))
+				StoreGeminiToolCallName(id, fnName, "")
+				sig := part.ThoughtSignature
+				if sig == "" {
+					sig = lastSig
+				}
+				if sig != "" {
+					id += "__ts__" + sig
+				}
+				toolCalls = append(toolCalls, OpenAIToolCall{
+					ID:   id,
+					Type: "function",
+					Function: OpenAIFunctionCall{
+						Name:      fnName,
+						Arguments: string(args),
+					},
+				})
+			}
+		}
+	}
+
+	// Map finish reason
+	claudeStop := geminiFinishToOpenAI(finishReason)
+	if len(toolCalls) > 0 {
+		claudeStop = "tool_calls"
+	}
+
+	// Usage
+	inputTokens, outputTokens, cachedTokens := 0, 0, 0
+	reasoningTokens := 0
+	if geminiResp.UsageMetadata != nil {
+		inputTokens = geminiResp.UsageMetadata.PromptTokenCount
+		outputTokens = geminiResp.UsageMetadata.CandidatesTokenCount
+		cachedTokens = geminiResp.UsageMetadata.CachedContentTokenCount
+		if cachedTokens == 0 {
+			cachedTokens = geminiResp.UsageMetadata.CachedContentToken
+		}
+		if geminiResp.UsageMetadata.CandidatesTokenDetails != nil {
+			reasoningTokens = geminiResp.UsageMetadata.CandidatesTokenDetails.ReasoningTokens
+		}
+	}
+
+	usage := &OpenAIUsage{
+		PromptTokens:     inputTokens,
+		CompletionTokens: outputTokens,
+		CachedTokens:     cachedTokens,
+		CompletionTokensDetails: &CompletionTokensDetails{
+			ReasoningTokens: reasoningTokens,
+		},
+	}
+	resp := map[string]any{
+		"id":      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
+		"object":  "chat.completion",
+		"created": time.Now().Unix(),
+		"model":   "gemini",
+		"choices": []map[string]any{{
+			"index": 0,
+			"message": map[string]any{
+				"role":              "assistant",
+				"content":           openaiContent,
+				"reasoning_content": reasoningContent,
+				"tool_calls":        toolCalls,
+			},
+			"finish_reason": claudeStop,
+		}},
+		"usage": map[string]any{
+			"prompt_tokens":     inputTokens,
+			"completion_tokens": outputTokens,
+			"cached_tokens":     cachedTokens,
+			"completion_tokens_details": map[string]any{
+				"reasoning_tokens": reasoningTokens,
+			},
+		},
+	}
+
+	// Remove empty fields
+	if reasoningContent == "" {
+		delete(resp["choices"].([]map[string]any)[0]["message"].(map[string]any), "reasoning_content")
+	}
+	if len(toolCalls) == 0 {
+		delete(resp["choices"].([]map[string]any)[0]["message"].(map[string]any), "tool_calls")
+	}
+
+	out, err := json.Marshal(resp)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal OpenAI response: %w", err)
+	}
+	return out, usage, nil
+}
+
+// TranslateGeminiChunkToOpenAI converts a Gemini SSE stream chunk to OpenAI SSE format.
+func TranslateGeminiChunkToOpenAI(chunk []byte, state *GeminiStreamState) ([]byte, error) {
+	if len(bytes.TrimSpace(chunk)) == 0 {
+		return nil, nil
+	}
+
+	var geminiChunk GeminiStreamChunk
+	if err := json.Unmarshal(chunk, &geminiChunk); err != nil {
+		return nil, fmt.Errorf("parse Gemini stream chunk: %w", err)
+	}
+
+	if len(geminiChunk.Candidates) == 0 && geminiChunk.UsageMetadata == nil {
+		return nil, nil
+	}
+
+	// Initialize state
+	if state.MessageId == "" {
+		state.MessageId = fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
+	}
+	if state.Model == "" {
+		state.Model = "gemini"
+	}
+
+	var results []map[string]any
+
+	// First chunk setup
+	if !state.MessageStartSent {
+		state.MessageStartSent = true
+		results = append(results, map[string]any{
+			"id":      state.MessageId,
+			"object":  "chat.completion.chunk",
+			"created": time.Now().Unix(),
+			"model":   state.Model,
+			"choices": []map[string]any{
+				{
+					"index": 0,
+					"delta": map[string]any{
+						"role": "assistant",
+					},
+					"finish_reason": nil,
+				},
+			},
+		})
+	}
+
+	if len(geminiChunk.Candidates) > 0 {
+		candidate := geminiChunk.Candidates[0]
+
+		if candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
+				if part.ThoughtSignature != "" {
+					state.LastThoughtSignature = part.ThoughtSignature
+				}
+				delta := map[string]any{}
+				if part.Text != "" && (part.Thought == nil || !*part.Thought) {
+					delta["content"] = part.Text
+				}
+				if part.Text != "" && part.Thought != nil && *part.Thought {
+					delta["reasoning_content"] = part.Text
+				}
+				if part.FunctionCall != nil {
+					args, err := json.Marshal(part.FunctionCall.Args)
+					if err != nil {
+						args = []byte("{}")
+					}
+					fnName := UncloakToolName(part.FunctionCall.Name, nil)
+					id := geminiToolCallID(part.FunctionCall.ID, fnName, state.ToolCallCount)
+					// The id is opaque (it may be Gemini's own token), so the tool
+					// it belongs to is recorded rather than encoded in it: a client
+					// that echoes only role:"tool" messages leaves the reverse
+					// direction with nothing else to pair the result by. The index
+					// in the generated form keeps parallel calls distinct —
+					// UnixNano alone does not, it does not tick within a chunk.
+					StoreGeminiToolCallName(id, fnName, state.MessageId)
+					sig := part.ThoughtSignature
+					if sig == "" {
+						sig = state.LastThoughtSignature
+					}
+					if sig != "" {
+						// Keyed by the conversation, not by this response's id:
+						// the response id changes on every turn, so it could
+						// never be looked up on the next one, and the lookup
+						// fell back to a global key another conversation shares.
+						storeSession := state.SessionID
+						if storeSession == "" {
+							storeSession = state.MessageId
+						}
+						StoreGeminiThoughtSignature(id, sig, storeSession, state.Model)
+						id += "__ts__" + sig
+					}
+					delta["tool_calls"] = []map[string]any{
+						{
+							"index": state.ToolCallCount,
+							"id":    id,
+							"type":  "function",
+							"function": map[string]any{
+								"name":      fnName,
+								"arguments": string(args),
+							},
+						},
+					}
+					state.ToolCallCount++
+				}
+				if len(delta) > 0 {
+					results = append(results, map[string]any{
+						"id":      state.MessageId,
+						"object":  "chat.completion.chunk",
+						"created": time.Now().Unix(),
+						"model":   state.Model,
+						"choices": []map[string]any{
+							{
+								"index":         0,
+								"delta":         delta,
+								"finish_reason": nil,
+							},
+						},
+					})
+				}
+			}
+		}
+
+		// Finish reason
+		if candidate.FinishReason != "" {
+			openAIStop := geminiFinishToOpenAI(candidate.FinishReason)
+
+			if state.ToolCallCount > 0 && openAIStop == "stop" {
+				openAIStop = "tool_calls"
+			}
+
+			inputTokens, outputTokens, cachedTokens := 0, 0, 0
+			if geminiChunk.UsageMetadata != nil {
+				inputTokens = geminiChunk.UsageMetadata.PromptTokenCount
+				outputTokens = geminiChunk.UsageMetadata.CandidatesTokenCount
+				cachedTokens = geminiChunk.UsageMetadata.CachedContentTokenCount
+				if cachedTokens == 0 {
+					cachedTokens = geminiChunk.UsageMetadata.CachedContentToken
+				}
+			}
+
+			state.Usage = &OpenAIUsage{
+				PromptTokens:     inputTokens,
+				CompletionTokens: outputTokens,
+				CachedTokens:     cachedTokens,
+			}
+
+			results = append(results, map[string]any{
+				"id":      state.MessageId,
+				"object":  "chat.completion.chunk",
+				"created": time.Now().Unix(),
+				"model":   state.Model,
+				"choices": []map[string]any{
+					{
+						"index":         0,
+						"delta":         map[string]any{},
+						"finish_reason": openAIStop,
+					},
+				},
+				"usage": map[string]any{
+					"prompt_tokens":     inputTokens,
+					"completion_tokens": outputTokens,
+					"cached_tokens":     cachedTokens,
+					"total_tokens":      inputTokens + outputTokens,
+				},
+			})
+		}
+	}
+
+	if geminiChunk.UsageMetadata != nil {
+		inputTokens := geminiChunk.UsageMetadata.PromptTokenCount
+		outputTokens := geminiChunk.UsageMetadata.CandidatesTokenCount
+		cachedTokens := geminiChunk.UsageMetadata.CachedContentTokenCount
+		if cachedTokens == 0 {
+			cachedTokens = geminiChunk.UsageMetadata.CachedContentToken
+		}
+		state.Usage = &OpenAIUsage{
+			PromptTokens:     inputTokens,
+			CompletionTokens: outputTokens,
+			CachedTokens:     cachedTokens,
+		}
+		if len(geminiChunk.Candidates) == 0 {
+			results = append(results, map[string]any{
+				"id":      state.MessageId,
+				"object":  "chat.completion.chunk",
+				"created": time.Now().Unix(),
+				"model":   state.Model,
+				"choices": []any{},
+				"usage": map[string]any{
+					"prompt_tokens":     inputTokens,
+					"completion_tokens": outputTokens,
+					"cached_tokens":     cachedTokens,
+					"total_tokens":      inputTokens + outputTokens,
+				},
+			})
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	// Format as multiple SSE lines
+	var buf bytes.Buffer
+	for _, res := range results {
+		payload, err := json.Marshal(res)
+		if err != nil {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("data: %s\n\n", string(payload)))
+	}
+	return buf.Bytes(), nil
+}
+
+// ─── Helpers ───
+
+// extractContentString extracts a string from OpenAI message content (string or array).
+func extractContentString(content any) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []any:
+		var parts []string
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				if text, ok := m["text"].(string); ok && text != "" {
+					parts = append(parts, text)
+				}
+			}
+		}
+		return strings.Join(parts, " ")
+	default:
+		return ""
+	}
+}
+
+// convertContentToGeminiParts converts OpenAI message content to Gemini parts.
+func convertContentToGeminiParts(content any) []GeminiPart {
+	switch v := content.(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		return []GeminiPart{{Text: v}}
+	case []any:
+		var parts []GeminiPart
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				if text, ok := m["text"].(string); ok && text != "" {
+					parts = append(parts, GeminiPart{Text: text})
+				}
+				if img, ok := m["image_url"].(map[string]any); ok {
+					if url, ok := img["url"].(string); ok {
+						if strings.HasPrefix(url, "data:") {
+							// Parse data URL: data:mimeType;base64,data
+							if semi := strings.Index(url, ";"); semi > 5 {
+								mimeType := url[5:semi]
+								if comma := strings.Index(url, ","); comma > 0 {
+									data := url[comma+1:]
+									parts = append(parts, GeminiPart{
+										InlineData: &GeminiInlineData{MimeType: mimeType, Data: data},
+									})
+								}
+							}
+						} else if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+							parts = append(parts, GeminiPart{
+								FileData: &GeminiFileData{FileUri: url, MimeType: "image/*"},
+							})
+						}
+					}
+				}
+				if audio, ok := m["input_audio"].(map[string]any); ok {
+					if data, ok := audio["data"].(string); ok && data != "" {
+						format, _ := audio["format"].(string)
+						mimeType := "audio/" + format
+						if format == "mp3" {
+							mimeType = "audio/mpeg"
+						} else if format == "" {
+							mimeType = "audio/wav"
+						}
+						parts = append(parts, GeminiPart{
+							InlineData: &GeminiInlineData{MimeType: mimeType, Data: data},
+						})
+					}
+				}
+				if audio, ok := m["audio_url"].(map[string]any); ok {
+					if url, ok := audio["url"].(string); ok && strings.HasPrefix(url, "data:") {
+						if semi := strings.Index(url, ";"); semi > 5 {
+							mimeType := url[5:semi]
+							if comma := strings.Index(url, ","); comma > 0 {
+								data := url[comma+1:]
+								parts = append(parts, GeminiPart{
+									InlineData: &GeminiInlineData{MimeType: mimeType, Data: data},
+								})
+							}
+						}
+					}
+				}
+				if file, ok := m["file"].(map[string]any); ok {
+					if fileData, ok := file["file_data"].(string); ok && strings.HasPrefix(fileData, "data:") {
+						if semi := strings.Index(fileData, ";"); semi > 5 {
+							mimeType := fileData[5:semi]
+							if comma := strings.Index(fileData, ","); comma > 0 {
+								data := fileData[comma+1:]
+								parts = append(parts, GeminiPart{
+									InlineData: &GeminiInlineData{MimeType: mimeType, Data: data},
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+		return parts
+	}
+	return nil
+}
+
+// geminiToolMediaParts picks the binary blocks out of a tool result so they can
+// ride along with the functionResponse. A browser or screenshot tool returns
+// binary, and Gemini only lets the model look at bytes that arrive as an
+// inlineData part — stringifying the screenshot into the result payload hides
+// the very pixels the model was called to read. Text is deliberately left out:
+// it already travels inside functionResponse.response.result.
+func geminiToolMediaParts(content any) []GeminiPart {
+	all := convertContentToGeminiParts(content)
+	var media []GeminiPart
+	for _, p := range all {
+		if p.InlineData != nil || p.FileData != nil {
+			media = append(media, p)
+		}
+	}
+	return media
+}
+
+// NormalizeGeminiContents merges adjacent same-role messages, strips empty
+// parts, and brackets the conversation with user turns — parity with
+// open-sse/translator/formats/gemini.js. Gemini rejects a contents array that
+// does not start on a user turn, and equally one that ends on a model turn: a
+// prefill, a truncated stream, or tool calls the client never answered all
+// arrive that way and would 400 without the guards.
+func NormalizeGeminiContents(contents []GeminiContent) []GeminiContent {
+	return NormalizeGeminiContentsForModel(contents, "")
+}
+
+// NormalizeGeminiContentsForModel allows passing model name to conditionally apply Gemini 4 functionResponse ordering.
+func NormalizeGeminiContentsForModel(contents []GeminiContent, model string) []GeminiContent {
+	isGemini4 := isGemini4Model(model)
+	out := make([]GeminiContent, 0, len(contents)+2)
+	for _, c := range contents {
+		if c.Role == "" || len(c.Parts) == 0 {
+			continue
+		}
+		var validParts []GeminiPart
+		for _, p := range c.Parts {
+			if isGeminiPartEmpty(p) {
+				continue
+			}
+			validParts = append(validParts, sanitizeGeminiFunctionResponsePart(p))
+		}
+		if len(validParts) == 0 {
+			continue
+		}
+		if len(out) > 0 && out[len(out)-1].Role == c.Role {
+			merged := append(out[len(out)-1].Parts, validParts...)
+			if c.Role == "user" && isGemini4 {
+				merged = moveFunctionResponsesLast(merged)
+			}
+			out[len(out)-1].Parts = merged
+		} else {
+			parts := validParts
+			if c.Role == "user" && isGemini4 {
+				parts = moveFunctionResponsesLast(parts)
+			}
+			out = append(out, GeminiContent{
+				Role:  c.Role,
+				Parts: parts,
+			})
+		}
+	}
+	if len(out) == 0 {
+		return out
+	}
+
+	if out[0].Role != "user" {
+		out = append([]GeminiContent{{
+			Role:  "user",
+			Parts: []GeminiPart{{Text: "..."}},
+		}}, out...)
+	}
+	if last := out[len(out)-1]; last.Role == "model" {
+		out = append(out, GeminiContent{Role: "user", Parts: geminiTerminalUserParts(last.Parts)})
+	}
+	return out
+}
+
+// geminiTerminalUserParts answers a terminal model turn: one functionResponse
+// per unanswered functionCall, carrying the call's id so Gemini can match it,
+// or a plain nudge when the model was talking rather than calling a tool.
+func geminiTerminalUserParts(modelParts []GeminiPart) []GeminiPart {
+	var calls []*GeminiFunctionCall
+	for _, p := range modelParts {
+		if p.FunctionCall != nil {
+			calls = append(calls, p.FunctionCall)
+		}
+	}
+	if len(calls) == 0 {
+		return []GeminiPart{{Text: "Continue."}}
+	}
+
+	responses := make([]GeminiPart, 0, len(calls))
+	for _, call := range calls {
+		name := call.Name
+		if name == "" {
+			name = "tool"
+		}
+		responses = append(responses, GeminiPart{
+			FunctionResponse: &GeminiFunctionResp{
+				Name:     name,
+				ID:       call.ID,
+				Response: &GeminiFuncResp{Result: "Continue."},
+			},
+		})
+	}
+	return responses
+}
+
+// geminiFinishToOpenAI maps a Gemini finishReason to the OpenAI finish_reason
+// shared by the non-stream and streaming paths, so the two can never drift.
+// Parity with toOpenAIFinish(reason, "gemini") in
+// open-sse/translator/concerns/finishReason.js.
+func geminiFinishToOpenAI(reason string) string {
+	switch strings.ToUpper(reason) {
+	case "MAX_TOKENS":
+		return "length"
+	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT":
+		return "content_filter"
+	default:
+		return "stop"
+	}
+}
+
+// nextToolNameForID resolves the function name a tool result must carry: the
+// name of the functionCall it actually answers. Names are queued per
+// tool_call_id and consumed in document order, because that id is only unique
+// within a single assistant turn — a replayed id would otherwise make an
+// earlier turn's result carry a later tool's name. Returns "" when no call for
+// the id is known, so the caller can fall back to the id-derived name.
+// Parity with decolua/9router #4273 / #4589.
+func nextToolNameForID(queued map[string][]string, fallback map[string]string, cursor map[string]int, id, cleanID string) string {
+	queue, key := queued[id], id
+	if len(queue) == 0 && cleanID != id {
+		queue, key = queued[cleanID], cleanID
+	}
+	if len(queue) > cursor[key] {
+		name := queue[cursor[key]]
+		cursor[key]++
+		return name
+	}
+	if name := fallback[id]; name != "" {
+		return name
+	}
+	return fallback[cleanID]
+}
+
+func isGeminiPartEmpty(p GeminiPart) bool {
+	return p.Text == "" &&
+		p.Thought == nil &&
+		p.ThoughtSignature == "" &&
+		p.FunctionCall == nil &&
+		p.FunctionResponse == nil &&
+		p.InlineData == nil &&
+		p.FileData == nil
+}

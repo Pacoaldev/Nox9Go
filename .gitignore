@@ -1,0 +1,75 @@
+# Build artifacts
+/nox9go
+/nox9go-*
+/SHA256SUMS.txt
+*.exe
+*.exe~
+web/dist/
+web/.dist-stamp
+_site/
+
+# Test binaries
+*.test
+*.out
+
+# Logs
+*.log
+/tmp/*.log
+
+# Data directory
+.9router/
+data/
+
+# Local demo gateway: its SQLite data dir, engine key and captured streams. The
+# key alone is enough to talk to the running gateway as a client, so none of it
+# belongs in a commit.
+.demo/
+
+# Local overrides
+docker-compose.local.yml
+
+# Environment
+.env
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+graphify-out
+node_modules/
+web/node_modules/
+stitch-screens/
+stitch-screenshots/
+
+# Git worktrees — each is a nested repo, so `git add -A` will happily stage
+# them as embedded gitlinks. A worktree caught in a commit has to be undone
+# with `git rm --cached` before it reaches the remote.
+.worktrees/
+.smoke-data/
+
+# A pasted browser-login credential for scripts/deepseek-web-live.sh. Never
+# belongs in a commit, and `git add -A` would otherwise stage it silently.
+.ds-token
+
+/opencode-go
+/opencode-go-*
+
+# Per-machine AI agent harness config. These directories hold tooling that is
+# installed locally, not project content: a committed `.claude/settings.json`
+# or `.agents/` tree makes every checkout inherit another machine's hooks.
+# The project's own instructions — CLAUDE.md and AGENTS.md — stay tracked.
+/.claude/
+/.agents/
+/.gemini/
+/.cursor/
+/.codex/
+/.continue/
+/.aider*
+/.mcp.json
+/.clinerules
+/.windsurfrules
+/GEMINI.md
+/QWEN.md
+/COPILOT.md
+/docs/infoNOX.md
+/.atl/

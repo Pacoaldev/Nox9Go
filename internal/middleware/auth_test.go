@@ -1,0 +1,290 @@
+package middleware
+
+import (
+	"database/sql"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
+	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/dbtest"
+)
+
+func setupTestDB(t *testing.T) (*sql.DB, func()) {
+	tmpFile, err := os.CreateTemp("", "test_middleware_*.sqlite")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	database, err := db.OpenDatabase(tmpFile.Name())
+	if err != nil {
+		os.Remove(tmpFile.Name())
+		t.Fatalf("OpenDatabase failed: %v", err)
+	}
+
+	cleanup := func() {
+		database.Close()
+		os.Remove(tmpFile.Name())
+	}
+
+	// dbtest.CreateTables builds every table and then applies the Go-only
+	// additive columns, so the fixture matches a real database. A hand-rolled
+	// schema here drifts and fails any query that reads a newer column.
+	if err := dbtest.CreateTables(database); err != nil {
+		cleanup()
+		t.Fatalf("failed to create tables: %v", err)
+	}
+
+	// Seed key data
+	_, err = database.Exec(`INSERT INTO apiKeys (id, key, name, machineId, isActive, createdAt) VALUES
+		('1', 'valid-token', 'Test Key 1', 'mac-1', 1, '2026-07-18T00:00:00Z'),
+		('2', 'inactive-token', 'Test Key 2', 'mac-2', 0, '2026-07-18T00:00:00Z');`)
+	if err != nil {
+		cleanup()
+		t.Fatalf("failed to seed apiKeys: %v", err)
+	}
+
+	return database, cleanup
+}
+
+func TestRequireApiKeyMiddleware(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := db.NewRepo(database)
+	middleware := RequireApiKey(repo)
+
+	// Mock handler that returns 200 OK
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	testHandler := middleware(okHandler)
+
+	tests := []struct {
+		name           string
+		setupRequest   func() *http.Request
+		expectedStatus int
+	}{
+		{
+			name: "Valid key in Authorization header",
+			setupRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "http://example.com/v1/chat/completions", nil)
+				req.Header.Set("Authorization", "Bearer valid-token")
+				return req
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			// Query-param keys are intentionally not supported (they leak via
+			// referrers/history); header auth is required.
+			name: "Key in query parameter is rejected",
+			setupRequest: func() *http.Request {
+				return httptest.NewRequest("GET", "http://example.com/v1/chat/completions?key=valid-token", nil)
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name: "Key in query parameter is accepted for stream endpoints",
+			setupRequest: func() *http.Request {
+				return httptest.NewRequest("GET", "http://example.com/api/usage/stream?key=valid-token", nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "Inactive key in Authorization header",
+			setupRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "http://example.com/v1/chat/completions", nil)
+				req.Header.Set("Authorization", "Bearer inactive-token")
+				return req
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name: "Missing API Key",
+			setupRequest: func() *http.Request {
+				return httptest.NewRequest("GET", "http://example.com/v1/chat/completions", nil)
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name: "Malformed Authorization header",
+			setupRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "http://example.com/v1/chat/completions", nil)
+				req.Header.Set("Authorization", "valid-token")
+				return req
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := tt.setupRequest()
+			rr := httptest.NewRecorder()
+			testHandler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d. Body: %s", tt.expectedStatus, rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestRequireApiKeyMiddleware_ProtectsAntigravityExchange(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	gate := RequireApiKey(db.NewRepo(database))(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/oauth/antigravity/exchange", nil)
+	rec := httptest.NewRecorder()
+	gate.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, expected 401", rec.Code)
+	}
+}
+
+func TestGetAuthenticatedApiKey(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := db.NewRepo(database)
+	middleware := RequireApiKey(repo)
+
+	var retrievedKey string
+	var retrievedID string
+	var hasKey bool
+
+	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKeyObj := GetAuthenticatedApiKey(r)
+		if apiKeyObj != nil {
+			retrievedKey = apiKeyObj.Key
+			retrievedID = apiKeyObj.ID
+			hasKey = true
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	testHandler := middleware(mockHandler)
+
+	req := httptest.NewRequest("GET", "http://example.com/v1/chat/completions", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rr := httptest.NewRecorder()
+
+	testHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	if !hasKey {
+		t.Error("expected context to contain authenticated API key")
+	}
+
+	// Issue #199 reverted the F-6 self-heal, so the authenticated object now
+	// carries the row as stored — including the secret. That is the deliberate
+	// trade-off: the dashboard can read a key back, at the cost of a database
+	// dump exposing every client key.
+	if retrievedID != "1" {
+		t.Errorf("expected authenticated key id '1', got %q", retrievedID)
+	}
+	if retrievedKey != "valid-token" {
+		t.Errorf("authenticated key = %q, want the stored secret %q", retrievedKey, "valid-token")
+	}
+
+	// Test case where no key is injected (directly calling mockHandler without middleware)
+	reqNoMiddleware := httptest.NewRequest("GET", "http://example.com/v1/chat/completions", nil)
+	apiKeyObj := GetAuthenticatedApiKey(reqNoMiddleware)
+	if apiKeyObj != nil {
+		t.Error("expected GetAuthenticatedApiKey to return nil when no key is injected")
+	}
+}
+
+func TestExtractApiKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		req      *http.Request
+		expected string
+	}{
+		{
+			name: "Bearer Authorization header",
+			req: func() *http.Request {
+				r := httptest.NewRequest("GET", "/", nil)
+				r.Header.Set("Authorization", "Bearer test-key-123")
+				return r
+			}(),
+			expected: "test-key-123",
+		},
+		{
+			name: "lowercase bearer",
+			req: func() *http.Request {
+				r := httptest.NewRequest("GET", "/", nil)
+				r.Header.Set("Authorization", "bearer test-key")
+				return r
+			}(),
+			expected: "test-key",
+		},
+		{
+			name:     "query key param is rejected",
+			req:      httptest.NewRequest("GET", "/?key=query-key", nil),
+			expected: "",
+		},
+		{
+			name:     "query api_key param is rejected",
+			req:      httptest.NewRequest("GET", "/?api_key=alt-key", nil),
+			expected: "",
+		},
+		{
+			name:     "query apiKey param is rejected",
+			req:      httptest.NewRequest("GET", "/?apiKey=camel-key", nil),
+			expected: "",
+		},
+		{
+			name: "X-API-Key header fallback",
+			req: func() *http.Request {
+				r := httptest.NewRequest("GET", "/", nil)
+				r.Header.Set("X-API-Key", "header-key")
+				return r
+			}(),
+			expected: "header-key",
+		},
+		{
+			name: "Bearer takes priority over X-API-Key header",
+			req: func() *http.Request {
+				r := httptest.NewRequest("GET", "/", nil)
+				r.Header.Set("Authorization", "Bearer bearer-key")
+				r.Header.Set("X-API-Key", "header-key")
+				return r
+			}(),
+			expected: "bearer-key",
+		},
+		{
+			name:     "no auth returns empty",
+			req:      httptest.NewRequest("GET", "/", nil),
+			expected: "",
+		},
+		{
+			name: "malformed auth with no space",
+			req: func() *http.Request {
+				r := httptest.NewRequest("GET", "/", nil)
+				r.Header.Set("Authorization", "no-space")
+				return r
+			}(),
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractApiKey(tt.req)
+			if got != tt.expected {
+				t.Errorf("ExtractApiKey() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}

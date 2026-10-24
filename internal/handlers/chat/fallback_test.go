@@ -1,0 +1,486 @@
+package chat
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	json "encoding/json/v2"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/tokensaver"
+)
+
+// seedConnDB inserts a single active connection for the given provider pointing at upstream.
+func seedConnDB(t *testing.T, database *sql.DB, provider, connID, apiKey, baseURL string) {
+	t.Helper()
+	data, _ := json.Marshal(map[string]any{"apiKey": apiKey, "baseUrl": baseURL})
+	q := `INSERT INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES (?, ?, 'apikey', 'Test', 1, 1, ?, '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`
+	if _, err := database.Exec(q, connID, provider, string(data)); err != nil {
+		t.Fatalf("seed connection: %v", err)
+	}
+}
+
+func TestApplyTokenSavers_AllOff(t *testing.T) {
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+
+	body := []byte(`{"messages":[{"role":"user","content":"hello"}]}`)
+	got, origTokens, savedTokens, savedPct := h.applyTokenSavers(context.Background(), body, false)
+	if string(got) != string(body) {
+		t.Errorf("expected unchanged body when all token savers off")
+	}
+	if origTokens != 0 || savedTokens != 0 || savedPct != 0 {
+		t.Errorf("expected 0 token metrics when off, got orig=%d, saved=%d, pct=%d", origTokens, savedTokens, savedPct)
+	}
+}
+
+func TestApplyTokenSavers_RTKOnly(t *testing.T) {
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+	h.TokenSaver.SetRTK(true)
+
+	// RTK compresses tool messages with large content. Build via json.Marshal
+	// so newlines are properly escaped (raw newlines are invalid JSON).
+	var sb strings.Builder
+	for i := 0; i < 300; i++ {
+		sb.WriteString("unique log line number ")
+		sb.WriteString(strconv.Itoa(i))
+		sb.WriteString("\n")
+	}
+	body, err := json.Marshal(map[string]any{
+		"messages": []any{
+			map[string]any{"role": "tool", "content": sb.String()},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	got, origTokens, savedTokens, savedPct := h.applyTokenSavers(context.Background(), body, false)
+	if string(got) == string(body) {
+		t.Errorf("expected RTK to modify body")
+	}
+	if origTokens <= 0 {
+		t.Errorf("expected origTokens > 0, got %d", origTokens)
+	}
+	if savedTokens <= 0 {
+		t.Errorf("expected savedTokens > 0, got %d", savedTokens)
+	}
+	if savedPct <= 0 {
+		t.Errorf("expected savedPct > 0, got %d", savedPct)
+	}
+}
+
+func TestApplyTokenSavers_CavemanInjects(t *testing.T) {
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+	h.TokenSaver.SetCaveman(true)
+
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	got, _, _, _ := h.applyTokenSavers(context.Background(), body, false)
+	// Caveman prompt text should now appear in the system message.
+	if !strings.Contains(string(got), "terse") && !strings.Contains(string(got), "caveman") {
+		t.Errorf("expected caveman prompt injected, got %s", got)
+	}
+}
+
+func TestApplyTokenSavers_PonytailInjects(t *testing.T) {
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+	h.TokenSaver.SetPonytail(true)
+
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	got, _, _, _ := h.applyTokenSavers(context.Background(), body, false)
+	if !strings.Contains(string(got), tokensaver.PonytailPrompt[:20]) {
+		t.Errorf("expected ponytail prompt injected, got %s", got)
+	}
+}
+
+func TestApplyTokenSavers_ADHDInjects(t *testing.T) {
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+	h.TokenSaver.SetADHD(true)
+
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	got, _, _, _ := h.applyTokenSavers(context.Background(), body, false)
+	if !strings.Contains(string(got), "I have ADHD — action-first output") {
+		t.Errorf("expected ADHD full prompt injected, got %s", got)
+	}
+
+	// Test lite mode
+	h.TokenSaver.SetADHD(true, "lite")
+	bodyLite := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	gotLite, _, _, _ := h.applyTokenSavers(context.Background(), bodyLite, false)
+	if !strings.Contains(string(gotLite), "I have ADHD (lite)") {
+		t.Errorf("expected ADHD lite prompt injected, got %s", gotLite)
+	}
+}
+
+func TestTryForwardWithConnection_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id":"ok","choices":[{"message":{"content":"done"}}],"usage":{"prompt_tokens":2,"completion_tokens":2}}`))
+	}))
+	defer srv.Close()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	seedConnDB(t, database, "deepseek", "conn-try", "sk-try", srv.URL)
+
+	repo := db.NewRepo(database)
+	h := NewChatHandler(repo)
+
+	body := []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}]}`)
+	rec := httptest.NewRecorder()
+	err := h.tryForwardWithConnection(forwardRequestParams{
+		Ctx: context.Background(), W: rec, Provider: "deepseek", Model: "deepseek-chat",
+		ConnectionID: "conn-try", ConnData: &ConnectionData{APIKey: "sk-try", BaseURL: srv.URL}, Body: body,
+		IsStream: false, TranslateResponse: false, Endpoint: "/v1/chat/completions",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestTryForwardWithConnection_NoAPIKey(t *testing.T) {
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+
+	rec := httptest.NewRecorder()
+	err := h.tryForwardWithConnection(forwardRequestParams{
+		Ctx: context.Background(), W: rec, Provider: "deepseek", Model: "deepseek-chat",
+		ConnectionID: "conn-x", ConnData: &ConnectionData{}, Body: []byte(`{}`),
+		IsStream: false, TranslateResponse: false, Endpoint: "/v1/chat/completions",
+	})
+	if err == nil {
+		t.Fatal("expected error when API key missing")
+	}
+	var ue *upstreamError
+	if !errors.As(err, &ue) {
+		t.Fatalf("expected *upstreamError, got %T", err)
+	}
+	if ue.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", ue.StatusCode)
+	}
+}
+
+func TestHandleAccountFallback_RetryableLocksModel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"rate limited"}`))
+	}))
+	defer srv.Close()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	if _, err := database.Exec(`DELETE FROM providerConnections WHERE id IN ('conn-1', 'conn-2')`); err != nil {
+		t.Fatalf("clear seeded connections: %v", err)
+	}
+	seedConnDB(t, database, "deepseek", "conn-429", "sk-429", srv.URL)
+
+	repo := db.NewRepo(database)
+	h := NewChatHandler(repo)
+
+	body := []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}]}`)
+	rec := httptest.NewRecorder()
+	err := h.handleAccountFallback(context.Background(), rec, "deepseek", "deepseek-chat", "", body, false, false, "/v1/chat/completions")
+	if err == nil {
+		t.Fatal("expected error after exhausting connections")
+	}
+
+	locked, lerr := repo.IsConnectionModelLocked("conn-429", "deepseek-chat")
+	if lerr != nil {
+		t.Fatalf("IsConnectionModelLocked failed: %v", lerr)
+	}
+	if !locked {
+		t.Error("expected conn-429 per-connection lock after 429 on all connections")
+	}
+}
+
+func TestHandleMessagesComboFallback_429LocksAndExcludesConnection(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"rate limited"}`))
+	}))
+	defer srv.Close()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	// Remove the helper's pre-seeded deepseek/groq connections so conn-combo is
+	// the only deepseek connection (they're priority 1 and would shadow it).
+	if _, err := database.Exec(`DELETE FROM providerConnections WHERE id IN ('conn-1', 'conn-2')`); err != nil {
+		t.Fatalf("clear seeded connections: %v", err)
+	}
+	seedConnDB(t, database, "deepseek", "conn-combo", "sk-combo", srv.URL)
+
+	repo := db.NewRepo(database)
+	h := NewChatHandler(repo)
+
+	// Two models on the SAME provider+connection: after the first 429, the
+	// connection is locked AND excluded so the second model must not re-hit it.
+	comboModels := []string{"deepseek/deepseek-chat", "deepseek/deepseek-reasoner"}
+	modelsJSON, _ := json.Marshal(comboModels)
+	if _, err := database.Exec(`INSERT INTO combos (id, name, kind, models, createdAt, updatedAt) VALUES ('combo-1', 'combo-test', 'fallback', ?, '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`, string(modelsJSON)); err != nil {
+		t.Fatalf("seed combo: %v", err)
+	}
+
+	translatedReq := map[string]any{
+		"model":      "deepseek-chat",
+		"max_tokens": 100,
+		"messages":   []map[string]any{{"role": "user", "content": "hi"}},
+	}
+	rec := httptest.NewRecorder()
+	h.handleMessagesComboFallback(context.Background(), rec, translatedReq, comboModels, "fallback", false, "combo-test", 0)
+
+	if got := hits.Load(); got != 1 {
+		t.Errorf("expected 1 upstream hit (second combo model excluded), got %d", got)
+	}
+
+	locked, lerr := repo.IsConnectionModelLocked("conn-combo", "deepseek-chat")
+	if lerr != nil {
+		t.Fatalf("IsConnectionModelLocked failed: %v", lerr)
+	}
+	if !locked {
+		t.Error("expected conn-combo locked for deepseek-chat after 429")
+	}
+}
+
+func TestHandleMessagesComboFallback_RetriesOnceOnBoundedRetryAfter(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := hits.Add(1)
+		if n == 1 {
+			// Upstream says "wait ~1s". A 429 is only worth retrying
+			// inside brief429RetryTolerance — past that the account is out of
+			// quota and re-hitting it deepens the upstream's backoff — so the
+			// bound, not the old 8s cap, is what this covers.
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(retryAfterBody(time.Now(), time.Second)))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id":"chatcmpl-1","object":"chat.completion","created":0,"model":"deepseek-chat","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	defer srv.Close()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	if _, err := database.Exec(`DELETE FROM providerConnections WHERE id IN ('conn-1', 'conn-2')`); err != nil {
+		t.Fatalf("clear seeded connections: %v", err)
+	}
+	seedConnDB(t, database, "deepseek", "conn-combo", "sk-combo", srv.URL)
+
+	repo := db.NewRepo(database)
+	h := NewChatHandler(repo)
+
+	comboModels := []string{"deepseek/deepseek-chat"}
+	modelsJSON, _ := json.Marshal(comboModels)
+	if _, err := database.Exec(`INSERT INTO combos (id, name, kind, models, createdAt, updatedAt) VALUES ('combo-r', 'combo-retry', 'fallback', ?, '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`, string(modelsJSON)); err != nil {
+		t.Fatalf("seed combo: %v", err)
+	}
+
+	translatedReq := map[string]any{
+		"model":      "deepseek-chat",
+		"max_tokens": 100,
+		"messages":   []map[string]any{{"role": "user", "content": "hi"}},
+	}
+	rec := httptest.NewRecorder()
+	h.handleMessagesComboFallback(context.Background(), rec, translatedReq, comboModels, "fallback", false, "combo-retry", 0)
+
+	if got := hits.Load(); got != 2 {
+		t.Errorf("expected 2 upstream hits (1 failure + 1 retry), got %d", got)
+	}
+}
+
+func TestHandleAccountFallback_NoConnections(t *testing.T) {
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+
+	body := []byte(`{"model":"deepseek-chat","messages":[]}`)
+	rec := httptest.NewRecorder()
+	err := h.handleAccountFallback(context.Background(), rec, "nonexistent-provider", "model", "", body, false, false, "/v1/chat/completions")
+	if err == nil {
+		t.Fatal("expected error when provider has no connections")
+	}
+}
+
+func TestHandleAccountFallback_503CapacityLocksCanonicalModel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{
+			"error": {
+				"code": 503,
+			"message": "No capacity available for model gemini-3.7-flash-tiered on the server",
+				"status": "UNAVAILABLE",
+				"details": [{"reason": "MODEL_CAPACITY_EXHAUSTED"}]
+			}
+		}`))
+	}))
+	defer srv.Close()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	agData, _ := json.Marshal(map[string]any{
+		"apiKey":      "tok-ag",
+		"accessToken": "tok-ag",
+		"baseUrl":     srv.URL,
+		"projectId":   "test-proj-503",
+		"providerSpecificData": map[string]any{
+			"projectId": "test-proj-503",
+		},
+	})
+	if _, err := database.Exec(`INSERT INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES ('conn-ag-cap', 'antigravity', 'oauth', 'AG Cap Test', 1, 1, ?, '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`, string(agData)); err != nil {
+		t.Fatalf("seed connection: %v", err)
+	}
+	repo := db.NewRepo(database)
+	h := NewChatHandler(repo)
+
+	body := []byte(`{"model":"gemini-3.7-flash-low","messages":[{"role":"user","content":"ping"}]}`)
+	rec := httptest.NewRecorder()
+	err := h.handleAccountFallback(context.Background(), rec, "antigravity", "gemini-3.7-flash-low", "", body, false, false, "/v1/chat/completions")
+	if err == nil {
+		t.Fatal("expected error after 503 capacity exhaustion")
+	}
+
+	// The whole 3.7 family shares one backend id (gemini-3.7-flash-tiered), so
+	// exhausting the low tier exhausts every 3.7 tier and all of them must be
+	// locked. The 3.8 family is deliberately NOT tested here: upstream
+	// v0.5.99 gives each 3.8 tier its own backend id, so a capacity error on
+	// one tier says nothing about the others.
+	lockedCanonical, err := repo.IsConnectionModelLocked("conn-ag-cap", "gemini-3.7-flash-tiered")
+	if err != nil {
+		t.Fatalf("check canonical lock: %v", err)
+	}
+	if !lockedCanonical {
+		t.Error("expected canonical model gemini-3.7-flash-tiered to be locked on 503 capacity error")
+	}
+
+	// A different 3.8 tier keeps its own capacity, so it must remain eligible.
+	conn, _, _ := h.GetBestConnection("antigravity", "", nil, "gemini-3.8-flash-high")
+	if conn == nil {
+		t.Error("expected gemini-3.8-flash-high to stay available: 3.8 tiers are separate backends")
+	}
+}
+
+func TestExtractErrorText_CloudflareHTML(t *testing.T) {
+	htmlBody := []byte(`<!DOCTYPE html>
+<html class="no-js" lang="en-US">
+<head>
+<title>Attention Required! | Cloudflare</title>
+<meta charset="UTF-8" />
+</head>
+<body>
+<h1>Attention Required!</h1>
+</body>
+</html>`)
+
+	got := extractErrorText(htmlBody)
+	if !strings.Contains(got, "Cloudflare WAF challenge") {
+		t.Errorf("expected Cloudflare WAF challenge in error text, got %q", got)
+	}
+}
+
+func TestHandleAccountFallback_AllInCooldownReportsEarliestReset(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+
+	dropSeededConn(t, database)
+	inTenMinutes := time.Now().UTC().Add(10 * time.Minute)
+	insertDeepseekConn(t, database, "conn-cooling", 1, cooldownData(t, &inTenMinutes))
+
+	h := NewChatHandler(db.NewRepo(database))
+	body := []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}]}`)
+	rec := httptest.NewRecorder()
+	err := h.handleAccountFallback(context.Background(), rec, "deepseek", "deepseek-chat", "", body, false, false, "/v1/chat/completions")
+	if err == nil {
+		t.Fatal("expected error when all connections are in cooldown")
+	}
+	if !strings.Contains(err.Error(), "all in cooldown") {
+		t.Errorf("expected error to contain 'all in cooldown', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), inTenMinutes.UTC().Format(time.RFC3339)) {
+		t.Errorf("expected error to contain earliest reset %s, got: %v", inTenMinutes.UTC().Format(time.RFC3339), err)
+	}
+}
+func TestApplyTokenSavers_HeadroomOffByDefault(t *testing.T) {
+	// The default must be "off", because the alternative is every request
+	// paying for a round trip to a proxy the operator never configured.
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+
+	body := []byte(`{"messages":[{"role":"user","content":"a long paragraph worth compressing if it were enabled"}]}`)
+	got, _, _, _ := h.applyTokenSavers(context.Background(), body, false)
+	if string(got) != string(body) {
+		t.Fatalf("headroom must be off by default; body changed")
+	}
+}
+
+func TestApplyTokenSavers_HeadroomCompressesWhenEnabled(t *testing.T) {
+	// The wiring test: with the flag on and a proxy that answers, the body the
+	// handler returns is the proxy's, not the original. Without this, the call
+	// site could be deleted and every other test would still pass.
+	var hits int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"messages":[{"role":"user","content":"short"}],
+			"tokens_before":900,"tokens_after":3,"tokens_saved":897}`))
+	}))
+	defer ts.Close()
+
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+	h.TokenSaver.UpdateFromSettings(&db.SettingsData{
+		HeadroomEnabled:   true,
+		HeadroomUrl:       ts.URL,
+		HeadroomTimeoutMs: 2000,
+	})
+
+	body := []byte(`{"model":"m","messages":[{"role":"user","content":"a long paragraph worth compressing if it were enabled at all today"}]}`)
+	got, _, _, _ := h.applyTokenSavers(context.Background(), body, false)
+	if atomic.LoadInt32(&hits) == 0 {
+		t.Fatalf("enabled headroom never reached the proxy")
+	}
+	if string(got) == string(body) {
+		t.Fatalf("body was not replaced by the compressed one")
+	}
+	if !bytes.Contains(got, []byte(`"short"`)) {
+		t.Fatalf("expected the proxy's message in the result, got: %s", got)
+	}
+}
+
+func TestApplyTokenSavers_HeadroomFailsOpen(t *testing.T) {
+	// A proxy that is configured but not running must not fail the request.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	url := ts.URL
+	ts.Close()
+
+	h, cleanup := setupHandlerForForward(t)
+	defer cleanup()
+	h.TokenSaver.UpdateFromSettings(&db.SettingsData{
+		HeadroomEnabled:   true,
+		HeadroomUrl:       url,
+		HeadroomTimeoutMs: 300,
+	})
+
+	body := []byte(`{"model":"m","messages":[{"role":"user","content":"still has to go through"}]}`)
+	got, _, _, _ := h.applyTokenSavers(context.Background(), body, false)
+	if string(got) != string(body) {
+		t.Fatalf("a dead proxy must leave the body untouched")
+	}
+}

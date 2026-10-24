@@ -1,0 +1,986 @@
+package translator
+
+import (
+	"crypto/sha256"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
+	"nox9go/proxy/internal/log"
+)
+
+// maxAntigravityOutputTokens caps generationConfig.maxOutputTokens; Google's
+// Antigravity backend rejects larger values (parity with Next.js capabilities.js).
+const maxAntigravityOutputTokens = 64000
+
+// thinkingHeadroomTokens is added on top of thinkingBudget when ensuring
+// maxOutputTokens strictly exceeds it (parity across chat and image paths).
+const thinkingHeadroomTokens = 8192
+
+// antigravityDecoyUnavailable is the placeholder description for injected decoy tools.
+const antigravityDecoyUnavailable = "This tool is currently unavailable."
+
+// antigravityRequestBlacklist are fields Google generateContent rejects when
+// present at the request root (thinking/reasoning fields set by upstream clients).
+var antigravityRequestBlacklist = []string{
+	"output_config",
+	"thinking",
+	"reasoning_effort",
+	"reasoning",
+	"enable_thinking",
+	"thinking_budget",
+	"thinkingConfig",
+}
+
+// AntigravityRequest is the wrapper format for Antigravity API.
+// RequestType is omitempty: PR decolua/9router#3986 showed Google's Cloud Code
+// endpoint enforces a tiny separate quota bucket whenever requestType="agent"
+// is present, causing false 429 RESOURCE_EXHAUSTED on OMP harness payloads
+// even with quota remaining. So the agent path omits the field entirely.
+type AntigravityRequest struct {
+	Project     string         `json:"project"`
+	Model       string         `json:"model"`
+	UserAgent   string         `json:"userAgent"`
+	RequestType string         `json:"requestType,omitempty"`
+	RequestID   string         `json:"requestId"`
+	Request     jsontext.Value `json:"request"`
+}
+
+// AntigravityNativeToolNames are tool names preserved without suffix.
+var AntigravityNativeToolNames = map[string]bool{
+	"browser_subagent": true,
+	"command_status":   true,
+	"find_by_name":     true,
+	"generate_image":   true,
+	"grep_search":      true,
+	"list_dir":         true,
+	"list_resources":   true,
+	"mcp_sequential-thinking_sequentialthinking": true,
+	"multi_replace_file_content":                 true,
+	"notify_user":                                true,
+	"read_resource":                              true,
+	"read_terminal":                              true,
+	"read_url_content":                           true,
+	"replace_file_content":                       true,
+	"run_command":                                true,
+	"search_web":                                 true,
+	"send_command_input":                         true,
+	"task_boundary":                              true,
+	"view_content_chunk":                         true,
+	"view_file":                                  true,
+	"write_to_file":                              true,
+}
+
+// AntigravityDecoyPlaceholderParams provides a valid schema for tools with no input parameters.
+var AntigravityDecoyPlaceholderParams = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"reason": map[string]any{
+			"type":        "string",
+			"description": "Brief explanation of why you are calling this tool",
+		},
+	},
+	"required": []string{"reason"},
+}
+
+// AntigravityDecoyTools are the 21 decoy tools matching official IDE defaults.
+var AntigravityDecoyTools = []GeminiFunctionDecl{
+	{Name: "browser_subagent", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "command_status", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "find_by_name", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "generate_image", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "grep_search", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "list_dir", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "list_resources", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "mcp_sequential-thinking_sequentialthinking", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "multi_replace_file_content", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "notify_user", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "read_resource", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "read_terminal", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "read_url_content", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "replace_file_content", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "run_command", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "search_web", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "send_command_input", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "task_boundary", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "view_content_chunk", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "view_file", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+	{Name: "write_to_file", Description: antigravityDecoyUnavailable, Parameters: AntigravityDecoyPlaceholderParams},
+}
+
+// CloakAntigravityRequest cloaks tool names with `_ide` suffix and appends decoy tools.
+func CloakAntigravityRequest(req *GeminiRequest, clientTool string) (*GeminiRequest, map[string]string) {
+	if req == nil {
+		return nil, nil
+	}
+
+	toolNameMap := make(map[string]string)
+	if len(req.Tools) == 0 {
+		return req, toolNameMap
+	}
+
+	isCopilot := clientTool == "github-copilot"
+	var clientDecls []GeminiFunctionDecl
+	decoyNames := make(map[string]bool, len(AntigravityDecoyTools))
+	for _, dt := range AntigravityDecoyTools {
+		decoyNames[dt.Name] = true
+	}
+
+	for _, toolGroup := range req.Tools {
+		for _, fn := range toolGroup.FunctionDeclarations {
+			if isCopilot && (AntigravityNativeToolNames[fn.Name] || decoyNames[fn.Name]) {
+				continue
+			}
+			if AntigravityNativeToolNames[fn.Name] {
+				clientDecls = append(clientDecls, fn)
+				continue
+			}
+
+			suffixedName := fn.Name + "_ide"
+			toolNameMap[suffixedName] = fn.Name
+			fn.Name = suffixedName
+			clientDecls = append(clientDecls, fn)
+		}
+	}
+
+	// Merge client declarations first, then decoy tools (deduplicating)
+	seen := make(map[string]bool)
+	var allDecls []GeminiFunctionDecl
+	for _, decl := range append(clientDecls, AntigravityDecoyTools...) {
+		if decl.Name == "" || seen[decl.Name] {
+			continue
+		}
+		seen[decl.Name] = true
+		if decl.Parameters != nil {
+			if b, err := json.Marshal(decl.Parameters); err == nil {
+				cleaned := CleanParametersSchema(b)
+				var cleanedParams any
+				if err := json.Unmarshal(cleaned, &cleanedParams); err == nil {
+					decl.Parameters = cleanedParams
+				}
+			}
+		}
+		allDecls = append(allDecls, decl)
+	}
+
+	// Update contents message history with renamed tools
+	cloakedContents := make([]GeminiContent, len(req.Contents))
+	for i, c := range req.Contents {
+		cloakedParts := make([]GeminiPart, len(c.Parts))
+		for j, p := range c.Parts {
+			partCopy := p
+			if p.FunctionCall != nil && !AntigravityNativeToolNames[p.FunctionCall.Name] {
+				fc := *p.FunctionCall
+				fc.Name = fc.Name + "_ide"
+				partCopy.FunctionCall = &fc
+			}
+			if p.FunctionResponse != nil && !AntigravityNativeToolNames[p.FunctionResponse.Name] {
+				fr := *p.FunctionResponse
+				fr.Name = fr.Name + "_ide"
+				partCopy.FunctionResponse = &fr
+			}
+			cloakedParts[j] = partCopy
+		}
+		cloakedContents[i] = GeminiContent{
+			Role:  c.Role,
+			Parts: cloakedParts,
+		}
+	}
+
+	res := *req
+	res.Tools = []GeminiTool{{FunctionDeclarations: allDecls}}
+	res.ToolConfig = map[string]any{
+		"functionCallingConfig": map[string]any{
+			"mode": "VALIDATED",
+		},
+	}
+	res.Contents = cloakedContents
+
+	return &res, toolNameMap
+}
+
+// UncloakToolName restores the original tool name from a cloaked name.
+func UncloakToolName(name string, toolMap map[string]string) string {
+	if toolMap != nil {
+		if orig, ok := toolMap[name]; ok {
+			return orig
+		}
+	}
+	name = strings.TrimPrefix(name, "proxy_")
+	if strings.HasSuffix(name, "_ide") {
+		return strings.TrimSuffix(name, "_ide")
+	}
+	return name
+}
+
+// Competitive prompt phrases that cause Antigravity to reject requests with 429.
+var competitivePromptBlacklist = []string{
+	"You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+	"You are a Claude agent, built on Anthropic's Claude Agent SDK",
+	"Anthropic's Claude Agent SDK",
+}
+
+// Harness tag patterns that trigger false 429 RESOURCE_EXHAUSTED rejections on
+// the Antigravity gateway (parity with decolua/9router PR #3987). OMP-family
+// harnesses inject these XML markers in system text; normalizing them to
+// neutral tags keeps instruction bodies intact while bypassing the filter.
+var (
+	harnessTagSystemConventions = regexp.MustCompile(`(?i)<(/?)system[-_]conventions>`)
+	harnessTagSystemDirective   = regexp.MustCompile(`(?i)<(/?)system[-_]directive>`)
+	harnessTagCritical          = regexp.MustCompile(`(?i)<(/?)critical>`)
+	harnessBrandOMPFull         = regexp.MustCompile(`(?i)Oh My Pi coding harness`)
+	harnessBrandOMP             = regexp.MustCompile(`(?i)Oh My Pi`)
+	harnessBrandOMPLive         = regexp.MustCompile(`(?i)omp Live`)
+	claudeBillingHeaderRegex    = regexp.MustCompile(`(?im)^x-anthropic-billing-header:[^\n]*(?:\r?\n)*`)
+	// antigravityOpenCodeRegex matches the literal `opencode` provider
+	// identifier upstream rewrites in the system instruction. Upstream's rule
+	// is unbounded and case-insensitive, so `opencode-zen` and
+	// `.config/opencode/` are rewritten too (parity with decolua/9router
+	// open-sse/config/appConstants.js:194).
+	antigravityOpenCodeRegex = regexp.MustCompile(`(?i)opencode`)
+	// hermesIdentityRegex matches every Hermes identity variant upstream
+	// rewrites, and the whole match is replaced by a neutral sentence. The
+	// legacy rule only matched one exact phrasing, so the other variants
+	// reached the Antigravity backend with the fingerprint intact and could
+	// trigger a fake 429 RESOURCE_EXHAUSTED (parity with decolua/9router
+	// commit a61fc6a0).
+	//
+	// The upstream expression is transliterated exactly, including the
+	// literal single space in "Nous Research" — upstream does not accept
+	// other whitespace between the two words, and a port that accepted more
+	// would rewrite phrasings upstream leaves alone.
+	hermesIdentityRegex = regexp.MustCompile(`(?i)You are Hermes(?: Agent)?(?:,\s*(?:an intelligent AI assistant|an AI assistant|an AI agent))?(?:,?\s*(?:built|created)\s+by\s+Nous Research)?\.`)
+)
+
+// normalizeHarnessMarkers neutralizes harness fingerprint tags in system text.
+// Bodies are preserved; only the marker names change.
+func normalizeHarnessMarkers(text string) string {
+	text = harnessTagSystemConventions.ReplaceAllString(text, "<${1}conventions>")
+	text = harnessTagSystemDirective.ReplaceAllString(text, "<${1}instructions>")
+	text = harnessTagCritical.ReplaceAllString(text, "<${1}important>")
+	text = harnessBrandOMPFull.ReplaceAllString(text, "AI coding assistant")
+	text = harnessBrandOMP.ReplaceAllString(text, "coding assistant")
+	text = harnessBrandOMPLive.ReplaceAllString(text, "coding assistant live")
+	return text
+}
+
+func rewriteCompetingBranding(text string) string {
+	return rewriteBrandingText(text, true)
+}
+
+// rewriteAntigravityBrand rewrites the literal `opencode` provider
+// identifier to `antigravity`, matching upstream's fourth row of
+// ANTIGRAVITY_PROMPT_REWRITES (decolua/9router
+// open-sse/config/appConstants.js:194). Upstream's replacement preserves the
+// three capitalisations it names and lowercases everything else.
+func rewriteAntigravityBrand(text string) string {
+	return antigravityOpenCodeRegex.ReplaceAllStringFunc(text, func(m string) string {
+		switch m {
+		case "OpenCode":
+			return "Antigravity"
+		case "OPENCODE":
+			return "ANTIGRAVITY"
+		default:
+			return "antigravity"
+		}
+	})
+}
+
+// rewriteBrandingText applies competitive-prompt rewrites. Harness markers
+// (tags + branding) are fingerprints of system-instruction text only;
+// user/model messages, tool definitions, arguments, and results keep the
+// existing competitive blacklist handling and are never harness-normalized.
+func rewriteBrandingText(text string, isSystemInstruction bool) string {
+	for _, phrase := range competitivePromptBlacklist {
+		text = strings.ReplaceAll(text, phrase, "")
+	}
+	text = claudeBillingHeaderRegex.ReplaceAllString(text, "")
+	text = hermesIdentityRegex.ReplaceAllString(text, "You are an AI assistant.")
+	if isSystemInstruction {
+		text = normalizeHarnessMarkers(text)
+		// Upstream applies this row to the system instruction only: the
+		// caller brands its own client there, and the backend flags
+		// competing-client branding with a fake 429 Quota Exhausted. The
+		// conversation keeps the caller's vocabulary.
+		text = rewriteAntigravityBrand(text)
+	}
+	return strings.TrimSpace(text)
+}
+
+// StripCompetitivePrompts removes competitor identity strings and rewrites competing client branding.
+func StripCompetitivePrompts(req *GeminiRequest) *GeminiRequest {
+	if req == nil {
+		return nil
+	}
+	res := *req
+	if res.SystemInstruction != nil {
+		var filtered []GeminiPart
+		for _, p := range res.SystemInstruction.Parts {
+			text := rewriteCompetingBranding(p.Text)
+			// Drop empty system instruction parts - Gemini requires oneof data field
+			if strings.TrimSpace(text) == "" && p.FunctionCall == nil && p.FunctionResponse == nil && p.InlineData == nil && p.FileData == nil && p.ThoughtSignature == "" {
+				continue
+			}
+			p.Text = text
+			filtered = append(filtered, p)
+		}
+		if len(filtered) == 0 {
+			res.SystemInstruction = nil
+		} else {
+			res.SystemInstruction = &GeminiContent{
+				Role:  res.SystemInstruction.Role,
+				Parts: filtered,
+			}
+		}
+	}
+	contents := make([]GeminiContent, 0, len(res.Contents))
+	for _, c := range res.Contents {
+		var filtered []GeminiPart
+		for _, p := range c.Parts {
+			if p.Text != "" {
+				text := rewriteBrandingText(p.Text, false)
+				if strings.TrimSpace(text) == "" && p.FunctionCall == nil && p.FunctionResponse == nil && p.InlineData == nil && p.FileData == nil && p.ThoughtSignature == "" {
+					continue
+				}
+				p.Text = text
+			}
+			// Keep non-text parts as-is, drop truly empty text parts
+			if p.Text == "" && p.FunctionCall == nil && p.FunctionResponse == nil && p.InlineData == nil && p.FileData == nil && p.ThoughtSignature == "" && p.Thought == nil {
+				continue
+			}
+			filtered = append(filtered, p)
+		}
+		if len(filtered) == 0 {
+			continue
+		}
+		contents = append(contents, GeminiContent{Role: c.Role, Parts: filtered})
+	}
+	if len(contents) > 0 || len(res.Contents) == 0 {
+		res.Contents = contents
+	}
+	return &res
+}
+
+// AntigravityModelSynonyms maps client/UI model names to the bare Antigravity
+// backend model name of their family.
+//
+// It is deliberately NOT the wire-id table: the lock and quota paths key on
+// this value, so it must stay family-shaped. Only AntigravityUpstreamModel
+// applies the effort suffix the backend actually needs.
+var AntigravityModelSynonyms = map[string]string{
+	// Gemini 4 Argon serves one backend id per tier; the bare catalog id is medium tier.
+	"gemini-4-argon":        "gemini-4-argon-medium",
+	"gemini-4-argon-high":   "gemini-4-argon-high",
+	"gemini-4-argon-medium": "gemini-4-argon-medium",
+	"gemini-4-argon-low":    "gemini-4-argon-low",
+	// Upstream decolua/9router#24034f69 retired the gemini-3.5 family and
+	// gemini-3-flash; the default moved to the 3.8 medium tier.
+	"gemini-default":             "gemini-3.8-flash-medium",
+	"gemini-3.5-flash":           "gemini-3.8-flash-medium",
+	"gemini-3.5-flash-high":      "gemini-3.8-flash-high",
+	"gemini-3.5-flash-medium":    "gemini-3.8-flash-medium",
+	"gemini-3.5-flash-low":       "gemini-3.8-flash-low",
+	"gemini-3.5-flash-extra-low": "gemini-3.8-flash-low",
+	"gemini-3-flash-agent":       "gemini-3.8-flash-high",
+	"gemini-3-flash":             "gemini-3.8-flash-high",
+	"gemini-3.1-pro-high":        "gemini-pro-agent",
+	"gemini-3.1-pro":             "gemini-pro-agent",
+	"gemini-3-pro-high":          "gemini-pro-agent",
+	"gemini-3-pro-low":           "gemini-3.1-pro-low",
+	// 3.8 serves one backend id per tier (unlike 3.7/3.6, which share one
+	// "-tiered" id for the whole family).
+	"gemini-3.8-flash":          "gemini-3.8-flash-medium",
+	"gemini-3.8-flash-high":     "gemini-3.8-flash-high",
+	"gemini-3.8-flash-medium":   "gemini-3.8-flash-medium",
+	"gemini-3.8-flash-low":      "gemini-3.8-flash-low",
+	"gemini-3.8-flash-agent":    "gemini-3.8-flash-high",
+	"gemini-3.8-flash-thinking": "gemini-3.8-flash-high",
+	// 3.7 flash tiered models -> backend model: gemini-3.7-flash-tiered
+	"gemini-3.7-flash":           "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-high":      "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-agent":     "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-medium":    "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-low":       "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-extra-low": "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-thinking":  "gemini-3.7-flash-tiered",
+	// 3.6 flash tiered models -> backend model: gemini-3.6-flash-tiered
+	"gemini-3.6-flash":        "gemini-3.6-flash-tiered",
+	"gemini-3.6-flash-high":   "gemini-3.6-flash-tiered",
+	"gemini-3.6-flash-medium": "gemini-3.6-flash-tiered",
+	"gemini-3.6-flash-low":    "gemini-3.6-flash-tiered",
+}
+
+// NormalizeAntigravityModel maps known aliases/synonyms to Antigravity internal backend model names.
+func NormalizeAntigravityModel(model string) string {
+	m := strings.ToLower(strings.TrimSpace(model))
+	// Strip trailing thinking suffix like (high), (medium), (low) if present
+	if idx := strings.Index(m, "("); idx != -1 && strings.HasSuffix(m, ")") {
+		m = strings.TrimSpace(m[:idx])
+	}
+	if canonical, ok := AntigravityModelSynonyms[m]; ok {
+		return canonical
+	}
+	return m
+}
+
+// antigravityUpstreamModelIDs is the Go form of the registry's
+// `upstreamModelId` column, reduced to the bare id Cloud Code serves.
+//
+// Upstream's rows carry a parenthesised effort
+// ("gemini-3.8-flash-low(low)") because its chatCore passes the raw row to
+// applyThinking and only then strips it for the wire. This port keeps the
+// effort out of the table instead of stripping it on the way out, so the value
+// here is exactly what Google is asked for — a suffixed row is a 404.
+//
+// These rows deliberately stay out of AntigravityModelSynonyms. That map is
+// shared with the lock and quota paths, which key on a bare model family.
+//
+// Port of open-sse/providers/registry/antigravity.js (upstream
+// decolua/9router#a07ed95b, refreshed by #24034f69). Every value was probed
+// live against daily-cloudcode-pa.googleapis.com on 2026-10-09.
+var antigravityUpstreamModelIDs = map[string]string{
+	// Gemini 4 Argon serves one backend id per tier; the bare catalog id is medium tier.
+	"gemini-4-argon":        "gemini-4-argon-medium",
+	"gemini-4-argon-high":   "gemini-4-argon-high",
+	"gemini-4-argon-medium": "gemini-4-argon-medium",
+	"gemini-4-argon-low":    "gemini-4-argon-low",
+	// The 3.8 family serves one backend id per tier. The bare catalog id is
+	// the medium tier.
+	"gemini-3.8-flash":        "gemini-3.8-flash-medium",
+	"gemini-3.8-flash-high":   "gemini-3.8-flash-high",
+	"gemini-3.8-flash-medium": "gemini-3.8-flash-medium",
+	"gemini-3.8-flash-low":    "gemini-3.8-flash-low",
+	// 3.7 and 3.6 share one tiered backend id per family.
+	"gemini-3.7-flash":        "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-high":   "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-medium": "gemini-3.7-flash-tiered",
+	"gemini-3.7-flash-low":    "gemini-3.7-flash-tiered",
+	"gemini-3.6-flash":        "gemini-3.6-flash-tiered",
+	"gemini-3.6-flash-high":   "gemini-3.6-flash-tiered",
+	"gemini-3.6-flash-medium": "gemini-3.6-flash-tiered",
+	"gemini-3.6-flash-low":    "gemini-3.6-flash-tiered",
+	// Pro is not tiered; the high id is served under its agent alias.
+	"gemini-3.1-pro-high": "gemini-pro-agent",
+	"gemini-3.1-pro-low":  "gemini-3.1-pro-low",
+	// Claude 5.5: the bare catalog id is the thinking tier, so it maps to
+	// high. The other Claude 5.5 ids are not yet served by Cloud Code.
+	"claude-sonnet-5-5":        "claude-sonnet-5-5-high",
+	"claude-opus-5-5":          "claude-opus-5-5-high",
+	"claude-sonnet-5-5-high":   "claude-sonnet-5-5-high",
+	"claude-sonnet-5-5-low":    "claude-sonnet-5-5-low",
+	"claude-sonnet-5-5-medium": "claude-sonnet-5-5-medium",
+	"claude-opus-5-5-high":     "claude-opus-5-5-high",
+	"claude-opus-5-5-low":      "claude-opus-5-5-low",
+	"claude-opus-5-5-medium":   "claude-opus-5-5-medium",
+}
+
+// AntigravityUpstreamModel resolves a catalog model id to the id the Antigravity
+// backend expects, applying the registry's upstreamModelId column.
+//
+// The parenthesised effort the registry carries ("gemini-3.8-flash-high(high)")
+// is NOX9GO's own thinking notation, not a Google model id, and it is stripped
+// before the id reaches the wire — exactly as upstream's chatCore does with
+// stripThinkingSuffix(upstreamModel) on both the passthrough and the
+// translateRequest branch. Cloud Code answers 404 NOT_FOUND for every
+// suffixed id: probed live against daily-cloudcode-pa.googleapis.com on
+// 2026-10-09, `gemini-3.8-flash-low(low)` and `gemini-3.8-flash-high(high)`
+// both 404 while the bare `gemini-3.8-flash-low` and `gemini-3.8-flash-high`
+// both 200. The tier is already encoded in the id, so dropping the suffix
+// loses no routing information; upstream carries it separately only to feed
+// applyThinking, which reads it off the value this function is given rather
+// than off the wire.
+//
+// A client-supplied "(level)" therefore narrows the id to its own base and is
+// not appended again: `claude-sonnet-5-5-medium(low)` resolves to
+// `claude-sonnet-5-5-medium`, matching upstream's resolvedBase of the same
+// registry row.
+//
+// An id with no registry row is returned unchanged, which keeps a model this
+// port has never heard of routable instead of silently blanking it.
+func AntigravityUpstreamModel(model string) string {
+	base := stripParenthesisedSuffix(strings.ToLower(strings.TrimSpace(model)))
+
+	if resolved, ok := antigravityUpstreamModelIDs[base]; ok {
+		return stripParenthesisedSuffix(resolved)
+	}
+	return NormalizeAntigravityModel(base)
+}
+
+// stripParenthesisedSuffix removes a trailing "(level)" from an id, if any.
+func stripParenthesisedSuffix(id string) string {
+	if idx := strings.Index(id, "("); idx != -1 && strings.HasSuffix(id, ")") {
+		return strings.TrimSpace(id[:idx])
+	}
+	return id
+}
+
+// antigravityUUIDFromSeed derives a deterministic RFC-4122-style UUID (v5-like)
+// from a seed string, matching the Next.js uuidFromSeed helper so trajectory and
+// conversation IDs are stable per session.
+func antigravityUUIDFromSeed(seed string) string {
+	h := sha256.Sum256([]byte(seed))
+	b := h[:16]
+	b[6] = (b[6] & 0x0f) | 0x50
+	b[8] = (b[8] & 0x3f) | 0x80
+	hex := fmt.Sprintf("%x", b)
+	return fmt.Sprintf("%s-%s-%s-%s-%s", hex[0:8], hex[8:12], hex[12:16], hex[16:20], hex[20:32])
+}
+
+// antigravityBuildRequestID builds the IDE request ID in the same shape as the
+// Next.js reference: agent/<conversationId>/<ts>/<trajectoryId>/<step>.
+func antigravityBuildRequestID(sessionID, model, requestType string, contentCount int) string {
+	if sessionID == "" {
+		sessionID = "anonymous"
+	}
+	conversationID := antigravityUUIDFromSeed("antigravity:conversation:" + sessionID)
+	trajectoryID := antigravityUUIDFromSeed(fmt.Sprintf("antigravity:trajectory:%s:%s:%s", sessionID, model, requestType))
+	step := max(contentCount*2-1, 1)
+	return fmt.Sprintf("agent/%s/%d/%s/%d", conversationID, time.Now().UnixMilli(), trajectoryID, step)
+}
+
+// hardenAntigravityRequest strips blacklisted thinking/reasoning fields Google
+// rejects and caps maxOutputTokens at maxAntigravityOutputTokens. It leaves the
+// request byte-for-byte intact when nothing needs changing so thought signatures
+// on functionCall/thought parts are never re-encoded (which would corrupt them).
+func hardenAntigravityRequest(geminiBody []byte) []byte {
+	var m map[string]any
+	if err := json.Unmarshal(geminiBody, &m); err != nil {
+		return geminiBody
+	}
+
+	changed := false
+	for _, k := range antigravityRequestBlacklist {
+		if _, ok := m[k]; ok {
+			delete(m, k)
+			changed = true
+		}
+	}
+
+	gc, _ := m["generationConfig"].(map[string]any)
+	if gc != nil {
+		if v, ok := gc["maxOutputTokens"].(float64); ok && v > maxAntigravityOutputTokens {
+			gc["maxOutputTokens"] = float64(maxAntigravityOutputTokens)
+			changed = true
+		}
+		// Ensure maxOutputTokens strictly exceeds thinkingBudget to prevent 400 INVALID_ARGUMENT (PR #3981)
+		var thinkingBudget float64
+		if tc, ok := gc["thinkingConfig"].(map[string]any); ok {
+			if tb, ok := tc["thinkingBudget"].(float64); ok {
+				thinkingBudget = tb
+			}
+		}
+		if thinkingBudget > 0 {
+			curMax, hasMax := gc["maxOutputTokens"].(float64)
+			if !hasMax || curMax <= thinkingBudget {
+				newMax := thinkingBudget + thinkingHeadroomTokens
+				if newMax > maxAntigravityOutputTokens {
+					newMax = maxAntigravityOutputTokens
+				}
+				gc["maxOutputTokens"] = newMax
+				changed = true
+			}
+		}
+	}
+
+	if !changed {
+		return geminiBody
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return geminiBody
+	}
+	return out
+}
+
+// StripThoughtSignatures removes all thoughtSignature / thought_signature keys
+// from a JSON body (Antigravity wrapper or plain Gemini). Used as a fallback
+// when the backend rejects a history signature as corrupted — stripping lets
+// the model treat the turn as a fresh thought.
+func StripThoughtSignatures(body []byte) []byte {
+	var v any
+	if err := json.Unmarshal(body, &v); err != nil {
+		return body
+	}
+	stripThoughtSignaturesRecursive(v)
+	out, err := json.Marshal(v)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+func stripThoughtSignaturesRecursive(v any) {
+	switch x := v.(type) {
+	case map[string]any:
+		delete(x, "thoughtSignature")
+		delete(x, "thought_signature")
+		for _, val := range x {
+			stripThoughtSignaturesRecursive(val)
+		}
+	case []any:
+		for _, elem := range x {
+			stripThoughtSignaturesRecursive(elem)
+		}
+	}
+}
+
+// ReplaceThoughtSignatures replaces every thoughtSignature / thought_signature
+// value with the given replacement (typically DefaultThinkingSignature). Used
+// when the backend rejects a history signature as corrupted/invalid — the
+// default is a known-valid signature for the Antigravity backend.
+func ReplaceThoughtSignatures(body []byte, replacement string) []byte {
+	var v any
+	if err := json.Unmarshal(body, &v); err != nil {
+		return body
+	}
+	replaceThoughtSignaturesRecursive(v, replacement)
+	out, err := json.Marshal(v)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+func replaceThoughtSignaturesRecursive(v any, replacement string) {
+	switch x := v.(type) {
+	case map[string]any:
+		if _, ok := x["thoughtSignature"]; ok {
+			x["thoughtSignature"] = replacement
+		}
+		if _, ok := x["thought_signature"]; ok {
+			x["thought_signature"] = replacement
+		}
+		for _, val := range x {
+			replaceThoughtSignaturesRecursive(val, replacement)
+		}
+	case []any:
+		for _, elem := range x {
+			replaceThoughtSignaturesRecursive(elem, replacement)
+		}
+	}
+}
+
+// fixAntigravityContents mirrors the Next.js Antigravity executor's content
+// fixup: role correction for functionResponse, stripping of thought-only parts
+// that Gemini 3 rejects, and backfilling of thoughtSignature on functionCall
+// parts (parity with open-sse/executors/antigravity.js).
+func fixAntigravityContents(req *GeminiRequest, model string) bool {
+	if req == nil || len(req.Contents) == 0 {
+		return false
+	}
+	changed := false
+	fixed := make([]GeminiContent, len(req.Contents))
+	for i, c := range req.Contents {
+		role := c.Role
+		hasFunctionResponse := false
+		for _, p := range c.Parts {
+			if p.FunctionResponse != nil {
+				hasFunctionResponse = true
+				break
+			}
+		}
+		if hasFunctionResponse {
+			role = "user"
+		}
+
+		filtered := make([]GeminiPart, 0, len(c.Parts))
+		for _, p := range c.Parts {
+			if p.Thought != nil && *p.Thought && p.FunctionCall == nil {
+				continue
+			}
+			if p.ThoughtSignature != "" && p.FunctionCall == nil && p.Text == "" {
+				continue
+			}
+			filtered = append(filtered, p)
+		}
+
+		needsBackfill := false
+		for _, p := range filtered {
+			if p.FunctionCall != nil && p.ThoughtSignature == "" {
+				needsBackfill = true
+				break
+			}
+		}
+
+		if needsBackfill {
+			firstFunctionCallSeen := false
+			for idx, p := range filtered {
+				if p.FunctionCall != nil {
+					sig := p.ThoughtSignature
+					if sig == "" && !firstFunctionCallSeen {
+						sig = DefaultThinkingSignature
+					}
+					firstFunctionCallSeen = true
+					filtered[idx].ThoughtSignature = sig
+				}
+			}
+		}
+
+		if role != c.Role || len(filtered) != len(c.Parts) || needsBackfill {
+			changed = true
+		}
+		fixed[i] = GeminiContent{Role: role, Parts: filtered}
+	}
+	normalized := NormalizeGeminiContentsForModel(fixed, model)
+	if changed || len(normalized) != len(req.Contents) {
+		req.Contents = normalized
+		return true
+	}
+	return false
+}
+
+// WrapForAntigravity wraps a standard Gemini request in Antigravity API envelope.
+func WrapForAntigravity(geminiBody []byte, projectID, modelName string) ([]byte, error) {
+	// The wire id is the registry's upstreamModelId with NOX9GO's own effort
+	// notation stripped, not the bare synonym the lock and quota paths share.
+	// proxy.ForwardGemini normalises the model before calling this, so the
+	// synonym lookup inside AntigravityUpstreamModel is idempotent and the two
+	// layers cannot disagree on the id that reaches Google.
+	modelName = AntigravityUpstreamModel(modelName)
+
+	contentCount := 1
+	var geminiReq GeminiRequest
+	if err := json.Unmarshal(geminiBody, &geminiReq); err == nil {
+		contentCount = len(geminiReq.Contents)
+		fixAntigravityContents(&geminiReq, modelName)
+		cleanedReq := StripCompetitivePrompts(&geminiReq)
+		if len(cleanedReq.Tools) > 0 {
+			cloaked, _ := CloakAntigravityRequest(cleanedReq, "")
+			cleanedReq = cloaked
+		}
+		if cloakedBytes, err := json.Marshal(cleanedReq); err == nil {
+			geminiBody = cloakedBytes
+		}
+	}
+	geminiBody = hardenAntigravityRequest(geminiBody)
+
+	wrapper := AntigravityRequest{
+		Project:   projectID,
+		Model:     modelName,
+		UserAgent: "antigravity",
+		// Omit RequestType (was "agent"): parity with decolua/9router#3986.
+		// Google rejects agent-bucketed requests with false 429s; requestId
+		// keeps its existing agent/<...>/<...>/<...>/<step> shape.
+		RequestID: antigravityBuildRequestID(projectID, modelName, "agent", contentCount),
+		Request:   geminiBody,
+	}
+	out, err := json.Marshal(wrapper)
+	if err != nil {
+		return nil, fmt.Errorf("marshal antigravity wrapper: %w", err)
+	}
+	return out, nil
+}
+
+// UnwrapAntigravityResponse extracts the inner Gemini response from antigravity envelope.
+func UnwrapAntigravityResponse(raw []byte) []byte {
+	var envelope struct {
+		Response jsontext.Value `json:"response"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		log.Warn("translator", "unmarshal envelope failed", "error", err)
+		return raw // passthrough on failure
+	}
+	if len(envelope.Response) == 0 {
+		log.Warn("translator", "empty envelope response")
+		return raw // passthrough on failure
+	}
+	return []byte(envelope.Response)
+}
+
+// IsAntigravityImageModel checks if the model name is an image generation model.
+func IsAntigravityImageModel(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "image") || strings.Contains(m, "imagen")
+}
+
+// gcd computes greatest common divisor for resolution reduction.
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+
+// ParseImageConfig extracts the base model name and aspect ratio from model suffixes.
+func ParseImageConfig(model string) (cleanModel, aspectRatio string) {
+	aspectRatio = "1:1"
+	cleanModel = model
+
+	// Look for suffix like -16x9, -4x3, -1x1, -1024x768
+	if before, suffix, ok := strings.CutLast(model, "-"); ok && suffix != "" {
+		if xIdx := strings.Index(suffix, "x"); xIdx != -1 {
+			var w, h int
+			if _, err := fmt.Sscanf(suffix, "%dx%d", &w, &h); err == nil && w > 0 && h > 0 {
+				cleanModel = before
+				if w <= 16 && h <= 16 {
+					aspectRatio = fmt.Sprintf("%d:%d", w, h)
+				} else {
+					d := gcd(w, h)
+					aspectRatio = fmt.Sprintf("%d:%d", w/d, h/d)
+				}
+			}
+		}
+	}
+	return cleanModel, aspectRatio
+}
+
+// WrapAntigravityImageRequest builds an Antigravity request envelope for image generation.
+func WrapAntigravityImageRequest(prompt, base64Input, projectID, cleanModel, aspectRatio string) ([]byte, error) {
+	parts := []GeminiPart{}
+	if base64Input != "" {
+		parts = append(parts, GeminiPart{
+			InlineData: &GeminiInlineData{
+				MimeType: "image/png",
+				Data:     base64Input,
+			},
+		})
+	}
+	if prompt != "" {
+		parts = append(parts, GeminiPart{
+			Text: prompt,
+		})
+	}
+
+	contents := []GeminiContent{
+		{
+			Role:  "user",
+			Parts: parts,
+		},
+	}
+
+	sessionID := fmt.Sprintf("img-%d", time.Now().UnixNano())
+	genConfig := map[string]any{
+		"temperature":     1.0,
+		"topP":            0.95,
+		"topK":            40,
+		"maxOutputTokens": 8192,
+		"imageConfig": map[string]string{
+			"aspectRatio": aspectRatio,
+		},
+	}
+
+	reqPayload := map[string]any{
+		"contents":         contents,
+		"generationConfig": genConfig,
+		"sessionId":        sessionID,
+	}
+
+	reqJSON, err := json.Marshal(reqPayload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal image request: %w", err)
+	}
+
+	wrapper := AntigravityRequest{
+		Project:     projectID,
+		Model:       cleanModel,
+		UserAgent:   "antigravity",
+		RequestType: "image_gen",
+		RequestID:   antigravityBuildRequestID(projectID, cleanModel, "image_gen", 1),
+		Request:     reqJSON,
+	}
+
+	return json.Marshal(wrapper)
+}
+
+// FormatAntigravityImageResponse converts a Gemini response containing inlineData to OpenAI images response format.
+func FormatAntigravityImageResponse(rawGeminiResp []byte, prompt string) ([]byte, error) {
+	unwrapped := UnwrapAntigravityResponse(rawGeminiResp)
+	var resp GeminiResponse
+	if err := json.Unmarshal(unwrapped, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal gemini image response: %w", err)
+	}
+
+	var images []map[string]string
+	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+		for _, part := range resp.Candidates[0].Content.Parts {
+			if part.InlineData != nil && part.InlineData.Data != "" {
+				images = append(images, map[string]string{
+					"b64_json": part.InlineData.Data,
+				})
+			}
+		}
+	}
+
+	if len(images) == 0 {
+		images = append(images, map[string]string{
+			"b64_json":       "",
+			"revised_prompt": prompt,
+		})
+	}
+
+	result := map[string]any{
+		"created": time.Now().Unix(),
+		"data":    images,
+	}
+
+	return json.Marshal(result)
+}
+
+// decloakContentBlockStart is the shared implementation that restores the
+// original tool name on a parsed Claude content_block_start event with
+// content_block.type == "tool_use". It never mutates the input map. The
+// boolean reports whether a tool name was actually rewritten.
+func decloakContentBlockStart(event map[string]any, toolNameMap map[string]string) (map[string]any, bool) {
+	if len(toolNameMap) == 0 || event == nil {
+		return event, false
+	}
+	if event["type"] != "content_block_start" {
+		return event, false
+	}
+	block, ok := event["content_block"].(map[string]any)
+	if !ok || block == nil || block["type"] != "tool_use" {
+		return event, false
+	}
+	name, ok := block["name"].(string)
+	if !ok || name == "" {
+		return event, false
+	}
+	original, found := toolNameMap[name]
+	if !found {
+		return event, false
+	}
+	blockCopy := make(map[string]any, len(block))
+	for k, v := range block {
+		blockCopy[k] = v
+	}
+	blockCopy["name"] = original
+	eventCopy := make(map[string]any, len(event))
+	for k, v := range event {
+		eventCopy[k] = v
+	}
+	eventCopy["content_block"] = blockCopy
+	return eventCopy, true
+}
+
+// DecloakStreamChunk restores original tool names in streamed Claude SSE event chunks.
+// Specifically handles "content_block_start" events with content_block.type == "tool_use".
+func DecloakStreamChunk(chunkBytes []byte, toolNameMap map[string]string) []byte {
+	if len(toolNameMap) == 0 || len(chunkBytes) == 0 {
+		return chunkBytes
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(chunkBytes, &raw); err != nil {
+		return chunkBytes
+	}
+
+	out, changed := decloakContentBlockStart(raw, toolNameMap)
+	if !changed {
+		return chunkBytes
+	}
+
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		return chunkBytes
+	}
+	return encoded
+}
+
+// DecloakClaudeStreamEvent restores the original tool name on parsed Claude content_block_start event.
+func DecloakClaudeStreamEvent(event map[string]any, toolNameMap map[string]string) map[string]any {
+	out, _ := decloakContentBlockStart(event, toolNameMap)
+	return out
+}

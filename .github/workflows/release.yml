@@ -1,0 +1,305 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # The release channel is derived from the tag and nothing else — not the
+  # branch, not the commit, not an input. That keeps the switch auditable: what
+  # you tag is what you publish.
+  #
+  #   stable       v1.10.0        -> GitHub Release (final)
+  #   experimental v1.10.0-exp.1  -> GitHub Release (PRERELEASE)
+  #
+  # The channel distinction matters for user safety. GitHub excludes
+  # prereleases from /releases/latest, which is the endpoint `internal/updater`
+  # falls back to, so a stable install is never offered an experimental build.
+  channel:
+    name: Resolve release channel
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve channel and verify version sources
+        id: resolve
+        run: |
+          set -euo pipefail
+          # A manual dispatch has no tag, so VERSION is the only version there
+          # is and the tag-vs-file check below is skipped rather than faked.
+          if [ "${GITHUB_REF_TYPE:-tag}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            FILE_VERSION="$(cat VERSION)"
+            # make cross embeds the VERSION file, so a tag that disagrees with
+            # the file would ship a binary that advertises a different version.
+            # mismatched tag would publish binaries that report themselves as
+            # $FILE_VERSION while the release is titled $TAG.
+            if [ "$FILE_VERSION" != "$VERSION" ]; then
+              echo "::error::VERSION ($FILE_VERSION) does not match tag $TAG."
+              echo "The release would ship binaries reporting the wrong version."
+              echo "  ./scripts/bump-version.sh $VERSION   # then re-tag"
+              exit 1
+            fi
+          else
+            VERSION="$(cat VERSION)"
+          fi
+
+          MANIFEST_VERSION="$(grep -o '"latestVersion": *"[^"]*"' version.json | cut -d'"' -f4)"
+          if [ -z "$MANIFEST_VERSION" ]; then
+            echo "::error::could not read latestVersion out of version.json"
+            exit 1
+          fi
+          case "$VERSION" in
+            *-*)
+              CHANNEL=experimental
+              PRERELEASE=true
+              # version.json is the manifest `nox9go update` polls from the
+              # main branch, and checkManifest offers whatever it names. An
+              # experimental version sitting in it is pushed to every install,
+              # so this has to fail the release rather than warn.
+              if [ "$MANIFEST_VERSION" = "$VERSION" ]; then
+                echo "::error::version.json advertises $VERSION to every install."
+                echo "version.json is the stable manifest; experimental builds must"
+                echo "not appear there. Restore it to the latest stable release:"
+                echo "  ./scripts/bump-version.sh <latest-stable>"
+                exit 1
+              fi
+              ;;
+            *)
+              CHANNEL=stable
+              PRERELEASE=false
+              # The mirror image: publishing a stable release without bumping
+              # the manifest leaves every existing install reporting "up to
+              # date" against the previous version, silently.
+              if [ "$MANIFEST_VERSION" != "$VERSION" ]; then
+                echo "::error::version.json advertises $MANIFEST_VERSION but this tag"
+                echo "is $VERSION. The manifest is what users are offered as an"
+                echo "update, so the release would go out without reaching anyone."
+                echo "  ./scripts/bump-version.sh $VERSION"
+                exit 1
+              fi
+              ;;
+          esac
+
+          {
+            echo "channel=$CHANNEL"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "channel:  $CHANNEL"
+          echo "version:  $VERSION"
+
+  binaries:
+    name: Build release binaries
+    needs: channel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Build Web SPA
+        run: |
+          cd web
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Warm the module cache (retried)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if go mod download all; then
+              echo "module graph cached on attempt ${attempt}"
+              exit 0
+            fi
+            if [ "${attempt}" -eq 3 ]; then
+              echo "::error::go mod download failed 3 times; the proxy is unreachable."
+              exit 1
+            fi
+            echo "attempt ${attempt} failed (transient proxy error); retrying in 5s"
+            sleep 5
+          done
+
+      - name: Build all platforms
+        run: make cross
+
+      - name: Generate changelog
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          NOTES=""
+          if [ -f CHANGELOG.md ]; then
+            NOTES=$(awk "/## \\[$TAG\\]/{flag=1; next} /## \\[v/{flag=0} flag" CHANGELOG.md)
+          fi
+          if [ -z "$NOTES" ]; then
+            # No section named after the tag. Fall back to [Unreleased] before
+            # the git log: writing up an experimental build in [Unreleased]
+            # and tagging it is the normal way this repo works, and a list of
+            # commit subjects is the worst possible release page for the build
+            # people are being asked to help test. The git log stays as the
+            # last resort, for a tag with neither.
+            if [ -f CHANGELOG.md ]; then
+              NOTES=$(awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md)
+            fi
+          fi
+          if [ -z "$NOTES" ]; then
+            # Per-PR fragments in .changes/ are the pending changelog (§7.6 of
+            # AGENTS.md). They are the fallback between the curated sections and
+            # the commit log because they carry the written explanation a release
+            # page needs, and because most tags are pushed without anyone running
+            # `make changelog-merge` first — which, before this step existed,
+            # meant a release page of bare commit subjects.
+            #
+            # Newest first, matching what the dashboard renders. The PR number is
+            # pulled out as a bare integer before sorting: `sort -k1,1n` on
+            # `900-z` treats the field as text and interleaves 88 and 1000
+            # anyway, so the order would disagree with the changelog modal.
+            #
+            # Written without `ls | grep` or an unquoted command substitution:
+            # both were shellcheck findings (SC2010, SC2046) that would fail
+            # actionlint once it runs with shellcheck present, and the glob with
+            # a `continue` is the form that also survives a filename containing
+            # a space. The output is byte-identical to what the old pipeline
+            # produced — verified against this repo's fragments.
+            if compgen -G ".changes/*.md" > /dev/null; then
+              ORDERED=$(for f in .changes/*.md; do
+                if [ "$(basename "$f")" = "README.md" ]; then continue; fi
+                printf '%s %s\n' "$(basename "$f" .md | cut -d- -f1)" "$f"
+              done | sort -rn | cut -d' ' -f2-)
+              NOTES=$(while IFS= read -r f; do
+                if [ -n "$f" ]; then cat "$f"; fi
+              done <<< "$ORDERED")
+            fi
+          fi
+          if [ -z "$NOTES" ]; then
+            # Last resort: the commit log. `grep '^v'` finds nothing before the
+            # first tagged release, and under `set -euo pipefail` that empty
+            # result aborted the whole step — a missing CHANGELOG.md took the
+            # release down instead of degrading to commit subjects.
+            PREV_TAG=$(git tag --sort=-version:refname | { grep '^v' || true; } | head -2 | tail -1)
+            if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$TAG" ]; then
+              LOG=$(git log --pretty=format:"- %s (%h)" --no-merges || true)
+            else
+              # The range needs both refs to resolve; a tag deleted or never
+              # fetched would otherwise abort the release for its notes.
+              LOG=$(git log --pretty=format:"- %s (%h)" --no-merges "${PREV_TAG}..${TAG}" 2>/dev/null || true)
+              if [ -z "$LOG" ]; then
+                LOG=$(git log --pretty=format:"- %s (%h)" --no-merges || true)
+              fi
+            fi
+            NOTES="$LOG"
+          fi
+          if [ "${{ needs.channel.outputs.prerelease }}" = "true" ]; then
+            # The banner is the first thing a reader sees on the release page,
+            # so it states the two things that actually differ from a stable
+            # release: it is not on `latest`, and the updater will not offer it
+            # to an install already running a stable version.
+            #
+            # Everything below keeps this step's indentation on purpose.
+            # `run: |` strips the block's common leading indentation, and a
+            # line flush against column 0 would make that indentation zero for
+            # the whole script. The heredoc terminator only looks unindented
+            # after GitHub removes the common prefix.
+            cat > /tmp/notes.md <<BANNER
+          > **Experimental build.** Not published to \`latest\`, and \`nox9go update\`
+          > will not offer it to an install running a stable release. Track it
+          > explicitly:
+          >
+          > \`\`\`sh
+          > curl -fsSL https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/install.sh | bash
+          > \`\`\`
+          >
+          > Issues found here are still worth reporting — but check the stable
+          > release first, because experimental breakage is usually already
+          > fixed by the next tagged build.
+
+          BANNER
+          else
+            echo "" > /tmp/notes.md
+          fi
+          printf '%s\n' "$NOTES" >> /tmp/notes.md
+          cat /tmp/notes.md
+
+      # The notify job runs on its own runner, where /tmp/notes.md does not
+      # exist. An artifact carries the exact text the release page was built
+      # from, so the Telegram message cannot drift from what users actually
+      # read — regenerating the notes in a second job would duplicate the
+      # 40-line fallback chain and let the two answers disagree.
+      - name: Share release notes with the notify job
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp/notes.md
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload binaries to release
+        uses: softprops/action-gh-release@v2
+        with:
+          # What marks the GitHub Release itself as experimental, which is what
+          # keeps it out of /releases/latest. The YAML value must be a real
+          # boolean, so it is compared here rather than passed through the
+          # string output of the channel job.
+          prerelease: ${{ needs.channel.outputs.prerelease == 'true' }}
+          files: |
+            nox9go-linux-amd64
+            nox9go-linux-arm64
+            nox9go-darwin-amd64
+            nox9go-darwin-arm64
+            nox9go-windows-amd64.exe
+            SHA256SUMS.txt
+          body_path: /tmp/notes.md
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Announce the release to the Telegram group.
+  #
+  # `needs: [binaries]` is the whole design: it runs only after the release
+  # page exists, so the link in the message resolves. A separate workflow
+  # triggered by the tag push would fire in parallel with the build and
+  # routinely publish a 404 link.
+  #
+  # continue-on-error is deliberate. A Telegram outage or a revoked token must
+  # not turn a successful release red — the artifacts are already published by
+  # this point, and a failed job here reads as "the release failed" to anyone
+  # watching the run list.
+  notify:
+    name: Notify Telegram
+    needs: [binaries]
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp
+
+      - name: Send release notification
+        run: bash scripts/notify-telegram.sh --tag "${GITHUB_REF_NAME}" --notes /tmp/notes.md
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID: ${{ secrets.TELEGRAM_TOPIC_ID }}
