@@ -107,7 +107,8 @@ func TestHandleTunnelEndpoints(t *testing.T) {
 		cloudflareEnable = func(context.Context, int) (cloudflare.EnableResult, error) {
 			return cloudflare.EnableResult{
 				TunnelURL: "https://demo.trycloudflare.com",
-				PublicURL: "https://demo.trycloudflare.com",
+				PublicURL: "https://rabcd12.abc-tunnel.us",
+				ShortID:   "abcd12",
 			}, nil
 		}
 		t.Cleanup(func() { cloudflareEnable = orig })
@@ -125,12 +126,21 @@ func TestHandleTunnelEndpoints(t *testing.T) {
 			Success   bool   `json:"success"`
 			TunnelURL string `json:"tunnelUrl"`
 			PublicURL string `json:"publicUrl"`
+			ShortID   string `json:"shortId"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
 			t.Fatalf("unmarshal enable response: %v", err)
 		}
 		if !res.Success || res.TunnelURL != "https://demo.trycloudflare.com" {
 			t.Errorf("unexpected enable payload: %+v", res)
+		}
+		// The short public hostname is what the client should be configured
+		// with: it survives a tunnel respawn, the trycloudflare URL does not.
+		if res.PublicURL != "https://rabcd12.abc-tunnel.us" {
+			t.Errorf("publicUrl = %q, want the short public hostname", res.PublicURL)
+		}
+		if res.ShortID != "abcd12" {
+			t.Errorf("shortId = %q, want abcd12", res.ShortID)
 		}
 
 		raw, err := repo.GetSettingsRaw()
@@ -142,6 +152,9 @@ func TestHandleTunnelEndpoints(t *testing.T) {
 		}
 		if raw["tunnelUrl"] != "https://demo.trycloudflare.com" {
 			t.Errorf("tunnelUrl = %v", raw["tunnelUrl"])
+		}
+		if raw["tunnelPublicUrl"] != "https://rabcd12.abc-tunnel.us" {
+			t.Errorf("tunnelPublicUrl = %v, want the short public hostname", raw["tunnelPublicUrl"])
 		}
 	})
 

@@ -6,7 +6,7 @@
   import MenuItem from '../lib/ui/MenuItem.svelte'
   import { type ActiveTab } from '../lib/router'
   import { promptInstall, subscribeInstallPrompt } from '../lib/pwa'
-  import { LOCALE_NAMES, type Locale } from '../lib/i18n/config'
+  import { type Locale } from '../lib/i18n/config'
   import { getCurrentLocale, setLocale } from '../lib/i18n/runtime'
 
   let {
@@ -296,13 +296,14 @@
         icon={isDark ? 'light_mode' : 'dark_mode'}
         onSelect={toggleTheme}
       />
+      <!-- Static labels so the DOM translator can match es.json keys exactly. -->
       <MenuItem
-        label={`Language: ${LOCALE_NAMES.en}${uiLocale === 'en' ? ' ✓' : ''}`}
+        label={uiLocale === 'en' ? 'Language: English ✓' : 'Language: English'}
         icon="translate"
         onSelect={() => chooseLocale('en')}
       />
       <MenuItem
-        label={`Language: ${LOCALE_NAMES.es}${uiLocale === 'es' ? ' ✓' : ''}`}
+        label={uiLocale === 'es' ? 'Language: Español (España) ✓' : 'Language: Español (España)'}
         icon="translate"
         onSelect={() => chooseLocale('es')}
       />

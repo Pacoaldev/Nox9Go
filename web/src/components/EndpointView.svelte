@@ -458,6 +458,20 @@
               <Copy class="w-4 h-4" />
             {/if}
           </button>
+          {#if publicUrl && publicUrl !== tunnelUrl}
+            <button
+              type="button"
+              onclick={() => copy(`${tunnelUrl}/v1`, 'tunnel_direct_url')}
+              class="p-2 hover:bg-surface-2 rounded-lg text-text-muted hover:text-brand-500 transition-colors shrink-0 cursor-pointer border border-border"
+              title="Copy direct trycloudflare URL"
+            >
+              {#if copiedId === 'tunnel_direct_url'}
+                <Check class="w-4 h-4 text-success" />
+              {:else}
+                <Copy class="w-4 h-4" />
+              {/if}
+            </button>
+          {/if}
           <button
             type="button"
             onclick={() => (showDisableTunnelModal = true)}

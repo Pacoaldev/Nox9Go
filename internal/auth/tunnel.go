@@ -19,7 +19,11 @@ func TunnelLoginBlocked(r *http.Request, raw map[string]any) bool {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = strings.Trim(h, "[]")
 	}
-	for _, key := range []string{"tunnelUrl", "tailscaleUrl"} {
+	// tunnelPublicUrl is the short public hostname clients are told to use. It
+	// is a DIFFERENT host from the raw trycloudflare.com URL, so a gate that
+	// only knew the raw URL would let every request through the public
+	// hostname — the toggle would be decorative.
+	for _, key := range []string{"tunnelUrl", "tunnelPublicUrl", "tailscaleUrl"} {
 		rawURL, _ := raw[key].(string)
 		if rawURL == "" {
 			continue

@@ -1,7 +1,8 @@
 /**
- * Runtime DOM translator — port of decolua/9router src/i18n/runtime.js.
+ * Runtime DOM translator — port of decolua/9router src/i18n/runtime.js,
+ * extended to also rewrite title / placeholder / aria-label / alt.
  * English source strings stay in the Svelte markup; a locale map rewrites
- * text nodes. Only `en` and `es` are supported in NOX9GO.
+ * the DOM. Only `en` and `es` are supported in NOX9GO.
  */
 import {
   DEFAULT_LOCALE,
@@ -10,12 +11,15 @@ import {
   type Locale,
 } from './config'
 
+const ATTRS = ['title', 'placeholder', 'aria-label', 'alt'] as const
+
 let translationMap: Record<string, string> = {}
 let currentLocale: Locale = DEFAULT_LOCALE
 let reloadCallbacks: Array<() => void> = []
 let observer: MutationObserver | null = null
 
 type MarkedText = Text & { _originalText?: string; _translated?: string }
+type MarkedEl = Element & { _i18nAttrOrig?: Partial<Record<(typeof ATTRS)[number], string>> }
 
 function readStoredLocale(): Locale {
   if (typeof document === 'undefined') return DEFAULT_LOCALE
@@ -70,18 +74,21 @@ export function onLocaleChange(callback: () => void): () => void {
   }
 }
 
+function skippedByAncestor(el: Element | null): boolean {
+  let cur: Element | null = el
+  while (cur) {
+    if (cur.hasAttribute?.('data-i18n-skip')) return true
+    cur = cur.parentElement
+  }
+  return false
+}
+
 function processTextNode(node: MarkedText) {
   const current = node.nodeValue
   if (!current || !current.trim()) return
 
   const parent = node.parentElement
-  if (!parent) return
-
-  let element: HTMLElement | null = parent
-  while (element) {
-    if (element.hasAttribute?.('data-i18n-skip')) return
-    element = element.parentElement
-  }
+  if (!parent || skippedByAncestor(parent)) return
 
   const tagName = parent.tagName?.toLowerCase()
   const skipTags = [
@@ -115,8 +122,36 @@ function processTextNode(node: MarkedText) {
   }
 }
 
+function processElementAttrs(el: MarkedEl) {
+  if (skippedByAncestor(el)) return
+  if (!el._i18nAttrOrig) el._i18nAttrOrig = {}
+
+  for (const attr of ATTRS) {
+    if (!el.hasAttribute(attr)) continue
+    const current = el.getAttribute(attr) || ''
+    if (!current.trim()) continue
+
+    const stored = el._i18nAttrOrig[attr]
+    const translatedOfStored = stored != null ? translate(stored) : null
+    // Fresh source text from Svelte (neither original nor our last translation).
+    if (stored == null || (current !== stored && current !== translatedOfStored)) {
+      el._i18nAttrOrig[attr] = current
+    }
+    const orig = el._i18nAttrOrig[attr] || current
+    const next = translate(orig)
+    if (next !== current) el.setAttribute(attr, next)
+  }
+}
+
 function processElement(root: Element | null) {
   if (!root) return
+
+  if (root.nodeType === Node.ELEMENT_NODE) {
+    processElementAttrs(root as MarkedEl)
+    const all = root.querySelectorAll('*')
+    all.forEach((el) => processElementAttrs(el as MarkedEl))
+  }
+
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   const nodes: MarkedText[] = []
   let node: Node | null
@@ -130,6 +165,7 @@ export async function initRuntimeI18n() {
   if (typeof window === 'undefined') return
 
   currentLocale = readStoredLocale()
+  document.documentElement.lang = currentLocale === 'es' ? 'es-ES' : 'en'
   await loadTranslations(currentLocale)
   processElement(document.body)
 
@@ -140,22 +176,32 @@ export async function initRuntimeI18n() {
         processTextNode(mutation.target as MarkedText)
         continue
       }
+      if (mutation.type === 'attributes' && mutation.target.nodeType === Node.ELEMENT_NODE) {
+        processElementAttrs(mutation.target as MarkedEl)
+        continue
+      }
       mutation.addedNodes.forEach((n) => {
         if (n.nodeType === Node.ELEMENT_NODE) processElement(n as Element)
         else if (n.nodeType === Node.TEXT_NODE) processTextNode(n as MarkedText)
       })
     }
   })
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: [...ATTRS],
+  })
 }
 
 export async function setLocale(next: Locale) {
   persistLocale(next)
   currentLocale = next
+  document.documentElement.lang = next === 'es' ? 'es-ES' : 'en'
   await loadTranslations(currentLocale)
   reloadCallbacks.forEach((cb) => cb())
   processElement(document.body)
-  document.documentElement.lang = next === 'es' ? 'es-ES' : 'en'
 }
 
 export async function reloadTranslations() {

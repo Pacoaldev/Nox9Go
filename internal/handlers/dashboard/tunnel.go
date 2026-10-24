@@ -129,7 +129,15 @@ func (h *DashboardHandler) HandleTunnelStatus(w http.ResponseWriter, r *http.Req
 	tunnelEnabled, _ := raw["tunnelEnabled"].(bool)
 	tunnelURL, _ := raw["tunnelUrl"].(string)
 	cf := cloudflareSnapshot(tunnelEnabled, tunnelURL)
-
+	// The short public hostname lives in the worker's state file, which the
+	// dashboard cannot read directly. The settings copy is the fallback for the
+	// case where that file is gone (a wiped data dir) but the tunnel settings
+	// survived.
+	if cf.PublicURL == "" || cf.PublicURL == cf.TunnelURL {
+		if pub, _ := raw["tunnelPublicUrl"].(string); pub != "" {
+			cf.PublicURL = pub
+		}
+	}
 	tailscaleEnabled, _ := raw["tailscaleEnabled"].(bool)
 	tailscaleURL, _ := raw["tailscaleUrl"].(string)
 
@@ -189,14 +197,16 @@ func (h *DashboardHandler) HandleTunnelEnable(w http.ResponseWriter, r *http.Req
 	}
 
 	_ = h.Repo.UpdateSettingsRaw(map[string]any{
-		"tunnelEnabled": true,
-		"tunnelUrl":     res.TunnelURL,
+		"tunnelEnabled":  true,
+		"tunnelUrl":      res.TunnelURL,
+		"tunnelPublicUrl": res.PublicURL,
 	})
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success":   true,
 		"tunnelUrl": res.TunnelURL,
 		"publicUrl": res.PublicURL,
+		"shortId":   res.ShortID,
 	})
 }
 
@@ -205,8 +215,9 @@ func (h *DashboardHandler) HandleTunnelDisable(w http.ResponseWriter, r *http.Re
 	port := config.LoadConfig().Port
 	cloudflareDisable(port)
 	_ = h.Repo.UpdateSettingsRaw(map[string]any{
-		"tunnelEnabled": false,
-		"tunnelUrl":     "",
+		"tunnelEnabled":  false,
+		"tunnelUrl":      "",
+		"tunnelPublicUrl": "",
 	})
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }

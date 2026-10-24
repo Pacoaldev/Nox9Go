@@ -329,6 +329,7 @@ export interface TunnelStatusResponse {
     settingsEnabled?: boolean
     tunnelUrl?: string
     publicUrl?: string
+    shortId?: string
     running?: boolean
   }
   tailscale?: {
@@ -1971,7 +1972,7 @@ export const api = {
       tailscale: { enabled: false, running: false, tunnelUrl: '', loggedIn: false },
     })),
   enableTunnel: () =>
-    request<{ success?: boolean; tunnelUrl?: string; publicUrl?: string; error?: string }>('/api/tunnel/enable', {
+    request<{ success?: boolean; tunnelUrl?: string; publicUrl?: string; shortId?: string; error?: string }>('/api/tunnel/enable', {
       method: 'POST',
     }),
   disableTunnel: () =>

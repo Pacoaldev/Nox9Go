@@ -171,6 +171,27 @@ func TestTunnelLoginBlocked(t *testing.T) {
 	}
 }
 
+// TestTunnelLoginBlocked_PublicHost covers the short public hostname. The
+// client is told to use `https://r<id>.abc-tunnel.us`, which is a DIFFERENT
+// host from the raw trycloudflare.com URL the tunnel actually serves. A gate
+// that only knew the raw URL would let every request through the public
+// hostname, making the "allow dashboard access via tunnel" toggle decorative.
+func TestTunnelLoginBlocked_PublicHost(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	req.Host = "rabc123.abc-tunnel.us"
+	raw := map[string]any{
+		"tunnelUrl":       "https://demo.trycloudflare.com",
+		"tunnelPublicUrl": "https://rabc123.abc-tunnel.us",
+	}
+	if !TunnelLoginBlocked(req, raw) {
+		t.Error("public tunnel host must be blocked without explicit access")
+	}
+	raw["tunnelDashboardAccess"] = true
+	if TunnelLoginBlocked(req, raw) {
+		t.Error("explicit tunnel access must allow login on the public host")
+	}
+}
+
 func TestCLITokenRoundTrip(t *testing.T) {
 	t.Setenv("DATA_DIR", t.TempDir())
 	token := CLIToken()
