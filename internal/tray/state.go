@@ -54,18 +54,22 @@ type Facts struct {
 
 // Snapshot is the renderable result: the state plus the strings the menu needs.
 type Snapshot struct {
-	State  State
-	Port   int
-	PID    int
+	State State
+	Port  int
+	PID   int
 	Reason string
+	// Autostart mirrors service.Status Enabled for the menu checkbox, so
+	// refresh does not call Status a second time each tick (Windows: schtasks).
+	Autostart bool
 }
 
 // Resolve turns facts into a state. Order matters: an unreadable input wins
 // over every positive reading, because a positive built on a failed read is a
 // guess.
 func Resolve(f Facts, port int) Snapshot {
+	auto := f.ServiceOK && f.ServiceInfo.Enabled
 	if f.FailedPIDRead != nil {
-		return Snapshot{State: StateUnknown, Port: port, Reason: f.FailedPIDRead.Error()}
+		return Snapshot{State: StateUnknown, Port: port, Reason: f.FailedPIDRead.Error(), Autostart: auto}
 	}
 
 	switch {
@@ -73,23 +77,23 @@ func Resolve(f Facts, port int) Snapshot {
 		// The backend exists but could not be interrogated. Active carries no
 		// information, and printing its zero value as "not running" is the bug
 		// ActiveUnknown was added to prevent.
-		return Snapshot{State: StateUnknown, Port: port, Reason: "supervisor state could not be read"}
+		return Snapshot{State: StateUnknown, Port: port, Reason: "supervisor state could not be read", Autostart: auto}
 
 	case f.DaemonPID > 0:
-		return Snapshot{State: StateRunning, Port: port, PID: f.DaemonPID}
+		return Snapshot{State: StateRunning, Port: port, PID: f.DaemonPID, Autostart: auto}
 
 	case f.ServiceOK && f.ServiceInfo.Active:
 		// Supervised and the supervisor says it is up. There is no pid file in
 		// this arrangement, so PID stays 0 — the menu shows the port instead.
-		return Snapshot{State: StateRunning, Port: port}
+		return Snapshot{State: StateRunning, Port: port, Autostart: auto}
 
 	case f.PortBusy:
 		// Something answers on the port, but it is not the daemon we know. Do
 		// not render it as Running and do not offer Stop.
-		return Snapshot{State: StatePortConflict, Port: port, PID: f.ForeignPID}
+		return Snapshot{State: StatePortConflict, Port: port, PID: f.ForeignPID, Autostart: auto}
 
 	default:
-		return Snapshot{State: StateStopped, Port: port}
+		return Snapshot{State: StateStopped, Port: port, Autostart: auto}
 	}
 }
 

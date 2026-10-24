@@ -62,6 +62,8 @@ func runGatewayCLI(args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, args...)
+	// nox9go.exe is console-subsystem; hide the flash when Start/Stop shell out.
+	cmd.SysProcAttr = proc.Detached()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

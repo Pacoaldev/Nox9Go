@@ -229,8 +229,14 @@ func hasCron() bool {
 // run runs a helper command, returning its combined output for diagnostics.
 // It is a var so tests can observe and stub supervisor calls without touching
 // the real init system.
+//
+// On Windows, schtasks.exe and powershell.exe are console-subsystem helpers.
+// The tray polls Status every second; without CREATE_NO_WINDOW each poll
+// flashes a Terminal window (open/close loop until Quit Tray).
 var run = func(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
+	cmd := exec.Command(name, args...)
+	cmd.SysProcAttr = proc.Detached()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(out), fmt.Errorf("service: %s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}

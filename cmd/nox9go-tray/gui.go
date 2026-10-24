@@ -144,9 +144,9 @@ func refresh(m *menu, actions tray.Actions) {
 		m.stop.Hide()
 	}
 
-	// The checkbox reflects what is installed, not what was last clicked: a
-	// failed install leaves the box where the service actually is.
-	if actions.AutostartEnabled() {
+	// The checkbox reflects what Gather already saw — do not call Status again
+	// (Windows would spawn another schtasks/powershell every tick).
+	if snap.Autostart {
 		m.autostart.Check()
 	} else {
 		m.autostart.Uncheck()

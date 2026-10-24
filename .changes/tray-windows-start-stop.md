@@ -8,3 +8,5 @@
   sibling `nox9go stop`, matching how Start already shells out to `nox9go
   start`, so the tray never puts the CLI token on the wire itself.
 - Verified with `go test ./internal/tray/` and a rebuilt `nox9go-tray.exe`.
+- Build the tray with `-H=windowsgui` on Windows (`make tray`) so launching it
+  does not open an empty console / Windows Terminal window.

@@ -65,6 +65,16 @@ build: web-build
 	go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) ./cmd/nox9go/
 	go build -ldflags="$(LDFLAGS)" -o opencode-go$(BINARY_SUFFIX) ./cmd/nox9go/
 
+## tray — system-tray companion (Windows: GUI subsystem so no console window)
+# -H=windowsgui is Windows-only PE metadata; other OSes ignore / don't need it
+# for a tray that already uses a native GUI toolkit.
+TRAY_LDFLAGS := $(LDFLAGS)
+ifeq ($(OS),Windows_NT)
+TRAY_LDFLAGS += -H=windowsgui
+endif
+tray:
+	go build -ldflags="$(TRAY_LDFLAGS)" -o nox9go-tray$(BINARY_SUFFIX) ./cmd/nox9go-tray/
+
 # `PORT=20130 ./nox9go` is POSIX env-assignment prefix syntax. cmd.exe does
 # not parse it: it tried to execute a program literally named "PORT" and failed
 # with "'PORT' is not recognized as an internal or external command". GNU Make's
