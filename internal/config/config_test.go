@@ -333,7 +333,9 @@ func TestResolveDataDir_PrefersNox9goDir(t *testing.T) {
 	t.Chdir(home)
 
 	preferred, legacy := platformDataDirs()
-	if filepath.Base(preferred) != "nox9go" {
+	// The directory is "nox9go" on Windows (%APPDATA%/nox9go) and ".nox9go"
+	// elsewhere (~/.nox9go), so the assertion cannot pin the exact base.
+	if base := filepath.Base(preferred); !strings.HasSuffix(base, "nox9go") {
 		t.Fatalf("preferred data dir = %q, want a nox9go directory", preferred)
 	}
 
