@@ -2,8 +2,9 @@ MIT License
 
 Copyright (c) 2024-2026 decolua and contributors
 Copyright (c) 2026 Luqmanul Hakim
+Copyright (c) 2026 Pacoaldev
 
-9router-go is a Go + Svelte port of 9router (https://github.com/decolua/9router),
+NOX9GO is a Go + Svelte port of 9router (https://github.com/decolua/9router),
 which is MIT licensed. Its notice is retained above as required.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
