@@ -61,8 +61,8 @@ nuevo tiene 2 commits previos que se pierden a propósito). Runner de tests: `go
 | T7 | S7 | inline | done — 40 documentos; `CHANGELOG.md` y `.changes/` intactos |
 | T8 | S8 | inline | done — `Copyright (c) 2026 Pacoaldev` añadido, créditos de upstream conservados |
 | T9 | S9 | inline | done — ver gates |
-| T10 | S10 | inline | pending |
-| T11 | S11 | inline | pending |
+| T10 | S10 | inline | done — `origin` → `https://github.com/Pacoaldev/Nox9Go.git`, force-push de `main` (`3501605`), los 2 commits previos del repo nuevo quedaron reemplazados |
+| T11 | S11 | inline | done — `C:\Users\spano\Documents\PROYECTOS\NOX9GO` (la carpeta vieja quedó vacía; su borrado final lo hace el usuario al cerrar OpenCode, que la tenía bloqueada como CWD) |
 
 ### Gates (S9)
 
