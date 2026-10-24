@@ -3332,7 +3332,13 @@
 
             <!-- Connection Row Content -->
             <div class="flex-1 min-w-0">
-              <div class="group flex min-w-0 flex-col gap-3 rounded-lg p-2 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between">
+              <div
+                class="group flex min-w-0 flex-col gap-3 rounded-lg p-2 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between {cooldownInfo
+                  ? cooldownInfo.isExhausted
+                    ? 'ring-1 ring-rose-500/40 bg-rose-500/[0.06]'
+                    : 'ring-1 ring-amber-500/40 bg-amber-500/[0.06]'
+                  : ''}"
+              >
                 <!-- Left info -->
                 <div class="flex min-w-0 flex-1 items-start gap-2 sm:items-center sm:gap-3">
                   <!-- Reorder buttons. z-[60] sits above the row proxy
@@ -3361,8 +3367,13 @@
                     </button>
                   </div>
 
-                  <!-- Lock icon -->
-                  <span class="material-symbols-outlined shrink-0 text-base text-text-muted">lock</span>
+                  <!-- Lock icon: amber when this connection is in cooldown/lockout -->
+                  <span
+                    class="material-symbols-outlined shrink-0 text-base {cooldownInfo
+                      ? 'text-amber-500'
+                      : 'text-text-muted'}"
+                    >{cooldownInfo ? 'lock_clock' : 'lock'}</span
+                  >
 
                   <!-- Title & badges -->
                   <div class="flex-1 min-w-0">
@@ -3406,21 +3417,26 @@
                           active
                         </span>
                       {/if}
-                      <!-- Cooldown & Exhausted Quota badge with live timer -->
+                      <!-- Cooldown & Exhausted Quota — solid pill so it cannot be missed -->
                       {#if cooldownInfo}
                         {#if cooldownInfo.isLock}
-                          <span class="text-xs text-orange-500 font-mono" title={cooldownInfo.title}>
-                            {cooldownInfo.label}
+                          <span
+                            class="inline-flex items-center gap-1.5 rounded-md font-bold px-2.5 py-1 text-[11px] tracking-wide bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/30"
+                            title={cooldownInfo.title}
+                          >
+                            <span class="material-symbols-outlined text-[14px] animate-pulse">timer</span>
+                            LOCKOUT {cooldownInfo.label.replace(/^⏱\s*/, '')}
                           </span>
                         {:else}
                           <span
-                            class="inline-flex items-center gap-1 rounded-full font-semibold px-2 py-0.5 text-[10px] border {cooldownInfo.isExhausted
-                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'}"
+                            class="inline-flex items-center gap-1.5 rounded-md font-bold px-2.5 py-1 text-[11px] tracking-wide shadow-sm ring-2 {cooldownInfo.isExhausted
+                              ? 'bg-rose-600 text-white ring-rose-500/30'
+                              : 'bg-amber-500 text-white ring-amber-500/30'}"
                             title={cooldownInfo.title}
                           >
-                            <span class="material-symbols-outlined text-[12px] animate-pulse">hourglass_top</span>
-                            {cooldownInfo.label}
+                            <span class="material-symbols-outlined text-[14px] animate-pulse">hourglass_top</span>
+                            {cooldownInfo.isExhausted ? 'QUOTA OUT' : 'COOLDOWN'}
+                            · {cooldownInfo.label.replace(/^Quota Exhausted[^:]*:\s*/i, '').replace(/^Quota Exhausted\s*/i, '')}
                           </span>
                         {/if}
                       {/if}
@@ -3497,6 +3513,17 @@
                       <!-- Priority tag -->
                       <span class="text-xs text-text-muted">#{priorityNum}</span>
                     </div>
+                    {#if cooldownInfo}
+                      <div
+                        class="mt-1.5 flex items-start gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border max-w-full {cooldownInfo.isExhausted
+                          ? 'text-rose-700 dark:text-rose-300 bg-rose-500/15 border-rose-500/40'
+                          : 'text-amber-800 dark:text-amber-200 bg-amber-500/15 border-amber-500/40'}"
+                        title={cooldownInfo.title}
+                      >
+                        <span class="material-symbols-outlined text-sm shrink-0 mt-0.5">{cooldownInfo.isLock ? 'lock_clock' : 'hourglass_top'}</span>
+                        <span class="break-words leading-relaxed">{cooldownInfo.title}</span>
+                      </div>
+                    {/if}
                     <!-- Error message block -->
                     {#if lastErr && lastErr !== 'Provider test not supported' && (status?.state === 'failed' || conn.testStatus === 'failed' || conn.testStatus === 'error')}
                       <div class="mt-1.5 flex items-start gap-1.5 text-xs text-red-500 bg-red-500/10 px-2.5 py-1.5 rounded-md border border-red-500/20 max-w-full">
@@ -3784,7 +3811,8 @@
           type="button"
           onclick={() => handleImportCompatibleModels(true)}
           disabled={!canImportCompatible || isImportingCompatibleModels}
-          class="inline-flex items-center justify-center gap-2 font-semibold transition-all duration-150 ease-out cursor-pointer active:scale-[0.97] bg-surface-2 hover:bg-surface-3 text-text-main border border-border h-8 px-4 text-xs rounded-[8px] disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Import only free-tier models from this provider's /models catalog"
+          class="inline-flex items-center justify-center gap-2 font-bold transition-all duration-150 ease-out cursor-pointer active:scale-[0.97] bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm border border-emerald-500/40 h-8 px-4 text-xs rounded-[8px] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span class="material-symbols-outlined text-[18px]">savings</span>
           Import free only

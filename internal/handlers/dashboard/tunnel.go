@@ -16,6 +16,15 @@ import (
 
 	"nox9go/proxy/internal/config"
 	"nox9go/proxy/internal/handlerutil"
+	"nox9go/proxy/internal/tunnel/cloudflare"
+)
+
+// Cloudflare seams — unit tests stub these so Enable never downloads cloudflared.
+var (
+	cloudflareEnable         = cloudflare.Enable
+	cloudflareDisable        = cloudflare.Disable
+	cloudflareSnapshot       = cloudflare.Snapshot
+	cloudflareDownloadStatus = cloudflare.DownloadStatus
 )
 
 var unixTailscaleCandidates = []string{
@@ -119,6 +128,7 @@ func (h *DashboardHandler) HandleTunnelStatus(w http.ResponseWriter, r *http.Req
 
 	tunnelEnabled, _ := raw["tunnelEnabled"].(bool)
 	tunnelURL, _ := raw["tunnelUrl"].(string)
+	cf := cloudflareSnapshot(tunnelEnabled, tunnelURL)
 
 	tailscaleEnabled, _ := raw["tailscaleEnabled"].(bool)
 	tailscaleURL, _ := raw["tailscaleUrl"].(string)
@@ -139,14 +149,15 @@ func (h *DashboardHandler) HandleTunnelStatus(w http.ResponseWriter, r *http.Req
 		tailscaleRunning = true
 	}
 
+	dl, progress := cloudflareDownloadStatus()
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"tunnel": map[string]any{
-			"enabled":         tunnelEnabled,
-			"settingsEnabled": tunnelEnabled,
-			"tunnelUrl":       tunnelURL,
-			"shortId":         "",
-			"publicUrl":       tunnelURL,
-			"running":         tunnelEnabled && tunnelURL != "",
+			"enabled":         cf.Enabled,
+			"settingsEnabled": cf.SettingsEnabled,
+			"tunnelUrl":       cf.TunnelURL,
+			"shortId":         cf.ShortID,
+			"publicUrl":       cf.PublicURL,
+			"running":         cf.Running,
 		},
 		"tailscale": map[string]any{
 			"enabled":         tailscaleEnabled,
@@ -156,21 +167,46 @@ func (h *DashboardHandler) HandleTunnelStatus(w http.ResponseWriter, r *http.Req
 			"loggedIn":        tailscaleLoggedIn,
 		},
 		"download": map[string]any{
-			"downloading": false,
-			"progress":    0,
+			"downloading": dl,
+			"progress":    progress,
 		},
 	})
 }
 
 // HandleTunnelEnable handles POST /api/tunnel/enable.
+// Spawns cloudflared quick tunnel (trycloudflare.com) — parity with upstream
+// decolua/9router src/lib/tunnel/cloudflare/, without the abc-tunnel.us short URL.
 func (h *DashboardHandler) HandleTunnelEnable(w http.ResponseWriter, r *http.Request) {
-	writePlainError(w, http.StatusBadRequest, "Cloudflare Tunnel service is not yet supported in nox9go. Use an external reverse proxy (e.g. ngrok, cloudflared, or caddy) pointing to http://127.0.0.1:20130")
+	port := config.LoadConfig().Port
+	if port <= 0 {
+		port = 20130
+	}
+
+	res, err := cloudflareEnable(r.Context(), port)
+	if err != nil {
+		writePlainError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	_ = h.Repo.UpdateSettingsRaw(map[string]any{
+		"tunnelEnabled": true,
+		"tunnelUrl":     res.TunnelURL,
+	})
+
+	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+		"success":   true,
+		"tunnelUrl": res.TunnelURL,
+		"publicUrl": res.PublicURL,
+	})
 }
 
 // HandleTunnelDisable handles POST /api/tunnel/disable.
 func (h *DashboardHandler) HandleTunnelDisable(w http.ResponseWriter, r *http.Request) {
+	port := config.LoadConfig().Port
+	cloudflareDisable(port)
 	_ = h.Repo.UpdateSettingsRaw(map[string]any{
 		"tunnelEnabled": false,
+		"tunnelUrl":     "",
 	})
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"nox9go/proxy/internal/tunnel/cloudflare"
 )
 
 // stubTailscaleHost pins both tailscale seams for the duration of the test.
@@ -63,6 +65,14 @@ func TestHandleTunnelEndpoints(t *testing.T) {
 			"tunnelEnabled": true,
 			"tunnelUrl":     "https://test.trycloudflare.com",
 		})
+		// No live cloudflared process: settingsEnabled stays true, running false.
+		origSnap := cloudflareSnapshot
+		cloudflareSnapshot = func(enabled bool, url string) cloudflare.StatusSnapshot {
+			return cloudflare.StatusSnapshot{
+				Enabled: false, SettingsEnabled: enabled, TunnelURL: url, PublicURL: url, Running: false,
+			}
+		}
+		t.Cleanup(func() { cloudflareSnapshot = origSnap })
 
 		req := httptest.NewRequest(http.MethodGet, "/api/tunnel/status", nil)
 		rec := httptest.NewRecorder()
@@ -71,45 +81,81 @@ func TestHandleTunnelEndpoints(t *testing.T) {
 
 		var res struct {
 			Tunnel struct {
-				Enabled   bool   `json:"enabled"`
-				TunnelURL string `json:"tunnelUrl"`
-				Running   bool   `json:"running"`
+				Enabled         bool   `json:"enabled"`
+				SettingsEnabled bool   `json:"settingsEnabled"`
+				TunnelURL       string `json:"tunnelUrl"`
+				Running         bool   `json:"running"`
 			} `json:"tunnel"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
 			t.Fatalf("unmarshal status response: %v", err)
 		}
 
-		if !res.Tunnel.Enabled || !res.Tunnel.Running {
-			t.Errorf("expected tunnel to be enabled and running when url is configured")
+		if !res.Tunnel.SettingsEnabled {
+			t.Errorf("expected settingsEnabled=true when url is configured")
+		}
+		if res.Tunnel.Running || res.Tunnel.Enabled {
+			t.Errorf("expected not running without a live cloudflared process")
 		}
 		if res.Tunnel.TunnelURL != "https://test.trycloudflare.com" {
 			t.Errorf("unexpected tunnel URL: %s", res.Tunnel.TunnelURL)
 		}
 	})
 
-	t.Run("TunnelEnable_ReturnsCleanError", func(t *testing.T) {
+	t.Run("TunnelEnable_PersistsURL", func(t *testing.T) {
+		orig := cloudflareEnable
+		cloudflareEnable = func(context.Context, int) (cloudflare.EnableResult, error) {
+			return cloudflare.EnableResult{
+				TunnelURL: "https://demo.trycloudflare.com",
+				PublicURL: "https://demo.trycloudflare.com",
+			}, nil
+		}
+		t.Cleanup(func() { cloudflareEnable = orig })
+
 		req := httptest.NewRequest(http.MethodPost, "/api/tunnel/enable", nil)
 		rec := httptest.NewRecorder()
 
 		h.HandleTunnelEnable(rec, req)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("expected status 400, got %d", rec.Code)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d (%s)", rec.Code, rec.Body.String())
 		}
 
 		var res struct {
-			Error string `json:"error"`
+			Success   bool   `json:"success"`
+			TunnelURL string `json:"tunnelUrl"`
+			PublicURL string `json:"publicUrl"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
-			t.Fatalf("unmarshal error response: %v", err)
+			t.Fatalf("unmarshal enable response: %v", err)
 		}
-		if res.Error == "" {
-			t.Errorf("expected non-empty error message")
+		if !res.Success || res.TunnelURL != "https://demo.trycloudflare.com" {
+			t.Errorf("unexpected enable payload: %+v", res)
+		}
+
+		raw, err := repo.GetSettingsRaw()
+		if err != nil {
+			t.Fatalf("GetSettingsRaw: %v", err)
+		}
+		if raw["tunnelEnabled"] != true {
+			t.Errorf("tunnelEnabled = %v, want true", raw["tunnelEnabled"])
+		}
+		if raw["tunnelUrl"] != "https://demo.trycloudflare.com" {
+			t.Errorf("tunnelUrl = %v", raw["tunnelUrl"])
 		}
 	})
 
 	t.Run("TunnelDisable_Success", func(t *testing.T) {
+		var disabledPort int
+		orig := cloudflareDisable
+		cloudflareDisable = func(port int) { disabledPort = port }
+		t.Cleanup(func() { cloudflareDisable = orig })
+
+		_ = repo.UpdateSettingsRaw(map[string]any{
+			"tunnelEnabled": true,
+			"tunnelUrl":     "https://demo.trycloudflare.com",
+		})
+
 		req := httptest.NewRequest(http.MethodPost, "/api/tunnel/disable", nil)
 		rec := httptest.NewRecorder()
 
@@ -117,6 +163,9 @@ func TestHandleTunnelEndpoints(t *testing.T) {
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		if disabledPort == 0 {
+			t.Errorf("expected Disable to be called with a port")
 		}
 
 		var res struct {
