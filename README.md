@@ -6,13 +6,6 @@
 
 **Connect Claude Code, Codex, Cursor, Antigravity, Gemini, OpenCode, Cline, OpenClaw... to 140+ AI providers & 800+ models — one Go binary, no Node.js needed at runtime.**
 
-[![CI](https://github.com/Pacoaldev/Nox9Go/actions/workflows/ci.yml/badge.svg)](https://github.com/Pacoaldev/Nox9Go/actions/workflows/ci.yml)
-[![Release](https://github.com/Pacoaldev/Nox9Go/actions/workflows/release.yml/badge.svg)](https://github.com/Pacoaldev/Nox9Go/actions/workflows/release.yml)
-[![GitHub release](https://img.shields.io/github/v/release/Pacoaldev/Nox9Go)](https://github.com/Pacoaldev/Nox9Go/releases/latest)
-[![License](https://img.shields.io/github/license/Pacoaldev/Nox9Go)](https://github.com/Pacoaldev/Nox9Go/blob/main/LICENSE)
-[![GitHub All Releases](https://img.shields.io/github/downloads/Pacoaldev/Nox9Go/total.svg)](https://github.com/Pacoaldev/Nox9Go/releases)
-[![Telegram](https://img.shields.io/badge/Telegram-Join%20Group-26A5E1?logo=telegram&logoColor=white)](https://pacoaldev.github.io/Nox9Go/tg)
-
 [🚀 Quick Start](#-quick-start) • [🌐 Providers](#-supported-providers) • [💡 Features](#-key-features) • [❓ FAQ](#-frequently-asked-questions) • [📖 Setup](#-setup-guide) • [🔄 Share DB with 9Router](#-sharing-a-database-with-9router) • [🌐 Upstream](https://github.com/decolua/9router)
 
 </div>
@@ -1073,8 +1066,6 @@ PRs follow the checks CI runs: `go vet ./...`, `go test -count=1 ./...`, `make t
 - [`CHANGELOG.md`](CHANGELOG.md) — release history (Go **v1.9.14**, upstream baseline `decolua/9router`
   v0.5.85). Work merged since the last tag lives in [`.changes/`](.changes/) and is folded in at the next
   release; the dashboard's changelog modal shows both.
-- [`docs/TELEGRAM_RELEASE_NOTIFICATIONS.md`](docs/TELEGRAM_RELEASE_NOTIFICATIONS.md) — one-time setup for the
-  release notice posted to Telegram
 
 ---
 
