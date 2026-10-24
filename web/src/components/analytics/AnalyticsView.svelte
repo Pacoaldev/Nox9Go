@@ -25,7 +25,6 @@
   import RequestDetailsTab from './RequestDetailsTab.svelte'
   import UsageChart from './UsageChart.svelte'
   import ProviderTopologyCard from './ProviderTopologyCard.svelte'
-  import ComboFlowCard from './ComboFlowCard.svelte'
   import { usageBlocks, isPanelVisible } from '../../lib/usagePanel.svelte'
   import Card from '../../lib/ui/Card.svelte'
   import { emailPrivacy, formatEmailLabel } from '../../lib/privacy'
@@ -50,11 +49,10 @@
   let period = $state<Period>('today')
   let isFetching = $state(false)
 
-  // The two optional Overview panels start collapsed and say so with a chevron,
+  // The optional Usage trend panel starts collapsed and says so with a chevron,
   // the same affordance the Details panels use. Collapsed is a view state, not a
   // preference: the switch that hides a panel outright is the arrangement's own
-  // visibility toggle, and that one also skips the combo query below.
-  let comboFlowOpen = $state(false)
+  // visibility toggle.
   let usageTrendOpen = $state(false)
   // The trend's metric switch lives in the panel header, and the header label
   // describes the active metric — so both the mode and the hourly fact the
@@ -67,7 +65,7 @@
       : `Tokens per ${trendHourly ? 'hour' : 'day'}, stacked by model family.`
   )
   // The stats read and the live stream fill the Overview's data panels: KPI
-  // cards, topology map, Recent Requests, the breakdown table, and Combo flow.
+  // cards, topology map, Recent Requests, and the breakdown table.
   // The Usage trend is not one of them — it reads its own chart endpoint, and
   // only while it is expanded — so a section that shows nothing but the trend
   // must not poll what none of its cards draw (issue #506).
@@ -76,7 +74,6 @@
     'overview.topology',
     'overview.recent',
     'overview.breakdown',
-    'overview.comboFlow',
   ] as const
   const overviewLive = $derived(OVERVIEW_LIVE_PANELS.some((id) => isPanelVisible(id)))
 
@@ -98,10 +95,6 @@
   // body, so the failure arrives here as a thrown error: keep the message, and
   // let the template show the stale data as stale rather than as current.
   let statsError = $state('')
-  // Combo definitions for the live map. The SSE already reports which combo a
-  // request asked for (requestedModel); these supply the members it resolved
-  // to, so the card can list models and providers instead of guessing.
-  let comboDefs = $state<{ name: string; members: string[]; strategy?: string }[]>([])
   let detailsError = $state('')
   let pulseTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -202,42 +195,6 @@
     // request and the page weight of a table nobody sees (issue #506).
     if (section === 'details' && isPanelVisible('details.requests')) {
       loadDetails(detailsPage, period)
-    }
-  })
-
-  // Loaded once: editing a combo is rare, and a reload picks up the change. The
-  // query is skipped outright while the Combo flow panel is hidden — the panel
-  // draws nothing then, so the definitions would only cost a request and memory
-  // (upstream #429). `isPanelVisible` reads the arrangement, so turning the panel
-  // back on in Settings refetches without a reload.
-  $effect(() => {
-    if (!isPanelVisible('overview.comboFlow')) {
-      comboDefs = []
-      return
-    }
-    let cancelled = false
-    api
-      .getCombos()
-      .then((rows: any[]) => {
-        if (cancelled) return
-        comboDefs = (Array.isArray(rows) ? rows : [])
-          .map((c: any) => {
-            let members: string[] = []
-            try {
-              const raw = typeof c?.models === 'string' ? JSON.parse(c.models) : c?.models
-              if (Array.isArray(raw)) members = raw.map((m: any) => String(m))
-            } catch {
-              members = []
-            }
-            return { name: String(c?.name ?? ''), members, strategy: String(c?.strategy ?? '') }
-          })
-          .filter((c: { name: string }) => c.name !== '')
-      })
-      .catch(() => {
-        if (!cancelled) comboDefs = []
-      })
-    return () => {
-      cancelled = true
     }
   })
 
@@ -535,41 +492,6 @@
     {#each usageBlocks('overview') as block (block.key)}
       {#if block.key === 'overview.kpi'}
         <SummaryKpiCards {stats} />
-      {:else if block.key === 'overview.comboFlow'}
-        <!-- Combo flow: router -> combo -> members, only while a combo is in use
-             (or just finished). The provider map keeps its own animation. The
-             panel starts collapsed: the flow is only interesting while a request
-             is moving, and an expanded empty tree reads as a broken panel. The
-             header is the Details panels' own — same fonts, same chevron, with
-             the panel's icon in front of the title. -->
-        <Card padding="none" class="overflow-hidden border border-border">
-          <div
-            class="flex flex-col gap-3 bg-surface-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between {comboFlowOpen
-              ? 'border-b border-border'
-              : ''}"
-          >
-            <div class="flex min-w-0 items-center gap-2">
-              <span class="material-symbols-outlined text-[18px] text-text-muted" aria-hidden="true"
-                >account_tree</span
-              >
-              <div class="min-w-0">
-                <h2 class="font-headline text-sm font-bold text-text-main">Combo flow</h2>
-                <p class="font-body text-xs text-text-muted">Router → combo → members, live</p>
-              </div>
-            </div>
-            {@render panelToggle(comboFlowOpen, 'Combo flow', () => (comboFlowOpen = !comboFlowOpen))}
-          </div>
-          {#if comboFlowOpen}
-            <div class="p-5">
-              <ComboFlowCard
-                combos={comboDefs}
-                {activeRequests}
-                recentRequests={stats.recentRequests || []}
-                {errorProvider}
-              />
-            </div>
-          {/if}
-        </Card>
       {:else if block.key === 'overview.topology+overview.recent'}
         <div class="grid min-w-0 grid-cols-1 items-stretch gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
           {@render topologyMap()}
@@ -580,8 +502,7 @@
       {:else if block.key === 'overview.recent'}
         {@render recentRequestsCard()}
       {:else if block.key === 'overview.trend'}
-        <!-- Usage trend: the same collapsed-by-default shape as Combo flow, so the
-             two optional panels read alike. The metric switch lives here, in the
+        <!-- Usage trend: collapsed-by-default. The metric switch lives here, in the
              header, beside the chevron — the label below it names what is drawn,
              so the two cannot disagree. -->
         <Card padding="none" class="overflow-hidden border border-border">

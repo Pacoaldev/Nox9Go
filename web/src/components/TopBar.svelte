@@ -117,6 +117,11 @@
       description: 'Model combos with fallback',
       icon: 'layers',
     },
+    'combo-flow': {
+      title: 'Combo flow',
+      description: 'Router → combo → members, live',
+      icon: 'account_tree',
+    },
     analytics: {
       title: 'Usage & Analytics',
       description: 'Monitor your API usage, token consumption, and request logs',

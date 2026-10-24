@@ -4,6 +4,7 @@ export type ActiveTab =
   | 'connections'
   | 'combos'
   | 'analytics'
+  | 'combo-flow'
   | 'quota'
   | 'token-saver'
 // Cache Analytics and Compression Analytics are sections of the Usage page
@@ -34,6 +35,7 @@ export const TAB_ROUTES: Record<ActiveTab, string> = {
   connections: '/dashboard/providers',
   combos: '/dashboard/combos',
   analytics: '/dashboard/usage',
+  'combo-flow': '/dashboard/combo-flow',
   quota: '/dashboard/quota',
   'token-saver': '/dashboard/token-saver',
   'usage-cache': '/dashboard/usage/cache',
@@ -82,6 +84,11 @@ const ROUTE_TO_TAB: Record<string, ActiveTab> = {
   '/dashboard/analytics': 'analytics',
   '/usage': 'analytics',
   '/analytics': 'analytics',
+
+  // combo flow: its own page, out of the Usage section (it is a live view of
+  // the router's own routing, not a usage report).
+  '/dashboard/combo-flow': 'combo-flow',
+  '/combo-flow': 'combo-flow',
 
   // Cache + compression analytics, sections of the Usage page (issue #200).
   '/dashboard/usage/cache': 'usage-cache',
@@ -230,6 +237,7 @@ export function pathToTab(pathname: string): ActiveTab {
     return 'console-log'
   }
   if (normalized.includes('quota')) return 'quota'
+  if (normalized.includes('combo-flow')) return 'combo-flow'
   if (normalized.includes('usage') || normalized.includes('analytics')) return 'analytics'
   if (normalized.includes('combos')) return 'combos'
   if (normalized.includes('providers') || normalized.includes('connections')) return 'connections'

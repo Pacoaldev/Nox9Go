@@ -18,20 +18,14 @@ test('the order repair appends panels this build knows that storage predates', (
     'overview.topology',
     'overview.recent',
     'overview.trend',
-    'overview.comboFlow',
   ])
 })
 
-test('the Default preset hides the combo flow and the three Details-only cards', () => {
+test('the Default preset hides the three Details-only cards', () => {
   const preset = USAGE_PANEL_PRESETS.find((p) => p.id === 'default')
   assert.ok(preset, 'the default preset must exist')
   const hidden = USAGE_PANEL_IDS.filter((id) => !preset.visible.includes(id))
-  assert.deepEqual(hidden, [
-    'overview.comboFlow',
-    'details.lifetime',
-    'details.heatmap',
-    'details.nodeHealth',
-  ])
+  assert.deepEqual(hidden, ['details.lifetime', 'details.heatmap', 'details.nodeHealth'])
 })
 
 test('the order repair drops unknown and duplicated ids', () => {
@@ -39,6 +33,20 @@ test('the order repair drops unknown and duplicated ids', () => {
   const order = normalizeListAgainst(stored, USAGE_PANEL_DEFAULT_ORDER.overview)
   assert.equal(order[0], 'overview.kpi')
   assert.equal(order.length, USAGE_PANEL_DEFAULT_ORDER.overview.length)
+})
+
+test('the order repair drops a retired combo-flow panel id from storage', () => {
+  const order = normalizeListAgainst(
+    ['overview.kpi', 'overview.comboFlow', 'overview.trend'],
+    USAGE_PANEL_DEFAULT_ORDER.overview
+  )
+  assert.deepEqual(order, [
+    'overview.kpi',
+    'overview.trend',
+    'overview.topology',
+    'overview.recent',
+    'overview.breakdown',
+  ])
 })
 
 test('the order repair keeps a group to its own panels', () => {
@@ -72,18 +80,18 @@ test('moveInList swaps one place and refuses to leave the list', () => {
 test('moveBeforeInList drops a panel into the slot above or below its target', () => {
   const order: UsagePanelId[] = [
     'overview.kpi',
-    'overview.comboFlow',
+    'overview.topology',
     'overview.trend',
     'overview.breakdown',
   ]
   assert.deepEqual(moveBeforeInList(order, 'overview.breakdown', 'overview.kpi', true), [
     'overview.breakdown',
     'overview.kpi',
-    'overview.comboFlow',
+    'overview.topology',
     'overview.trend',
   ])
   assert.deepEqual(moveBeforeInList(order, 'overview.kpi', 'overview.trend', false), [
-    'overview.comboFlow',
+    'overview.topology',
     'overview.trend',
     'overview.kpi',
     'overview.breakdown',

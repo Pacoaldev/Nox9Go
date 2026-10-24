@@ -12,6 +12,7 @@
     type Settings
   } from './api/client'
   import AnalyticsView from './components/analytics/AnalyticsView.svelte'
+  import ComboFlowView from './components/analytics/ComboFlowView.svelte'
   import CliToolsView from './components/CliToolsView.svelte'
   import CombosView from './components/combos/CombosView.svelte'
   import ConnectionsView from './components/connections/ConnectionsView.svelte'
@@ -267,6 +268,7 @@
     endpoint: { title: 'Endpoint & Key', description: 'API endpoint and key configuration' },
     connections: { title: 'Providers & Endpoints', description: 'Manage your AI provider connections' },
     combos: { title: 'Combo & Routing', description: 'Model combos and failover strategies' },
+    'combo-flow': { title: 'Combo flow', description: 'Router → combo → members, live' },
     // The two moved tabs are sections of the Usage page, so the TopBar keeps
     // the Usage title and the section's own header below it names the section.
     'usage-cache': { title: 'Usage & Analytics', description: 'Monitor your API usage, token consumption, and request logs' },
@@ -404,6 +406,8 @@
               />
             {:else if activeTab === 'combos'}
               <CombosView {combos} {connections} {providerNodes} onRefresh={loadData} bind:isCreatingOpen={isCreateComboOpen} />
+            {:else if activeTab === 'combo-flow'}
+              <ComboFlowView />
             {:else if activeTab === 'analytics' || activeTab === 'usage-cache' || activeTab === 'usage-compression'}
               <!-- Cache and Compression Analytics are Usage sections (#200);
                    AnalyticsView renders all four sections under one header. -->

@@ -13,7 +13,6 @@ export type UsagePanelGroupId = 'overview' | 'details' | 'cache' | 'compression'
 
 export type UsagePanelId =
   | 'overview.kpi'
-  | 'overview.comboFlow'
   | 'overview.topology'
   | 'overview.recent'
   | 'overview.trend'
@@ -56,11 +55,10 @@ export const USAGE_PANEL_GROUPS: UsagePanelGroup[] = [
       { id: 'overview.topology', label: 'Provider topology map' },
       { id: 'overview.recent', label: 'Recent requests' },
       { id: 'overview.breakdown', label: 'Usage breakdown table' },
-      // The two collapsed-by-default panels sit at the bottom of the declared
-      // order, the way upstream draws them: a chevron row is the last thing on
-      // the page, not something a reader scrolls past to reach the numbers.
+      // The collapsed-by-default trend sits at the bottom of the declared order:
+      // a chevron row is the last thing on the page, not something a reader
+      // scrolls past to reach the numbers.
       { id: 'overview.trend', label: 'Usage trend chart' },
-      { id: 'overview.comboFlow', label: 'Combo flow' },
     ],
   },
   {
@@ -133,30 +131,28 @@ export const USAGE_PANEL_ORDERABLE_GROUPS: UsagePanelGroupId[] = ['overview', 'd
 
 /**
  * The panels a dashboard that has never been arranged starts without: the
- * animated combo flow, and the three Details cards that only repeat what the
- * Overview already says. defaultLayout() hides these, and the Default preset
- * restores exactly this set.
+ * three Details cards that only repeat what the Overview already says.
+ * defaultLayout() hides these, and the Default preset restores exactly this set.
  */
 export const USAGE_PANEL_DEFAULT_HIDDEN: UsagePanelId[] = [
-  'overview.comboFlow',
   'details.lifetime',
   'details.heatmap',
   'details.nodeHealth',
 ]
 
 /**
- * Four ready-made shapes. Default is what an unarranged dashboard shows: no
- * combo flow, and the Details section down to its paged request table. Advanced
- * is everything; Simple drops the two animated maps and the operational panels;
- * Super Lite keeps only the four reads an operator checks on a phone — the KPI
- * row, the recent list, lifetime totals and the request table. A preset fills
- * the toggles only: an arrangement, once made, is kept.
+ * Four ready-made shapes. Default is what an unarranged dashboard shows: the
+ * Details section down to its paged request table. Advanced is everything;
+ * Simple drops the animated map and the operational panels; Super Lite keeps
+ * only the four reads an operator checks on a phone — the KPI row, the recent
+ * list, lifetime totals and the request table. A preset fills the toggles only:
+ * an arrangement, once made, is kept.
  */
 export const USAGE_PANEL_PRESETS: UsagePanelPresetDef[] = [
   {
     id: 'default',
     label: 'Default',
-    hint: 'No combo flow, no Details-only cards',
+    hint: 'No Details-only cards',
     visible: USAGE_PANEL_IDS.filter((id) => !USAGE_PANEL_DEFAULT_HIDDEN.includes(id)),
   },
   {
@@ -172,7 +168,6 @@ export const USAGE_PANEL_PRESETS: UsagePanelPresetDef[] = [
     visible: USAGE_PANEL_IDS.filter(
       (id) =>
         ![
-          'overview.comboFlow',
           'overview.topology',
           'details.payload',
           'cache.invalidation',

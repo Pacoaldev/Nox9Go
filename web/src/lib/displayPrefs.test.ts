@@ -54,7 +54,7 @@ describe('usage detail collapse preference', () => {
   })
 })
 
-// The Overview's two optional panels are hidden through the Usage arrangement
-// (lib/usagePanel.svelte.ts) rather than a separate localStorage switch, so the
-// coverage for that lives in usagePanelPlan.test.ts and nav.test.ts. Upstream's
-// showComboFlow / showUsageTrend keys would be a second, competing control.
+// The Overview's optional Usage trend panel is hidden through the Usage
+// arrangement (lib/usagePanel.svelte.ts) rather than a separate localStorage
+// switch, so the coverage for that lives in usagePanelPlan.test.ts and
+// nav.test.ts. Combo flow lives on its own sidebar page.

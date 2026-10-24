@@ -480,6 +480,7 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 	r.Get("/media-providers/web", webH.ServeHTTP)
 	r.Get("/connections", webH.ServeHTTP)
 	r.Get("/combos", webH.ServeHTTP)
+	r.Get("/combo-flow", webH.ServeHTTP)
 	r.Get("/analytics", webH.ServeHTTP)
 	r.Get("/terminal", webH.ServeHTTP)
 	r.Get("/keys", webH.ServeHTTP)
