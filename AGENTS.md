@@ -21,10 +21,9 @@ Whenever you implement features, fix bugs, add providers, update routing logic, 
    - Combo expansion, model fallback, account rotation, and strike-breaker quota handling.
    - SQLite database compatibility (`~/.nox9go/db/data.sqlite`).
 3. **Changelog Tracking**:
-   - When porting features or fixes, reference the upstream commit/issue/PR in
-     your `.changes/<pr-number>-<slug>.md` fragment (e.g. `upstream
-     decolua/9router#4197 parity`). **Never write it into `CHANGELOG.md`** — see
-     §7.6 for the rule and the reason behind it.
+   - When porting features or fixes, note the upstream commit/issue/PR in
+     [`CHANGELOG.md`](CHANGELOG.md) under the current personal version
+     (see §7.6).
 
 ### Secondary Reference: OmniRoute (source of many feature requests)
 
@@ -37,7 +36,7 @@ Some feature issues in this repo are not parity requests against `decolua/9route
 1. **Fetch the cited file first**, from raw: `https://raw.githubusercontent.com/diegosouzapw/OmniRoute/main/<path>`. Fetch the related UI component too (dashboard modals live under its `src/app/` tree) — the port must match the dashboard *behavior*, not just the API shape.
 2. **Port the contract, not the code**: endpoints, request/response payloads, error status codes, and filter/sort rules. Never transliterate TypeScript into Go (see §4.A).
 3. **Map by responsibility** — OmniRoute `src/lib/usage/*.ts` → `internal/handlers/dashboard/` + `web/src/api/client.ts`; `open-sse/executors/` → `internal/proxy/executor/`; `src/app/` components → `web/src/`.
-4. **OmniRoute is secondary**. Where it conflicts with `decolua/9router`, the §1 parity rules win; record the deliberate divergence in your `.changes/` fragment (§7.6), never in `CHANGELOG.md`.
+4. **OmniRoute is secondary**. Where it conflicts with `decolua/9router`, the §1 parity rules win; note the deliberate divergence in `CHANGELOG.md` (§7.6).
 5. **Provider IDs are not portable verbatim.** OmniRoute has its own catalog. Map to `nox9go` provider IDs and obey §3 (strict provider isolation — no cross-provider aliasing or model hijacking).
 6. **Preserve upstream error semantics.** OmniRoute surfaces typed error classes with explicit status codes (e.g. `409 no_credit`); port that distinction rather than collapsing every upstream failure into one generic error.
 
@@ -507,42 +506,15 @@ When tasked with syncing a feature, bugfix, or provider from upstream:
    # and `bun test src scripts` cover the contract; the numbers in the PR
    # body come from a browser measurement, not from `du -sh dist`.
    go test ./web/...
-   # A CHANGELOG.md hunk in a PR is a violation of §7.6. Both forms matter:
-   # the committed range catches what was pushed, the worktree the rest.
-   { rtk git diff --name-only HEAD; rtk git diff --name-only main...HEAD; \
-     rtk git status --porcelain | cut -c4-; } | rtk grep -qx CHANGELOG.md \
-     && echo "VIOLATION: CHANGELOG.md must not appear in a PR diff (§7.6)"
    ```
-   That last check is the machine-checkable half of §7.6: it prints nothing on a
-   clean PR and fails loudly the moment an entry is written to the wrong file.
-6. **Update Changelog (a fragment file — NEVER edit `CHANGELOG.md`)**:
-   - **Create `.changes/<pr-number>-<slug>.md`.** That is the whole step. Name
-     it after the PR you are opening (e.g. `.changes/219-chat-402-model-scoped.md`).
-     The file body is the entry exactly as it would have appeared under
-     `## [Unreleased]`: a `###` heading plus bullets covering what changed, why,
-     and how it was verified. No front matter, no wrapping heading.
-   - **`CHANGELOG.md` is written by exactly one thing: `make changelog-merge`, at
-     release time.** If a PR's diff contains a `CHANGELOG.md` hunk, that PR is
-     wrong — move the entry into a fragment and revert the hunk. A stray edit is
-     also what will re-introduce the merge conflicts described below.
-   - **Why a fragment instead of a shared `[Unreleased]` section.** Every PR
-     prepended its entry at the top of `## [Unreleased]`, which made those few
-     lines the most contested hunk in the repository: any two PRs landing in the
-     same window collided there, and `## [Unreleased]` had grown to 675 lines of
-     backlog. `.gitattributes` with `merge=union` does **not** fix it here —
-     this repo merges through GitHub's web merge button, which ignores merge
-     drivers entirely, so no setting merged them automatically. A per-PR fragment
-     is a new unique file, so two concurrent PRs never share a line and cannot
-     conflict. Do not propose `merge=union` or a conflict bot as the fix again.
-   - **The dashboard is unaffected.** `GET /api/changelog` assembles
-     `CHANGELOG.md` plus every fragment (`internal/changelogfrag`), so an entry
-     appears as soon as its PR merges — no waiting for a release. Fragments
-     render newest-first by PR number, numerically.
-   - **At release time only:** `make changelog-merge TAG=v<version>` after
-     `scripts/bump-version.sh`. It files every fragment under
-     `## [TAG] - <date>`, drops the emptied `[Unreleased]` section, and clears
-     `.changes/`. Contributors do not run this per PR.
-   - Format reference: [`.changes/README.md`](.changes/README.md).
+6. **Update Changelog (personal fork)**:
+   - This is a **private personal** repository. Edit [`CHANGELOG.md`](CHANGELOG.md)
+     directly under the current version heading (today: `## [1.0.0]`). Do **not**
+     reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or
+     `scripts/bump-version.sh` — those were upstream multi-contributor release
+     machinery and were removed.
+   - Bump `VERSION` (and `version.json` `latestVersion`) by hand when you cut a
+     new personal version; rebuild with `make build` so `-ldflags` embeds it.
 
 7. **Branch & PR Targeting (`main` ONLY — MANDATORY)**:
    - **Every pull request in this repository targets `main`.** Never open a PR
@@ -574,18 +546,8 @@ When tasked with syncing a feature, bugfix, or provider from upstream:
    - **Check the diff size before opening.** `gh pr view <n> --json changedFiles,
      additions` must show only the files you touched. If it shows more than
      that, the branch was cut from the wrong place — see the previous rule.
-   - **`CHANGELOG.md` must not conflict, because no PR touches it.** If one does,
-     the branch predates the fragment split (§7.6) or an edit slipped in: move
-     that entry into a `.changes/` fragment and revert the `CHANGELOG.md` hunk.
-     Never resolve an `[Unreleased]` conflict additively by hand — that is the
-     manual workaround the fragments replaced.
-   - **When reviewing or auditing shipped behaviour, read the fragments too.**
-     `CHANGELOG.md` alone is release history: anything merged after the last tag
-     lives only in `.changes/*.md`. Answering "what changed in X?" from
-     `CHANGELOG.md` alone reports the previous release's fixes as if they were
-     current. `GET /api/changelog` shows both, and
-     `go run ./cmd/changelog-merge --tag <next> --dry-run` previews what the next
-     release will contain without writing anything.
+   - **Changelog lives only in `CHANGELOG.md`.** Keep it short and personal;
+     `GET /api/changelog` serves that file (plus an empty `.changes/` if present).
 
 ---
 
@@ -651,15 +613,8 @@ done
 # Run dev server with live go run (PORT=20130 default)
 make dev
 
-# Changelog. Per PR: write .changes/<pr-number>-<slug>.md, never CHANGELOG.md.
-# Preview what the next release will contain (writes nothing):
-go run ./cmd/changelog-merge --tag v1.9.11 --dry-run
-# Release time only — files the fragments under ## [TAG], clears .changes/:
-make changelog-merge TAG=v1.9.11
-
-# Prove a PR does not touch CHANGELOG.md (prints nothing when clean)
-{ rtk git diff --name-only HEAD; rtk git diff --name-only main...HEAD; \
-  rtk git status --porcelain | cut -c4-; } | rtk grep -qx CHANGELOG.md
+# Changelog (personal fork): edit CHANGELOG.md under ## [1.0.0] (or the next
+# version). Bump VERSION + version.json by hand, then make build.
 
 # Git operations (always prefix with rtk)
 rtk git status

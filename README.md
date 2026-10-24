@@ -1,14 +1,16 @@
 <p align="center">
-  <img src="assets/branding/NOX9GO_logo.svg" alt="ClientSeeker Logo" width="350">
+  <img src="assets/branding/NOX9GO_logo.svg" alt="NOX9GO" width="350">
 </p>
 
 <div align="center">
 
-# NOX9GO — FREE AI Router & Token Saver (Single Binary)
+# NOX9GO — FREE AI GATEWAY
 
 **Never stop coding. Save 20-40% tokens with RTK + auto-fallback to FREE & cheap AI models.**
 
 **Connect Claude Code, Codex, Cursor, Antigravity, Gemini, OpenCode, Cline, OpenClaw... to 140+ AI providers & 800+ models — one Go binary, no Node.js needed at runtime.**
+
+Personal fork · version **1.0.0** · private use
 
 [🚀 Quick Start](#-quick-start) • [🌐 Providers](#-supported-providers) • [💡 Features](#-key-features) • [❓ FAQ](#-frequently-asked-questions) • [📖 Setup](#-setup-guide) • [🔄 Share DB with 9Router](#-sharing-a-database-with-9router) • [🌐 Upstream](https://github.com/decolua/9router)
 
@@ -25,8 +27,8 @@ wire contract and the same SQLite database, and replaces the Node.js runtime wit
   Node.js, no Bun, no `node_modules` on the target machine.
 - 🖥️ **Native Svelte 5 dashboard** — compiled to a static bundle and embedded in the binary
   (`web/embed.go`), served pre-compressed (`.br`/`.gz`) from the gateway's own origin.
-- 📦 **Cross-compiled releases** — `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`,
-  `windows-amd64`. One artifact per target, `CGO_ENABLED=0`.
+- 📦 **Cross-compile ready** — `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`,
+  `windows-amd64` with `CGO_ENABLED=0` (local packaging; this fork does not publish releases).
 - 🛠️ **First-class autostart** — `service install` picks the native backend: systemd, launchd, OpenRC, runit,
   cron, or a Windows scheduled task.
 - 🪶 **Token savers beyond RTK** — RTK (on by default), Caveman, Ponytail, an action-first "ADHD" prompt
@@ -100,24 +102,19 @@ Result: Never stop coding, minimal cost + 20-40% token savings via RTK
 
 ## ⚡ Quick Start
 
-**1. Install (one line):**
+This is a **private personal fork**. There is no public one-line installer or GitHub Release
+channel. Build from the clone you already have:
 
 ```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/install.sh | bash
-```
-
-```powershell
-# Windows (PowerShell — installer writes to %LOCALAPPDATA% + user PATH, no admin needed)
-irm https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/install.ps1 | iex
-```
-
-🎉 Then start it (defaults: port `20130`, data `~/.nox9go` — no flags needed):
-
-```bash
-nox9go
+# From the repo root (needs Go 1.27 + Bun 1.x for the dashboard)
+make web-build
+make build          # writes ./nox9go (or nox9go.exe on Windows)
+./nox9go start      # or: .\nox9go.exe start
 # Dashboard: http://localhost:20130 (Default password: 123456)
 ```
+
+On Windows you can also use the desktop launcher / tray (`make tray`, then
+`scripts/start-nox9go.ps1`) so the gateway starts without a flashing Terminal.
 
 > **Already using upstream [9Router](https://github.com/decolua/9router)?** Point NOX9GO at the same
 > data dir — it opens the **same `DATA_DIR/db/data.sqlite`**. Your providers, connections, combos, API keys,
@@ -125,16 +122,11 @@ nox9go
 > [Sharing a database with 9Router](#-sharing-a-database-with-9router) for the caveats.
 
 <details>
-<summary><b>📦 Other install paths</b></summary>
+<summary><b>📦 Cross-compile (optional)</b></summary>
 
-**Manual download — pick your file, no command line guesswork:**
-
-```bash
-# Windows → .exe | Mac M1+ → darwin-arm64 | Mac Intel → darwin-amd64
-# Linux VPS → linux-amd64 | Raspberry Pi → linux-arm64
-```
-
-📦 [All release binaries](https://github.com/Pacoaldev/Nox9Go/releases/latest) • 🔨 [Build from source](#-setup-guide)
+`make cross` (or the `CROSS_TARGETS` loop in the Makefile) builds the five release
+targets with `CGO_ENABLED=0`. That is for local packaging only — this private repo
+does not publish GitHub Releases.
 
 </details>
 
@@ -663,34 +655,19 @@ fake upstream, so it verifies routing, account rotation and usage accounting wit
 
 ## 📖 Setup Guide
 
-### Release binary
-
-Download from [GitHub Releases](https://github.com/Pacoaldev/Nox9Go/releases/latest), verify against
-`SHA256SUMS.txt`.
-
-### 🧪 Experimental builds
-
-Unreleased work also ships as **experimental** builds. They are published
-separately and are never offered to a normal install:
-
-- GitHub Releases marks them **Pre-release**, so `releases/latest` — the URL
-  `nox9go update` falls back to — keeps pointing at the stable version.
-
-Opt in only if you want to help shake out bugs. `nox9go update` will not
-install one over a stable release — grab the asset for your platform from the
-[pre-releases page](https://github.com/Pacoaldev/Nox9Go/releases) and
-replace the running binary with it.
-
 ### Build from source
 
 Prerequisites: Go 1.27 and Bun 1.x (dashboard is embedded into the binary, so build web first):
 
 ```bash
-git clone https://github.com/Pacoaldev/Nox9Go.git
+git clone https://github.com/Pacoaldev/Nox9Go.git   # private — needs your GitHub auth
 cd Nox9Go
 make web-build   # bun install --frozen-lockfile && bun run build
-make build       # embeds VERSION into the Go binary
+make build       # embeds VERSION (1.0.0) into the Go binary
 ```
+
+There is no public GitHub Releases channel for this fork. `nox9go update` will 404
+until you publish one yourself — rebuild with `make build` instead.
 
 ### Run
 
@@ -1032,10 +1009,9 @@ do not edit the same combo or settings entry in both dashboards simultaneously. 
 <details>
 <summary><b>🐛 "Go port" of upstream behaves differently</b></summary>
 
-NOX9GO is a port, not a fork: it keeps the wire contract and the database schema of
-[`decolua/9router`](https://github.com/decolua/9router), and it never silently changes a provider's
-behaviour. A divergence is a bug — open an **Upstream parity** issue with the upstream commit or PR, and
-include `nox9go version`, the OS, and the log excerpt around the failure.
+NOX9GO keeps the wire contract and the database schema of
+[`decolua/9router`](https://github.com/decolua/9router). A silent behaviour change against that
+contract is a bug — note `nox9go version`, the OS, and the log excerpt around the failure.
 
 </details>
 
@@ -1043,19 +1019,16 @@ include `nox9go version`, the OS, and the log excerpt around the failure.
 
 ## 🤝 Contributing
 
-Issues and pull requests use templates, so pick the right one rather than opening a blank report:
+Private personal repo — no public issue templates or CI. For local checks before you keep a change:
 
-- **Bug report** — something behaves incorrectly. Include a reproduction, `nox9go version`, OS, and the
-  log excerpt around the failure.
-- **Feature request** — the problem you cannot solve today, the surface it touches, and whether upstream
-  already has it.
-- **Upstream parity** — a behaviour `decolua/9router` has and this gateway does not; link the upstream commit
-  or PR.
-- **Question** — configuration and usage help.
+```bash
+go test ./...
+make test-integration   # when you touch routing / auth / usage
+cd web && bun test      # dashboard
+make vet-svelte
+```
 
-PRs follow the checks CI runs: `go vet ./...`, `go test -count=1 ./...`, `make test-integration`, plus
-`cd web && bun test` and `make vet-svelte` for anything touching the dashboard. Before writing code, skim
-[`AGENTS.md`](AGENTS.md) — provider isolation and the Go/Svelte conventions there are enforced by review.
+Engineering rules live in [`AGENTS.md`](AGENTS.md) (provider isolation, Go/Svelte conventions).
 
 ---
 
@@ -1063,13 +1036,9 @@ PRs follow the checks CI runs: `go vet ./...`, `go test -count=1 ./...`, `make t
 
 - [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — routing, providers, runtime layout
 - [`DATABASE.md`](docs/DATABASE.md) — SQLite schema & operator contract
-- [`COMPARISON.md`](docs/COMPARISON.md) — how this port compares to upstream 9Router
-- [`ROADMAP.md`](docs/ROADMAP.md) — proposals only, not current behavior
-- [`TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md) — known gaps and why they are still open
+- [`proximo.md`](docs/proximo.md) — personal local checklist (Windows)
 - [`AGENTS.md`](AGENTS.md) — engineering rules this repository enforces
-- [`CHANGELOG.md`](CHANGELOG.md) — release history (Go **v1.9.14**, upstream baseline `decolua/9router`
-  v0.5.85). Work merged since the last tag lives in [`.changes/`](.changes/) and is folded in at the next
-  release; the dashboard's changelog modal shows both.
+- [`CHANGELOG.md`](CHANGELOG.md) — personal fork history starting at **1.0.0** (2026-10-24)
 
 ---
 
