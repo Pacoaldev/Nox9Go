@@ -60,20 +60,21 @@ func runGUI(actions tray.Actions, port int) error {
 // sees the menu agree before they can open it, and cheap enough that reading a
 // pid file plus a non-blocking service probe costs nothing.
 func runMenu(actions tray.Actions, port int) {
+	// Order is creation order. Open Dashboard sits above Start/Stop so the
+	// common action is one click from the status line.
 	m := &menu{
 		status: systray.AddMenuItem("NOX9GO", ""),
-		start:  systray.AddMenuItem("Start Gateway", ""),
-		stop:   systray.AddMenuItem("Stop Gateway", ""),
-		// A real checkbox rather than a "✓ " prefix: the prefix is a picture of
-		// a checkbox that the OS will not toggle, and users click it expecting
-		// the check to move. AddMenuItemCheckbox is checkable on Windows and
-		// macOS; on Linux it is the same call, and the checked state still
-		// renders through Check/Uncheck.
-		autostart: systray.AddMenuItemCheckbox("Enable Auto-start", "", false),
 	}
 	m.status.Disable()
-
 	open := systray.AddMenuItem("Open Dashboard", "")
+	m.start = systray.AddMenuItem("Start Gateway", "")
+	m.stop = systray.AddMenuItem("Stop Gateway", "")
+	// A real checkbox rather than a "✓ " prefix: the prefix is a picture of
+	// a checkbox that the OS will not toggle, and users click it expecting
+	// the check to move. AddMenuItemCheckbox is checkable on Windows and
+	// macOS; on Linux it is the same call, and the checked state still
+	// renders through Check/Uncheck.
+	m.autostart = systray.AddMenuItemCheckbox("Enable Auto-start", "", false)
 	quit := systray.AddMenuItem("Quit Tray", "")
 
 	go func() {
