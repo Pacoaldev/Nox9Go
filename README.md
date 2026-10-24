@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/NOX9GO_logo.svg" alt="ClientSeeker Logo" width="350">
+</p>
+
 <div align="center">
 
 # NOX9GO — FREE AI Router & Token Saver (Single Binary)
