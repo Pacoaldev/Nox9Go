@@ -490,6 +490,8 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 	r.HandleFunc("/assets/*", webH.ServeHTTP)
 	r.HandleFunc("/providers/*", webH.ServeHTTP)
 	r.HandleFunc("/icons/*", webH.ServeHTTP)
+	// Locale packs for the dashboard runtime translator (en source + es.json).
+	r.HandleFunc("/i18n/*", webH.ServeHTTP)
 	r.HandleFunc("/favicon.ico", webH.ServeHTTP)
 	r.HandleFunc("/favicon.svg", webH.ServeHTTP)
 	r.HandleFunc("/logo_9nox.svg", webH.ServeHTTP)

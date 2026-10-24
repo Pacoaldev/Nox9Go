@@ -6,6 +6,8 @@
   import MenuItem from '../lib/ui/MenuItem.svelte'
   import { type ActiveTab } from '../lib/router'
   import { promptInstall, subscribeInstallPrompt } from '../lib/pwa'
+  import { LOCALE_NAMES, type Locale } from '../lib/i18n/config'
+  import { getCurrentLocale, setLocale } from '../lib/i18n/runtime'
 
   let {
     activeTab = 'endpoint',
@@ -24,6 +26,8 @@
     onMenuClick?: () => void
     onLogout?: () => void
   } = $props()
+
+  let uiLocale = $state<Locale>('en')
 
   // The group invite rotates. Everything user-facing points at the redirect
   // page instead, so a revoked link is repaired by editing site/tg.html alone
@@ -52,8 +56,15 @@
         isDark = document.documentElement.classList.contains('dark')
       }
       applyTheme(isDark)
+      uiLocale = getCurrentLocale()
     }
   })
+
+  async function chooseLocale(next: Locale) {
+    if (next === uiLocale) return
+    await setLocale(next)
+    uiLocale = next
+  }
 
   function applyTheme(dark: boolean) {
     document.documentElement.classList.toggle('dark', dark)
@@ -268,13 +279,8 @@
     {/if}
   </div>
 
-  <!-- Right: one menu. Donate, install, theme, changelog and logout were five
-       controls competing for the same strip, and on a phone they wrapped into
-       two rows (issue #224). They now live behind a single trigger, which is
-       why the separate language dropdown and app-drawer dropdown this file
-       used to own are gone. The Language item is gone too: the dashboard ships
-       English only, and the item's handler was an empty function, so clicking
-       it did nothing (issue #240). -->
+  <!-- Right: one menu (issue #224). Language is back with a real handler:
+       only English + Español (España), via the runtime DOM translator. -->
   <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
     <Menu label="Account and display options" triggerIcon="account_circle" minWidth="15rem">
       <MenuItem label="Donate" icon="volunteer_activism" onSelect={() => (isDonateOpen = true)} />
@@ -289,6 +295,16 @@
         label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         icon={isDark ? 'light_mode' : 'dark_mode'}
         onSelect={toggleTheme}
+      />
+      <MenuItem
+        label={`Language: ${LOCALE_NAMES.en}${uiLocale === 'en' ? ' ✓' : ''}`}
+        icon="translate"
+        onSelect={() => chooseLocale('en')}
+      />
+      <MenuItem
+        label={`Language: ${LOCALE_NAMES.es}${uiLocale === 'es' ? ' ✓' : ''}`}
+        icon="translate"
+        onSelect={() => chooseLocale('es')}
       />
       <MenuItem label="Change Log" icon="history" onSelect={() => (isChangelogOpen = true)} />
 

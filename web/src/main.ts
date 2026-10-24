@@ -6,6 +6,7 @@
 import { mount } from 'svelte'
 import App from './App.svelte'
 import './index.css'
+import { initRuntimeI18n } from './lib/i18n/runtime'
 import { registerServiceWorker } from './lib/pwa'
 
 registerServiceWorker()
@@ -13,5 +14,8 @@ registerServiceWorker()
 const app = mount(App, {
   target: document.getElementById('app')!,
 })
+
+// After mount so document.body exists; MutationObserver covers later navigations.
+void initRuntimeI18n()
 
 export default app
