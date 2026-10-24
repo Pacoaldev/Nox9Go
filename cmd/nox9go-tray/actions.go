@@ -81,8 +81,12 @@ func trimOutput(b []byte) string {
 }
 
 // startGateway boots the gateway through the CLI's daemon path.
+//
+// `start` already means background — do not pass `--background` here: that
+// flag is global on the root command, so `nox9go start --background` is
+// rejected as an unknown subcommand flag.
 func startGateway() error {
-	return runGatewayCLI("start", "--background")
+	return runGatewayCLI("start")
 }
 
 // stopSupervised stops through the init supervisor. No token is sent: systemd,
@@ -94,14 +98,12 @@ func stopSupervised() error {
 	return nil
 }
 
-// stopVerified is the only path that may reach daemon.Stop(). That function
-// re-checks the PID against the executable recorded in the pid file before it
-// signals anything, so a recycled PID cannot become a kill against a stranger.
+// stopVerified shells out to the sibling CLI's `stop`. The child process owns
+// the CLI token and re-checks the PID against the recorded executable, so the
+// tray never puts the credential on the wire itself (C3) and a recycled PID
+// cannot become a kill against a stranger.
 func stopVerified() error {
-	if _, err := daemon.Stop(); err != nil {
-		return err
-	}
-	return nil
+	return runGatewayCLI("stop")
 }
 
 // autostartEnabled reads the supervisor rather than a cached value: the tray

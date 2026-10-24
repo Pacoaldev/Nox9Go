@@ -5,10 +5,11 @@ package tray
 // No L2 on this platform: neither Windows nor macOS offers an unprivileged
 // "who owns this listening socket" query that x/sys exposes.
 //
-// Rather than fall back to the pid file alone — the claim-only path §5.2 of the
-// tray spec removed, because a claim is not an identity — this leaves the
-// default fail-closed. Stop Gateway is therefore refused here, and the menu
-// points at the dashboard instead.
+// DecideStop still fails closed for the in-process token path (a claim is not
+// an identity — §5.2). Actions.Stop then takes the CLI fallback on these
+// platforms: shell out to the sibling `nox9go stop`, the same way Start
+// already shells out to `nox9go start`. The child process owns the credential;
+// the tray never puts it on the wire (§C3).
 //
 // §9 of the tray spec records the upgrade: a UDS / named-pipe control channel
 // lets the kernel attest the peer, which solves all three platforms without
