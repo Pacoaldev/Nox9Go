@@ -41,7 +41,7 @@ type menu struct {
 func runGUI(actions tray.Actions, port int) error {
 	systray.Run(func() {
 		systray.SetIcon(trayIcon)
-		systray.SetTitle("9Router Go")
+		systray.SetTitle("NOX9GO")
 		go runMenu(actions, port)
 	}, func() {
 		// Quit Tray: release the icon and return. Deliberately empty — C4 says
@@ -61,7 +61,7 @@ func runGUI(actions tray.Actions, port int) error {
 // pid file plus a non-blocking service probe costs nothing.
 func runMenu(actions tray.Actions, port int) {
 	m := &menu{
-		status: systray.AddMenuItem("9Router Go", ""),
+		status: systray.AddMenuItem("NOX9GO", ""),
 		start:  systray.AddMenuItem("Start Gateway", ""),
 		stop:   systray.AddMenuItem("Stop Gateway", ""),
 		// A real checkbox rather than a "✓ " prefix: the prefix is a picture of

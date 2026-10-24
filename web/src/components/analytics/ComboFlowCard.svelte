@@ -162,7 +162,7 @@
     <!-- the route: gateway into the combo, one hop -->
     <div class="cf-route">
       <div class="cf-chip" data-role="router" data-state={routeState}>
-        <img src="/favicon.svg" alt="" loading="lazy" decoding="async" />
+        <img src="/icons/icon-192.png" alt="" class="rounded-sm object-cover" loading="lazy" decoding="async" />
         <span>NOX9GO</span>
       </div>
       <span class="cf-route-arrow" data-state={routeState} aria-hidden="true">

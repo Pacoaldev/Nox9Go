@@ -30,8 +30,9 @@ nuevo tiene 2 commits previos que se pierden a propósito). Runner de tests: `go
   (name/short_name/description), textos de la UI, la página de callback OAuth (`9router — OAuth callback`,
   `9Router Relay`), el token local `sk-9router-local-token` → `sk-nox9go-local-token`, y la clave de config
   de OpenCode `model_providers.9router` → `model_providers.nox9go`.
-- **S7** — La documentación vigente pasa a NOX9GO: `README.md`, `AGENTS.md`, `ARCHITECTURE.md`,
-  `DATABASE.md`, `COMPARISON.md`, `ROADMAP.md`, `TECHNICAL_DEBT.md`, `CLAUDE.md` y `docs/*.md` de estado
+- **S7** — La documentación vigente pasa a NOX9GO: `README.md`, `AGENTS.md`,
+  `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `docs/COMPARISON.md`, `docs/ROADMAP.md`,
+  `docs/TECHNICAL_DEBT.md`, `CLAUDE.md` y `docs/*.md` de estado
   actual. `CHANGELOG.md` y `.changes/` **no** se reescriben (son historia). Las referencias a upstream
   (`decolua/9router`, `9router.com`, el producto Node.js "9Router") se conservan: son atribución y
   paridad, no identidad propia.

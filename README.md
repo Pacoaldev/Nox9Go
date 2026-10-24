@@ -844,8 +844,8 @@ GET  /api/version               Version metadata
 Go reads/writes the upstream 9router table/JSON shapes and bootstraps the core schema on startup (creates the
 11 tables when absent, backfills missing columns, seeds an empty settings row) — a fresh `DATA_DIR` just
 works, no upstream install needed. Existing databases are never modified beyond additive backfills. Full
-contract in [`DATABASE.md`](DATABASE.md), routing internals in
-[`ARCHITECTURE.md`](ARCHITECTURE.md).
+contract in [`DATABASE.md`](docs/DATABASE.md), routing internals in
+[`ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 </details>
 
@@ -899,11 +899,11 @@ What NOX9GO will **not** do:
 Take a backup first if the database matters:
 
 ```bash
-cp -r ~/.nox9go/db ~/nox9go-db-backup   # stop the daemon first — see DATABASE.md
+cp -r ~/.nox9go/db ~/nox9go-db-backup   # stop the daemon first — see docs/DATABASE.md
 ```
 
-Full schema, operator contract, and multi-process limits: [`DATABASE.md`](DATABASE.md). Routing internals:
-[`ARCHITECTURE.md`](ARCHITECTURE.md).
+Full schema, operator contract, and multi-process limits: [`DATABASE.md`](docs/DATABASE.md). Routing internals:
+[`ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
@@ -1057,11 +1057,11 @@ PRs follow the checks CI runs: `go vet ./...`, `go test -count=1 ./...`, `make t
 
 ## 📚 Docs
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — routing, providers, runtime layout
-- [`DATABASE.md`](DATABASE.md) — SQLite schema & operator contract
-- [`COMPARISON.md`](COMPARISON.md) — how this port compares to upstream 9Router
-- [`ROADMAP.md`](ROADMAP.md) — proposals only, not current behavior
-- [`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md) — known gaps and why they are still open
+- [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — routing, providers, runtime layout
+- [`DATABASE.md`](docs/DATABASE.md) — SQLite schema & operator contract
+- [`COMPARISON.md`](docs/COMPARISON.md) — how this port compares to upstream 9Router
+- [`ROADMAP.md`](docs/ROADMAP.md) — proposals only, not current behavior
+- [`TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md) — known gaps and why they are still open
 - [`AGENTS.md`](AGENTS.md) — engineering rules this repository enforces
 - [`CHANGELOG.md`](CHANGELOG.md) — release history (Go **v1.9.14**, upstream baseline `decolua/9router`
   v0.5.85). Work merged since the last tag lives in [`.changes/`](.changes/) and is folded in at the next

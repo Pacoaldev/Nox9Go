@@ -487,6 +487,7 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 	r.HandleFunc("/icons/*", webH.ServeHTTP)
 	r.HandleFunc("/favicon.ico", webH.ServeHTTP)
 	r.HandleFunc("/favicon.svg", webH.ServeHTTP)
+	r.HandleFunc("/logo_9nox.svg", webH.ServeHTTP)
 	r.HandleFunc("/icons.svg", webH.ServeHTTP)
 	r.HandleFunc("/sw.js", webH.ServeHTTP)
 	r.HandleFunc("/manifest.webmanifest", webH.ServeHTTP)

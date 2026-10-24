@@ -390,9 +390,9 @@
       style="left: 0px; top: 0px; transform: translate(-50%, -50%);"
     >
       <img
-        src="/favicon.svg"
+        src="/icons/icon-192.png"
         alt="NOX9GO"
-        class="w-6 h-6 mr-2 object-contain {activeCount > 0 ? 'topology-router-icon' : ''}"
+        class="w-7 h-7 mr-2 rounded-md object-cover {activeCount > 0 ? 'topology-router-icon' : ''}"
         loading="lazy"
         decoding="async"
       />

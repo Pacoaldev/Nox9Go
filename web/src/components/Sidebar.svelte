@@ -98,22 +98,18 @@
     <div class="w-3 h-3 rounded-full bg-[#27C93F]"></div>
   </div>
 
-  <!-- Brand header: NOX9GO with official favicon.svg logo -->
+  <!-- Brand header: same footprint as before (size-11), no plate — logo fills the badge -->
   <div class="px-6 py-4 flex flex-col gap-2 shrink-0">
     <a
       href={TAB_ROUTES.endpoint}
       onclick={(e) => handleNav('endpoint', e)}
       class="flex items-center gap-3 cursor-pointer group"
     >
-      <div
-        class="flex items-center justify-center size-9 rounded-[10px] bg-surface-2 border border-border-subtle shadow-[var(--shadow-warm)] flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden p-1.5"
-      >
-        <img
-          src="/favicon.svg"
-          alt="NOX9GO"
-          class="w-full h-full object-contain"
-        />
-      </div>
+      <img
+        src="/icons/icon-192.png"
+        alt="NOX9GO"
+        class="size-11 rounded-[12px] object-cover flex-shrink-0 group-hover:scale-105 transition-transform shadow-[var(--shadow-warm)]"
+      />
       <div class="flex flex-col min-w-0">
         <h1 class="text-lg font-semibold tracking-tight text-text-main truncate leading-snug">
           NOX9GO

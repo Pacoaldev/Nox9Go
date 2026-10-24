@@ -185,9 +185,11 @@
       </div>
     {:else}
       <div class="text-center mb-8 flex flex-col items-center">
-        <div class="size-14 rounded-2xl bg-surface border border-border-subtle shadow-[var(--shadow-warm)] flex items-center justify-center p-2.5 mb-4">
-          <img src="/favicon.svg" alt="NOX9GO" class="w-full h-full object-contain" />
-        </div>
+        <img
+          src="/icons/icon-192.png"
+          alt="NOX9GO"
+          class="size-16 rounded-2xl object-cover shadow-[var(--shadow-warm)] mb-4"
+        />
         <h1 class="text-3xl font-bold text-primary mb-2">NOX9GO</h1>
         <p class="text-text-muted">
           {#if samlAvailable}
