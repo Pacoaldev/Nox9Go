@@ -16,6 +16,7 @@ export const ACCOUNT_FILTER_OPTIONS = [
   { value: 'all', label: 'All accounts' },
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Turned off' },
+  { value: 'metered', label: 'With quota limits only' },
 ]
 
 export const QUOTA_SORT_OPTIONS = [

@@ -577,10 +577,11 @@
   // ─── Data loading ──────────────────────────────────────────────────────────
   async function fetchConnections(targetPage = page): Promise<ProviderConnection[]> {
     try {
+      const backendAccountStatus = accountFilter === 'metered' ? 'active' : accountFilter
       const params = new URLSearchParams({
         page: String(targetPage),
         pageSize: String(pageSize),
-        accountStatus: accountFilter,
+        accountStatus: backendAccountStatus,
         sort: 'priority',
       })
       if (providerFilter !== 'all') {
@@ -803,15 +804,37 @@
   }
 
   // ─── Derived ───────────────────────────────────────────────────────────────
-  let sortedConnections = $derived.by<ProviderConnection[]>(() =>
-    sortVisibleConnections(
-      connections as ProviderConnectionLike[],
+  let sortedConnections = $derived.by<ProviderConnection[]>(() => {
+    let list = connections as ProviderConnectionLike[]
+    if (accountFilter === 'metered') {
+      list = list.filter((conn) => {
+        const q = quotaData[conn.id]
+        if (!q) return true // Keep loading rows so they aren't hidden prematurely
+        if (q.quotaStatus) return false // available / exhausted / unknown from probe
+        if (q.quotas && q.quotas.length > 0) return true
+        if (q.message) {
+          const m = q.message.toLowerCase()
+          if (
+            m.includes('no rate-limit data') ||
+            m.includes('no usage limits') ||
+            m.includes('no quota details') ||
+            m.includes('no quota limits') ||
+            m.includes('quota probe failed')
+          ) {
+            return false
+          }
+        }
+        return false
+      })
+    }
+    return sortVisibleConnections(
+      list,
       quotaData,
       expiringFirst,
       providerFilter,
       quotaSortMode,
-    ) as ProviderConnection[],
-  )
+    ) as ProviderConnection[]
+  })
 
   let hasEligibleConnections = $derived(totals.eligibleConnections > 0)
   let hasVisibleConnections = $derived(sortedConnections.length > 0)
