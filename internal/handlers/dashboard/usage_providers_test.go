@@ -6,13 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"nox9go/proxy/internal/models"
 )
-
-func testUsageConn(provider, authType string) *models.ProviderConnection {
-	return &models.ProviderConnection{ID: "t", Provider: provider, AuthType: authType}
-}
 
 func TestUsageResetTime(t *testing.T) {
 	if got := usageResetTime(nil); got != "" {
@@ -113,23 +107,27 @@ func TestUsageResetTimeNaiveLocal(t *testing.T) {
 	}
 }
 
-func TestIsUsageEligibleConnection(t *testing.T) {
-	cases := []struct {
-		provider, authType string
-		want               bool
-	}{
-		{"codex", "oauth", true},
-		{"kimi", "apikey", true},
-		{"kimi", "oauth", true},
-		{"openai", "apikey", false},
-		{"deepseek", "apikey", true},
-		{"comfyui", "apikey", false},
+func TestUsageResultToResponseIncludesQuotaStatus(t *testing.T) {
+	response := (usageResult{
+		plan:        "openai",
+		message:     "Connected. Provider exposes no quota details.",
+		quotaStatus: "available",
+	}).toResponse()
+	if response["quotaStatus"] != "available" {
+		t.Fatalf("quotaStatus = %v, want available", response["quotaStatus"])
 	}
-	for _, c := range cases {
-		conn := testUsageConn(c.provider, c.authType)
-		if got := isUsageEligibleConnection(conn); got != c.want {
-			t.Errorf("%s/%s: got %v want %v", c.provider, c.authType, got, c.want)
-		}
+	if response["message"] != "Connected. Provider exposes no quota details." {
+		t.Fatalf("message = %v", response["message"])
+	}
+}
+
+// usageSupportedProviders orders known metered providers ahead of generic ones.
+func TestUsageSupportedProvidersOrdersKnownMeteredFirst(t *testing.T) {
+	if len(usageSupportedProviders) == 0 {
+		t.Fatal("usageSupportedProviders must not be empty")
+	}
+	if usageSupportedProviders[0] != "antigravity" {
+		t.Errorf("usageSupportedProviders[0] = %q, want antigravity", usageSupportedProviders[0])
 	}
 }
 

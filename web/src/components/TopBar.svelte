@@ -36,6 +36,61 @@
 
   let uiLocale = $state<Locale>('en')
 
+  // ─── Upstream update alert ────────────────────────────────────────────────
+  // The two repositories this fork tracks. They are versioned independently, so
+  // the button says which one moved and how far past the baseline this build was
+  // ported from (that baseline is baked in with -ldflags, not stored here).
+  type UpstreamSource = {
+    id: string
+    name: string
+    repo: string
+    baseline: string
+    latest: string
+    hasNew: boolean
+    publishedAt?: string
+    releaseUrl?: string
+    error?: string
+  }
+
+  let upstreamSources = $state<UpstreamSource[]>([])
+  let isUpstreamOpen = $state(false)
+  // One read per ten minutes at most: the gateway caches the answer for half an
+  // hour, and a window focus must not become a poll. GitHub's unauthenticated
+  // budget is 60 requests an hour, shared with everything else on this IP.
+  let lastUpstreamCheck = 0
+  const UPSTREAM_CHECK_INTERVAL_MS = 10 * 60 * 1000
+
+  let upstreamNew = $derived(upstreamSources.filter((s) => s.hasNew))
+  // Both unreachable is worth showing as a state, not as silence.
+  let upstreamAllFailed = $derived(
+    upstreamSources.length > 0 && upstreamNew.length === 0 && upstreamSources.every((s) => s.error),
+  )
+
+  async function checkUpstream(force = false): Promise<void> {
+    const now = Date.now()
+    if (!force && now - lastUpstreamCheck < UPSTREAM_CHECK_INTERVAL_MS) return
+    lastUpstreamCheck = now
+    try {
+      const res = await api.getUpstreamVersions()
+      upstreamSources = res?.sources ?? []
+    } catch {
+      // A failure here is not worth a toast: the button simply does not appear,
+      // and the next focus retries. The page itself is unaffected.
+    }
+  }
+
+  // The notes of every repository that has something new, each under its own
+  // heading, so one press covers the case where both moved.
+  async function loadUpstreamNotes(): Promise<string> {
+    const parts: string[] = []
+    for (const source of upstreamNew) {
+      const notes = await api.getUpstreamChangelog(source.id, source.latest)
+      const link = source.releaseUrl ? ` — [${source.repo}](${source.releaseUrl})` : ` — ${source.repo}`
+      parts.push(`## ${source.name} · ${source.latest}${link}\n\n${notes}`)
+    }
+    return parts.join('\n\n---\n\n')
+  }
+
   // The group invite rotates. Everything user-facing points at the redirect
   // page instead, so a revoked link is repaired by editing site/tg.html alone
   // and every already-installed dashboard follows the new one.
@@ -65,6 +120,19 @@
       applyTheme(isDark)
       uiLocale = getCurrentLocale()
     }
+  })
+
+  // The alert is read once when the dashboard mounts and again when the operator
+  // comes back to the tab — the moment they would act on it. No timer: the
+  // gateway caches the answer for half an hour and a poll would buy nothing.
+  $effect(() => {
+    void checkUpstream()
+    if (typeof document === 'undefined') return
+    const onVisible = () => {
+      if (!document.hidden) void checkUpstream()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   })
 
   async function chooseLocale(next: Locale) {
@@ -305,6 +373,33 @@
       </div>
     {/if}
 
+    <!-- Upstream / fork update alert: between the latency meter and "Uso de hoy",
+         so it reads as one more live signal about this install. -->
+    {#if upstreamNew.length > 0}
+      <button
+        type="button"
+        onclick={() => (isUpstreamOpen = true)}
+        class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-primary/40 bg-primary/10 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+        title={upstreamNew
+          .map((s) => `${s.name}: ${s.baseline || '?'} → ${s.latest}`)
+          .join('\n')}
+      >
+        <span class="material-symbols-outlined text-[14px]">new_releases</span>
+        <span class="hidden sm:inline">{upstreamNew.length === 1
+          ? upstreamNew[0].name
+          : `${upstreamNew.length} updates`}</span>
+        <span class="font-mono">{upstreamNew.length === 1 ? upstreamNew[0].latest : ''}</span>
+      </button>
+    {:else if upstreamAllFailed}
+      <div
+        class="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border-subtle bg-surface-2 text-[11px] text-text-subtle"
+        title={upstreamSources.map((s) => `${s.name}: ${s.error}`).join('\n')}
+      >
+        <span class="material-symbols-outlined text-[14px]">cloud_off</span>
+        <span>upstream unreachable</span>
+      </div>
+    {/if}
+
     <!-- Token savings / usage today (Idea 6) -->
     <TokenWidget />
 
@@ -457,3 +552,14 @@
 
 <!-- Change Log Modal -->
 <ChangelogModal isOpen={isChangelogOpen} onClose={() => (isChangelogOpen = false)} />
+
+<!-- Same modal, different source: the notes of whichever tracked repository has
+     moved past this build's baseline. No repoUrl, because there are two repos
+     and the assembled markdown names each one. -->
+<ChangelogModal
+  isOpen={isUpstreamOpen}
+  onClose={() => (isUpstreamOpen = false)}
+  title="Upstream changes"
+  repoUrl=""
+  load={loadUpstreamNotes}
+/>

@@ -137,6 +137,38 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 		}
 	}
 
+	// Providers without a metered endpoint. The account-state probe is a real
+	// upstream call, so it runs only on a forced read — the operator pressing
+	// refresh on that row. The 60s auto cycle would otherwise spend one live
+	// request per unmetered account per tick, which on a 1 vCPU box is exactly
+	// the burst quotaFetchGate exists to prevent.
+	if data != nil && r.URL.Query().Get("force") != "" {
+		probeData := parseConnectionProbeData(data)
+		out := h.testSingleConnection(r.Context(), conn, probeData, data)
+		if out.valid {
+			message := out.message
+			if message == "" {
+				message = "Connected. Provider exposes no quota details."
+			}
+			handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+				"plan":        conn.Provider,
+				"message":     message,
+				"quotaStatus": "available",
+			})
+			return
+		}
+		if out.message != "" && out.message != "Provider test not supported" {
+			// A probe error does not prove quota exhaustion, and the message is
+			// provider-owned wording: report it as unknown, never as exhausted.
+			handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+				"plan":        conn.Provider,
+				"message":     "Quota probe failed: " + out.message,
+				"quotaStatus": "unknown",
+			})
+			return
+		}
+	}
+
 	// Fallback for connections with rate limit or locks in data
 	respQuotas := make(map[string]any)
 	if data != nil {

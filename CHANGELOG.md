@@ -27,7 +27,12 @@ Personal NOX9GO fork (`Pacoaldev/Nox9Go`). Nothing from upstream release history
 
 - Runtime i18n: English + Español (España), including `title` / `placeholder` / `aria-label` / `alt`.
 - **Combo flow** moved out of Usage › Overview into its own sidebar page (`/dashboard/combo-flow`), always open (no auto-collapse).
+- **Quota tracker lists every connection.** `GET /api/providers/client` no longer filters the list by upstream's `features.usage` / `features.usageApikey` flags, so the accounts the tracker used to hide are visible and manageable from the same page. *Deliberate divergence from `decolua/9router` and `luqman-v1/9router-go`, which return usage-eligible connections only.*
+- **Account state for providers with no metered endpoint.** Those rows report `available` / `exhausted` / `unknown` from the existing connection probe instead of an invented percentage. The probe runs **only on a manual row refresh** — the 60-second auto cycle would otherwise spend one live upstream request per unmetered account per tick.
+- Quota filters and ordering persist for the browser session.
+- **Upstream update alert**: a button between the latency meter and "Uso de hoy" appears when `decolua/9router` or `luqman-v1/9router-go` publishes a version newer than the one this build was ported from, and opens that version's changelog. Backed by `GET /api/upstream-versions` and `GET /api/upstream-changelog`; both are served by the gateway, never called from the browser.
 
 ### Version
 
 - Personal fork version pinned to **1.0.0** (`VERSION`, `version.json`, binary `-ldflags`).
+- Tracked-upstream baselines are embedded at build time (`upstreamwatch.BaselineUpstreamVersion` / `BaselineForkVersion`). Bump them at each port; unset means the alert stays silent.

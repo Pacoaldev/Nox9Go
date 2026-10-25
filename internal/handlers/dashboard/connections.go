@@ -41,9 +41,8 @@ func (h *DashboardHandler) HandleGetConnections(w http.ResponseWriter, r *http.R
 }
 
 // HandleGetProvidersClient handles GET /api/providers and GET /api/providers/client.
-// Mirrors upstream 9router providers/client route: usage-eligible connections
-// only, with provider/accountStatus filters, priority|provider sort, and
-// page/pageSize pagination plus providerOptions and totals.
+// Returns every visible connection for the quota tracker, with provider/accountStatus
+// filters, priority|provider sort, and page/pageSize pagination.
 func (h *DashboardHandler) HandleGetProvidersClient(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	providerFilter := q.Get("provider")
@@ -69,15 +68,23 @@ func (h *DashboardHandler) HandleGetProvidersClient(w http.ResponseWriter, r *ht
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	eligible := make([]*models.ProviderConnection, 0, len(conns))
+	// Every connection is listed, not only the ones with a live quota fetcher:
+	// the operator has to see and manage all of them from this page, and a
+	// provider without a metered endpoint reports its account state instead of
+	// a percentage (HandleGetConnectionUsage). Hidden providers stay excluded.
+	visible := make([]*models.ProviderConnection, 0, len(conns))
 	for _, c := range conns {
-		if c != nil && isUsageEligibleConnection(c) {
-			eligible = append(eligible, c)
+		if c == nil {
+			continue
 		}
+		if cfg, ok := providers.KnownProviders[c.Provider]; ok && cfg.Hidden {
+			continue
+		}
+		visible = append(visible, c)
 	}
-	providerOptions := uniqueSortedProviders(eligible)
-	providerFiltered := make([]*models.ProviderConnection, 0, len(eligible))
-	for _, c := range eligible {
+	providerOptions := uniqueSortedProviders(visible)
+	providerFiltered := make([]*models.ProviderConnection, 0, len(visible))
+	for _, c := range visible {
 		if providerFilter == "all" || c.Provider == providerFilter {
 			providerFiltered = append(providerFiltered, c)
 		}
@@ -124,7 +131,7 @@ func (h *DashboardHandler) HandleGetProvidersClient(w http.ResponseWriter, r *ht
 			"page": currentPage, "pageSize": pageSize, "total": total, "totalPages": totalPages,
 		},
 		"totals": map[string]any{
-			"eligibleConnections": len(eligible), "providerFilteredConnections": len(providerFiltered),
+			"eligibleConnections": len(visible), "providerFilteredConnections": len(providerFiltered),
 		},
 	})
 }
@@ -135,7 +142,8 @@ const (
 )
 
 // usageSupportedProviders mirrors upstream USAGE_SUPPORTED_PROVIDERS
-// (registry features.usage).
+// (registry features.usage). It orders the quota tracker — providers with a
+// live metered endpoint first — and is no longer a visibility gate.
 var usageSupportedProviders = []string{
 	"antigravity", "claude", "codebuddy-cn", "codebuddy-intl", "codex",
 	"commandcode", "deepseek", "gemini-cli", "gemini-web", "github", "glm", "glm-cn",
@@ -143,31 +151,6 @@ var usageSupportedProviders = []string{
 	"minimax-code-global", "ollama",
 	"opencode-go", "opencode-zen", "qoder", "qoder-cn", "trae",
 	"vercel-ai-gateway", "xiaomi-mimo", "zed",
-}
-
-// usageApikeyProviders mirrors upstream USAGE_APIKEY_PROVIDERS
-// (registry features.usageApikey).
-var usageApikeyProviders = []string{
-	"codebuddy-cn", "codebuddy-intl", "commandcode", "deepseek", "gemini-web", "glm",
-	"glm-cn", "groq", "kimi", "kiro", "minimax", "minimax-cn", "ollama",
-	"opencode-go", "opencode-zen", "qoder", "qoder-cn", "vercel-ai-gateway",
-	"xiaomi-mimo",
-}
-
-func strSliceContains(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
-}
-
-func isUsageEligibleConnection(c *models.ProviderConnection) bool {
-	if !strSliceContains(usageSupportedProviders, c.Provider) {
-		return false
-	}
-	return c.AuthType == "oauth" || strSliceContains(usageApikeyProviders, c.Provider)
 }
 
 func uniqueSortedProviders(conns []*models.ProviderConnection) []string {

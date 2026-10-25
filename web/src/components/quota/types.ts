@@ -47,6 +47,7 @@ export interface QuotaEntry {
   quotas: NormalizedQuota[]
   plan?: string | null
   message?: string | null
+  quotaStatus?: 'available' | 'exhausted' | 'unknown'
   raw?: unknown
   cachedAt?: string
 }

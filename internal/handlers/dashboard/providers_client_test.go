@@ -26,7 +26,7 @@ func seedProvidersClient(t *testing.T, repo *db.Repo) {
 	}{
 		{"c-codex", "codex", "oauth", "Codex Work", "secret-codex"},
 		{"c-kimi", "kimi", "apikey", "Kimi Key", "secret-kimi"},
-		{"c-openai", "openai", "apikey", "OpenAI", "secret-openai"}, // not usage-eligible
+		{"c-openai", "openai", "apikey", "OpenAI", "secret-openai"}, // No metered endpoint; still listed.
 		{"c-long", "trae", "oauth", "abcdefghijklmnopqrstuvwxyz0123456789ABCD", "secret-trae"},
 	}
 	for _, s := range seed {
@@ -60,20 +60,30 @@ func TestProvidersClientPagination(t *testing.T) {
 
 	out := getProvidersClient(t, r, "")
 	conns, _ := out["connections"].([]any)
-	if len(conns) != 3 {
-		t.Fatalf("expected 3 eligible connections (openai excluded), got %d", len(conns))
+	if len(conns) != 4 {
+		t.Fatalf("expected all 4 connections, including providers without a metered endpoint; got %d", len(conns))
 	}
 	pag, _ := out["pagination"].(map[string]any)
-	if pag["total"] != float64(3) || pag["totalPages"] != float64(1) {
+	if pag["total"] != float64(4) || pag["totalPages"] != float64(1) {
 		t.Errorf("unexpected pagination: %v", pag)
 	}
 	tot, _ := out["totals"].(map[string]any)
-	if tot["eligibleConnections"] != float64(3) {
+	if tot["eligibleConnections"] != float64(4) {
 		t.Errorf("unexpected totals: %v", tot)
 	}
 	opts, _ := out["providerOptions"].([]any)
-	if len(opts) != 3 {
-		t.Errorf("expected 3 providerOptions, got %v", opts)
+	if len(opts) != 4 {
+		t.Errorf("expected all 4 providers, got %v", opts)
+	}
+	foundOpenAI := false
+	for _, c := range conns {
+		m, _ := c.(map[string]any)
+		if m["provider"] == "openai" {
+			foundOpenAI = true
+		}
+	}
+	if !foundOpenAI {
+		t.Error("a provider without a metered endpoint must still be listed")
 	}
 	// Secrets must never leak; long token-like names masked.
 	for _, c := range conns {
@@ -117,8 +127,8 @@ func TestProvidersClientFilters(t *testing.T) {
 		t.Errorf("inactive filter returned %v, want c-kimi", m["id"])
 	}
 	out = getProvidersClient(t, r, "?accountStatus=active")
-	if conns, _ := out["connections"].([]any); len(conns) != 2 {
-		t.Fatalf("active filter: expected 2, got %d", len(conns))
+	if conns, _ := out["connections"].([]any); len(conns) != 3 {
+		t.Fatalf("active filter: expected 3, got %d", len(conns))
 	}
 }
 
@@ -131,17 +141,17 @@ func TestProvidersClientPaging(t *testing.T) {
 
 	out := getProvidersClient(t, r, "?pageSize=2&page=2")
 	conns, _ := out["connections"].([]any)
-	if len(conns) != 1 {
-		t.Fatalf("page 2 of 3 with size 2: expected 1, got %d", len(conns))
+	if len(conns) != 2 {
+		t.Fatalf("page 2 of 4 with size 2: expected 2, got %d", len(conns))
 	}
 	pag, _ := out["pagination"].(map[string]any)
-	if pag["page"] != float64(2) || pag["totalPages"] != float64(2) || pag["total"] != float64(3) {
+	if pag["page"] != float64(2) || pag["totalPages"] != float64(2) || pag["total"] != float64(4) {
 		t.Errorf("unexpected pagination: %v", pag)
 	}
 	// Out-of-range page clamps to last page.
 	out = getProvidersClient(t, r, "?pageSize=2&page=99")
-	if conns, _ := out["connections"].([]any); len(conns) != 1 {
-		t.Fatalf("clamped page: expected 1, got %d", len(conns))
+	if conns, _ := out["connections"].([]any); len(conns) != 2 {
+		t.Fatalf("clamped page: expected 2, got %d", len(conns))
 	}
 }
 
@@ -154,11 +164,12 @@ func TestProvidersClientProviderSort(t *testing.T) {
 
 	out := getProvidersClient(t, r, "?sort=provider")
 	conns, _ := out["connections"].([]any)
-	if len(conns) != 3 {
-		t.Fatalf("expected 3, got %d", len(conns))
+	if len(conns) != 4 {
+		t.Fatalf("expected all 4 connections, got %d", len(conns))
 	}
-	// usageSupportedProviders order: codex < kimi < trae.
-	want := []string{"codex", "kimi", "trae"}
+	// Metered providers keep usageSupportedProviders order (codex < kimi < trae);
+	// a provider without a metered endpoint sorts after them, alphabetically.
+	want := []string{"codex", "kimi", "trae", "openai"}
 	for i, id := range want {
 		m, _ := conns[i].(map[string]any)
 		if m["provider"] != id {
@@ -196,12 +207,8 @@ func TestSanitizeProviderConnection_LastErrorString(t *testing.T) {
 	}
 }
 
-// The registry marks some providers `hidden`: routable, and their detail page
-// stays reachable, but kept out of the lists a person scans. Go keeps no copy
-// of that flag, so this pins the rule the quota lists already imply — a
-// provider the tracker does not serve has nothing to offer there. A provider
-// that ever becomes usage-supported while hidden needs this revisited in the
-// same commit.
+// The quota tracker lists every visible connection so the operator can find and
+// manage all of them; hidden providers stay out of the provider options list.
 func TestHiddenProvidersStayOutOfTheQuotaList(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -226,12 +233,7 @@ func TestHiddenProvidersStayOutOfTheQuotaList(t *testing.T) {
 		s, _ := o.(string)
 		opts = append(opts, s)
 	}
-	for _, p := range opts {
-		if p == "mmf" {
-			t.Errorf("hidden provider mmf reached the quota provider list: %v", opts)
-		}
-	}
-	if len(opts) != 2 {
-		t.Errorf("providerOptions = %v, want the two visible providers only", opts)
+	if len(opts) != 3 {
+		t.Errorf("providerOptions = %v, want visible claude, deepseek, and mmf providers", opts)
 	}
 }

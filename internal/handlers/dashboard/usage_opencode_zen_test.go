@@ -6,8 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"nox9go/proxy/internal/models"
 )
 
 func withOpenCodeZenUsageServer(t *testing.T, status int, body string) *string {
@@ -95,9 +93,10 @@ func TestFetchOpenCodeZenUsage_ClampsAndReports(t *testing.T) {
 	}
 }
 
-func TestOpenCodeZenIsUsageEligibleConnection(t *testing.T) {
-	conn := &models.ProviderConnection{Provider: "opencode-zen", AuthType: "apikey"}
-	if !isUsageEligibleConnection(conn) {
-		t.Error("a keyed opencode-zen connection must appear in the quota tracker")
+// A keyed opencode-zen connection reaches a real metered fetcher, so it reports
+// quota rows instead of falling through to the account-state probe.
+func TestOpenCodeZenHasAMeteredFetcher(t *testing.T) {
+	if _, ok := fetchProviderUsage(context.Background(), "opencode-zen", nil); !ok {
+		t.Error("opencode-zen must dispatch to a metered fetcher")
 	}
 }

@@ -1,6 +1,10 @@
 package handlers
 
 import (
+	json "encoding/json/v2"
+	"github.com/go-chi/chi/v5"
+	"net/http"
+	"net/http/pprof"
 	"nox9go/proxy/internal/constants"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/guardrails"
@@ -14,10 +18,6 @@ import (
 	"nox9go/proxy/internal/middleware"
 	"nox9go/proxy/internal/observ"
 	"nox9go/proxy/web"
-	json "encoding/json/v2"
-	"github.com/go-chi/chi/v5"
-	"net/http"
-	"net/http/pprof"
 	"os"
 	"strings"
 	"time"
@@ -196,6 +196,9 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	r.Post("/api/providers/{id}/reorder", dashH.HandleReorderConnection)
 	r.Post("/api/providers/{id}/test", dashH.HandleTestConnection)
 	r.Get("/api/providers/suggested-models", HandleSuggestedModels)
+	// Upstream & fork update alerts for the dashboard top bar (issue S1-S5).
+	r.Get("/api/upstream-versions", dashH.HandleGetUpstreamVersions)
+	r.Get("/api/upstream-changelog", dashH.HandleGetUpstreamChangelog)
 	// Usage & Quota Endpoints (dashboard quota tracker, usage stats, and topology stream)
 	r.Get("/api/usage/stream", HandleUsageStream(repo))
 	r.Get("/usage/stream", HandleUsageStream(repo))

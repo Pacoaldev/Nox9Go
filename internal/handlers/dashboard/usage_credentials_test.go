@@ -143,6 +143,80 @@ func TestIsAuthExpiredUsageMessage(t *testing.T) {
 	}
 }
 
+func TestHandleGetConnectionUsage_UnsupportedProviderUsesConnectionProbe(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	t.Cleanup(cleanup)
+
+	var requests int
+	probeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/models" {
+			t.Errorf("probe path = %q, want /models", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	t.Cleanup(probeServer.Close)
+	payload := `{"apiKey":"probe-key","baseUrl":"` + probeServer.URL + `"}`
+	if err := repo.CreateProviderConnectionFull("conn-probe", "custom-provider", "apikey", "Probe", nil, payload); err != nil {
+		t.Fatalf("create connection: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	setupTestRouter(repo).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/usage/conn-probe?force=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		QuotaStatus string `json:"quotaStatus"`
+		Message     string `json:"message"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if requests != 1 || response.QuotaStatus != "available" {
+		t.Fatalf("probe calls=%d status=%q, want one call and available", requests, response.QuotaStatus)
+	}
+	if response.Message != "Connected. Provider exposes no quota details." {
+		t.Fatalf("message = %q", response.Message)
+	}
+}
+
+// The auto-refresh cycle must not spend a live upstream probe on an unmetered
+// account: that would be one request per such row every 60s.
+func TestHandleGetConnectionUsage_UnmeteredAutoReadSkipsTheProbe(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	t.Cleanup(cleanup)
+
+	var requests int
+	probeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	t.Cleanup(probeServer.Close)
+	payload := `{"apiKey":"probe-key","baseUrl":"` + probeServer.URL + `"}`
+	if err := repo.CreateProviderConnectionFull("conn-unmetered", "custom-provider", "apikey", "Unmetered", nil, payload); err != nil {
+		t.Fatalf("create connection: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	setupTestRouter(repo).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/usage/conn-unmetered", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		QuotaStatus string `json:"quotaStatus"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("auto read spent %d upstream probes, want 0", requests)
+	}
+	if response.QuotaStatus != "" {
+		t.Fatalf("auto read reported quotaStatus %q, want none", response.QuotaStatus)
+	}
+}
+
 func TestIsUsageRefreshable(t *testing.T) {
 	tests := []struct {
 		name     string

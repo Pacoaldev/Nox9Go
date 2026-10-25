@@ -96,6 +96,7 @@
   // ─── State ─────────────────────────────────────────────────────────────────
   let connections = $state<ProviderConnection[]>([])
   let quotaData = $state<Record<string, QuotaEntry>>({})
+  let resolvedQuotaIds = $state<Record<string, boolean>>({})
   let quotaLoading = $state<Record<string, boolean>>({})
   let quotaErrors = $state<Record<string, string>>({})
   let autoRefresh = $state(true)
@@ -222,6 +223,7 @@
   ): Promise<void> {
     quotaErrors = filterQuotaStateByConnections(quotaErrors, visible)
     quotaData = filterQuotaStateByConnections(quotaData, visible)
+    resolvedQuotaIds = filterQuotaStateByConnections(resolvedQuotaIds, visible)
     quotaLoading = buildLoadingState(targets)
 
     // Supersede the pass in flight before starting this one. Its reads are
@@ -246,6 +248,7 @@
           raw: data,
         }
         quotaData = { ...quotaData, [target.id]: quotaEntry }
+        resolvedQuotaIds = { ...resolvedQuotaIds, [target.id]: true }
         quotaErrors = { ...quotaErrors, [target.id]: '' }
         quotaLoading = { ...quotaLoading, [target.id]: false }
         setQuotaCache(target.id, quotaEntry)
@@ -257,6 +260,7 @@
         // not a failure worth showing on a row that is about to disappear.
         if (message.toLowerCase().includes('not found')) return
         quotaErrors = { ...quotaErrors, [target.id]: message || 'Failed to fetch quota' }
+        resolvedQuotaIds = { ...resolvedQuotaIds, [target.id]: true }
       },
       onComplete: () => {
         if (quotaCycleController === controller) quotaCycleController = null
@@ -623,9 +627,11 @@
           quotas: parseQuotaData(target.provider, data),
           plan: data?.plan || null,
           message: data?.message || null,
+          quotaStatus: data?.quotaStatus,
           raw: data,
         }
         quotaData = { ...quotaData, [target.id]: quotaEntry }
+        resolvedQuotaIds = { ...resolvedQuotaIds, [target.id]: true }
         quotaErrors = { ...quotaErrors, [target.id]: '' }
         quotaLoading = { ...quotaLoading, [target.id]: false }
         setQuotaCache(target.id, quotaEntry)
@@ -637,6 +643,7 @@
         // showing on a row that is about to disappear.
         if (message.toLowerCase().includes('not found')) return
         quotaErrors = { ...quotaErrors, [target.id]: message || 'Failed to fetch quota' }
+        resolvedQuotaIds = { ...resolvedQuotaIds, [target.id]: true }
       },
     })
   }
@@ -1428,9 +1435,31 @@
               <div class="py-5 text-center">
                 <p class="text-xs text-text-muted">{error}</p>
               </div>
+            {:else if quota?.quotaStatus}
+              <!-- No metered endpoint: the row reports account state instead of a
+                   percentage. Reached only on a forced (manual) read; the auto
+                   cycle leaves the status unset and falls through to the table. -->
+              <div class="py-3 text-center text-xs text-text-muted">
+                {#if quota.quotaStatus === 'available'}
+                  <span class="text-emerald-400">Available.</span>
+                  Provider exposes no quota details.
+                {:else if quota.quotaStatus === 'exhausted'}
+                  <span class="text-amber-400">Quota or billing limit reached.</span>
+                  {#if quota.message}<span class="block">{quota.message}</span>{/if}
+                {:else}
+                  Quota status could not be determined.
+                  {#if quota.message?.startsWith('Quota probe failed:')}<span class="block">{quota.message}</span>{/if}
+                {/if}
+              </div>
             {:else if quota?.message}
               <div class="py-5 text-center">
                 <p class="text-xs text-text-muted">{quota.message}</p>
+              </div>
+            {:else if !resolvedQuotaIds[conn.id] && !quota}
+              <div class="py-5 text-center text-text-muted">
+                <span class="material-symbols-outlined text-[28px] animate-spin">
+                  progress_activity
+                </span>
               </div>
             {:else}
               <QuotaTable
@@ -1442,7 +1471,7 @@
                 showSortLabel={conn.provider === 'codex' && quotaSortMode !== 'default'}
                 onHideQuota={(quotaRow) => handleHideQuota(conn.provider, quotaRow)}
               />
-              {#if visibleQuotas.length === 0 && rawQuotas.length === 0}
+              {#if visibleQuotas.length === 0 && rawQuotas.length === 0 && !quota?.quotaStatus}
                 <div class="py-3 text-center text-xs text-text-muted">
                   Account active. No quota limits tracked.
                 </div>

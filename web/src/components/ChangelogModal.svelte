@@ -5,9 +5,22 @@
   let {
     isOpen = false,
     onClose = () => {},
+    title = 'Change Log',
+    repoUrl = 'https://github.com/Pacoaldev/Nox9Go',
+    load,
   }: {
     isOpen?: boolean
     onClose?: () => void
+    /** Header title. Defaults to this fork's own change log. */
+    title?: string
+    /** Base GitHub URL for the two outbound links; hidden when empty. */
+    repoUrl?: string
+    /**
+     * Where the markdown comes from. Defaults to this fork's own change log, so
+     * the existing caller is unchanged; the upstream-alert caller passes a loader
+     * that concatenates the notes of every repository that has something new.
+     */
+    load?: () => Promise<string>
   } = $props()
 
   let html = $state('')
@@ -20,7 +33,7 @@
     loading = true
     error = ''
     try {
-      const md = await api.getChangelog()
+      const md = load ? await load() : await api.getChangelog()
       html = await marked.parse(md)
     } catch (err: any) {
       error = err?.message || 'Failed to load change log'
@@ -76,18 +89,20 @@
       <div class="flex items-center justify-between px-6 py-4 border-b border-border-subtle shrink-0">
         <div class="flex items-center gap-2.5">
           <span class="material-symbols-outlined text-primary text-[22px]">history</span>
-          <h2 class="text-lg font-semibold text-text-main tracking-tight">Change Log</h2>
+          <h2 class="text-lg font-semibold text-text-main tracking-tight">{title}</h2>
         </div>
         <div class="flex items-center gap-2">
-          <a
-            href="https://github.com/Pacoaldev/Nox9Go/releases"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium text-text-muted hover:text-text-main hover:bg-surface-2 border border-border-subtle transition-colors"
-          >
-            <span class="material-symbols-outlined text-[16px]">open_in_new</span>
-            GitHub Releases
-          </a>
+          {#if repoUrl}
+            <a
+              href="{repoUrl}/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium text-text-muted hover:text-text-main hover:bg-surface-2 border border-border-subtle transition-colors"
+            >
+              <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+              GitHub Releases
+            </a>
+          {/if}
           <button
             type="button"
             onclick={onClose}
@@ -125,14 +140,16 @@
               >
                 Retry
               </button>
-              <a
-                href="https://github.com/Pacoaldev/Nox9Go/blob/main/CHANGELOG.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="px-4 py-2 text-xs font-medium rounded-lg border border-border-subtle text-text-main hover:bg-surface-2 transition-colors"
-              >
-                View on GitHub
-              </a>
+              {#if repoUrl}
+                <a
+                  href="{repoUrl}/blob/main/CHANGELOG.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="px-4 py-2 text-xs font-medium rounded-lg border border-border-subtle text-text-main hover:bg-surface-2 transition-colors"
+                >
+                  View on GitHub
+                </a>
+              {/if}
             </div>
           </div>
         {:else if html}
@@ -145,15 +162,19 @@
 
       <!-- Footer -->
       <div class="flex items-center justify-between px-6 py-3.5 border-t border-border-subtle bg-surface shrink-0">
-        <a
-          href="https://github.com/Pacoaldev/Nox9Go/blob/main/CHANGELOG.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="text-xs text-text-muted hover:text-primary transition-colors flex items-center gap-1"
-        >
-          <span>View on GitHub</span>
-          <span class="material-symbols-outlined text-[14px]">arrow_outward</span>
-        </a>
+        {#if repoUrl}
+          <a
+            href="{repoUrl}/blob/main/CHANGELOG.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs text-text-muted hover:text-primary transition-colors flex items-center gap-1"
+          >
+            <span>View on GitHub</span>
+            <span class="material-symbols-outlined text-[14px]">arrow_outward</span>
+          </a>
+        {:else}
+          <span></span>
+        {/if}
         <button
           type="button"
           onclick={onClose}

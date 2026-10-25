@@ -35,7 +35,8 @@ type usageResult struct {
 	extra   map[string]any
 	// bare mirrors upstream handlers (e.g. qoder) that return {message}
 	// with NO quotas key on error. Most handlers include quotas:{}.
-	bare bool
+	bare        bool
+	quotaStatus string
 }
 
 func (r usageResult) toResponse() map[string]any {
@@ -43,6 +44,9 @@ func (r usageResult) toResponse() map[string]any {
 	// is set, so only attach a message when there are no quota rows.
 	if len(r.quotas) > 0 {
 		out := map[string]any{"plan": r.plan, "quotas": r.quotas}
+		if r.quotaStatus != "" {
+			out["quotaStatus"] = r.quotaStatus
+		}
 		for k, v := range r.extra {
 			out[k] = v
 		}
@@ -50,6 +54,9 @@ func (r usageResult) toResponse() map[string]any {
 	}
 	if r.message != "" {
 		out := map[string]any{"message": r.message}
+		if r.quotaStatus != "" {
+			out["quotaStatus"] = r.quotaStatus
+		}
 		if !r.bare {
 			out["quotas"] = map[string]any{}
 		}
@@ -61,7 +68,11 @@ func (r usageResult) toResponse() map[string]any {
 		}
 		return out
 	}
-	return map[string]any{"plan": r.plan, "quotas": map[string]any{}}
+	out := map[string]any{"plan": r.plan, "quotas": map[string]any{}}
+	if r.quotaStatus != "" {
+		out["quotaStatus"] = r.quotaStatus
+	}
+	return out
 }
 
 // fetchProviderUsage dispatches a live quota fetch for providers with a
