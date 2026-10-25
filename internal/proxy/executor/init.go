@@ -68,6 +68,11 @@ func RegisterAll() {
 	// short-lived access token, and gates every completion on a proof of work, so
 	// it needs the full executor rather than the shared passthrough.
 	Register("deepseek-web", func() Executor { return ForwardDeepSeekWeb })
+	// Perplexity Web is not an OpenAI API. It streams text/event-stream frames and
+	// requires query_str at the top level. The executor does the conversation-to-
+	// query translation and the site-event-to-OpenAI translation.
+	Register("perplexity-web", func() Executor { return ForwardPerplexityWeb })
+	Register("pw", func() Executor { return ForwardPerplexityWeb })
 	// gemini-web talks to gemini.google.com over plain HTTP. It is not an API,
 	// but the site answers an anonymous client, so it needs the full executor —
 	// the session tokens, the nested request array and the line stream are not
