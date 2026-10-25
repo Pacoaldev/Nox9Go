@@ -8,6 +8,9 @@
   import { promptInstall, subscribeInstallPrompt } from '../lib/pwa'
   import { type Locale } from '../lib/i18n/config'
   import { getCurrentLocale, setLocale } from '../lib/i18n/runtime'
+  import ServiceStatus from './ServiceStatus.svelte'
+  import TokenWidget from './TokenWidget.svelte'
+  import AlertsBadge from './AlertsBadge.svelte'
 
   let {
     activeTab = 'endpoint',
@@ -16,6 +19,7 @@
     selectedProvider = null,
     onBackToProviders,
     onMenuClick,
+    onToggleSidebar,
     onLogout,
   }: {
     activeTab?: ActiveTab
@@ -24,6 +28,7 @@
     selectedProvider?: { id: string; name: string; icon: string } | null
     onBackToProviders?: () => void
     onMenuClick?: () => void
+    onToggleSidebar?: () => void
     onLogout?: () => void
   } = $props()
 
@@ -287,6 +292,9 @@
   <!-- Right: one menu (issue #224). Language is back with a real handler:
        only English + Español (España), via the runtime DOM translator. -->
   <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+    <ServiceStatus />
+    <TokenWidget />
+    <AlertsBadge />
     <Menu label="Account and display options" triggerIcon="account_circle" minWidth="15rem">
       <MenuItem label="Donate" icon="volunteer_activism" onSelect={() => (isDonateOpen = true)} />
 

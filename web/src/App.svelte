@@ -302,6 +302,7 @@
   let isUpdateModalOpen = $state(false)
   let systemUpdateInfo = $state<SystemVersionInfo | null>(null)
   let systemVersion = $state('')
+  let sidebarCollapsed = $state(false)
 </script>
 
 {#if isOAuthCallback}
@@ -355,6 +356,7 @@
         bind:showUpdateModal={isUpdateModalOpen}
         bind:updateInfo={systemUpdateInfo}
         bind:version={systemVersion}
+        bind:collapsed={sidebarCollapsed}
         hiddenNav={hiddenNav}
         navOrder={navOrder}
       />
@@ -375,6 +377,7 @@
       <TopBar
         {activeTab}
         pageTitle={pageMeta[activeTab]?.title}
+        onToggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}
         pageDescription={pageMeta[activeTab]?.description}
         selectedProvider={selectedProviderMeta}
         onBackToProviders={() => navigate('connections', false, null)}

@@ -18,6 +18,7 @@
     version = $bindable(''),
     hiddenNav,
     navOrder,
+    collapsed = $bindable(false),
   }: {
     activeTab: ActiveTab
     navigate?: (tab: ActiveTab, replace?: boolean) => void
@@ -29,6 +30,7 @@
     version?: string
     hiddenNav?: string[]
     navOrder?: string[]
+    collapsed?: boolean
   } = $props()
   const INSTALL_CMD = 'nox9go update'
   let copied = $state(false)
@@ -89,10 +91,26 @@
 </script>
 
 <aside
-  class="flex h-full max-h-screen w-72 flex-col overflow-hidden border-r border-border-subtle bg-sidebar backdrop-blur-xl transition-colors duration-300 flex-shrink-0 select-none z-30"
->
+    class="flex h-full max-h-screen flex-col overflow-hidden border-r border-border-subtle bg-sidebar backdrop-blur-xl transition-colors duration-300 flex-shrink-0 select-none z-30"
+    class:w-72={!collapsed}
+    class:w-16={collapsed}
+  >
+  <!-- Collapse/expand toggle -->
+  <div class="flex justify-end px-2 pt-2 shrink-0">
+    <button
+      type="button"
+      onclick={() => (collapsed = !collapsed)}
+      class="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
+      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    >
+      <span class="material-symbols-outlined text-[20px]">
+        {collapsed ? 'menu' : 'menu_open'}
+      </span>
+    </button>
+  </div>
+
   <!-- Window control / traffic lights -->
-  <div class="flex items-center gap-2 px-6 pt-5 pb-2 shrink-0">
+  <div class="flex items-center gap-2 px-6 pt-2 pb-2 shrink-0">
     <div class="w-3 h-3 rounded-full bg-[#FF5F56]"></div>
     <div class="w-3 h-3 rounded-full bg-[#FFBD2E]"></div>
     <div class="w-3 h-3 rounded-full bg-[#27C93F]"></div>
@@ -174,16 +192,18 @@
                 : 'text-text-muted hover:bg-surface-2 hover:text-text-main'}"
             >
               <span class="material-symbols-outlined text-[18px]">{entry.icon}</span>
-              <span class="text-[13px] flex-1 text-left">{entry.label}</span>
-              <span
-                class="material-symbols-outlined text-[14px] transition-transform duration-200"
-                style:transform={isMediaOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
-              >
-                expand_more
-              </span>
+              {#if !collapsed}
+                <span class="text-[13px] flex-1 text-left">{entry.label}</span>
+                <span
+                  class="material-symbols-outlined text-[14px] transition-transform duration-200"
+                  style:transform={isMediaOpen ? 'rotate(180deg)' : 'rotate(0deg)'}
+                >
+                  expand_more
+                </span>
+              {/if}
             </button>
 
-            {#if isMediaOpen}
+            {#if isMediaOpen && !collapsed}
               <div class="pl-4 space-y-0.5">
                 {#each entry.children as child (child.id)}
                   {@const childActive = isNavLinkActive(child.id, activeTab)}
@@ -222,7 +242,9 @@
               >
                 {entry.icon}
               </span>
-              <span class="text-[13px]">{entry.label}</span>
+              {#if !collapsed}
+                <span class="text-[13px]">{entry.label}</span>
+              {/if}
             </a>
           {/if}
         {/each}
