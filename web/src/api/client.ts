@@ -1966,6 +1966,14 @@ export const api = {
       }
     ),
   // Tunnel & Tailscale
+  getDashboardStatus: () =>
+    request<{
+      gateway?: { ok?: boolean }
+      database?: { ok?: boolean }
+      tunnel?: { enabled?: boolean; running?: boolean }
+      today?: { requests?: number; promptTokens?: number; completionTokens?: number }
+      alerts?: { connections?: number; locked?: number }
+    }>('/api/dashboard/status'),
   getTunnelStatus: () =>
     request<TunnelStatusResponse>('/api/tunnel/status').catch(() => ({
       tunnel: { enabled: false, running: false, tunnelUrl: '', publicUrl: '' },

@@ -189,5 +189,8 @@ func RegisterRoutes(r chi.Router, h *DashboardHandler) {
 
 		// Compression Analytics
 		r.Get("/analytics/compression", h.HandleGetCompressionAnalytics)
+
+		// Top-bar and semaphore status snapshot (issue #2026-10-25)
+		r.Get("/dashboard/status", h.HandleStatus)
 	})
 }

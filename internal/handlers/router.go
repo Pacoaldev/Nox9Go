@@ -220,6 +220,9 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	// Compression Analytics
 	r.Get("/api/analytics/compression", dashH.HandleGetCompressionAnalytics)
 
+	// Top-bar and semaphore status snapshot
+	r.Get("/api/dashboard/status", dashH.HandleStatus)
+
 	r.Get("/api/provider-nodes", dashH.HandleGetProviderNodes)
 	r.Post("/api/provider-nodes", dashH.HandleCreateProviderNode)
 	r.Put("/api/provider-nodes/{id}", dashH.HandleUpdateProviderNode)
