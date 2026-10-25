@@ -71,6 +71,7 @@
   } from './quota/fetch'
 
   const CONNECTIONS_PAGE_SIZE = 20
+  const FILTER_STORAGE_KEY = 'quotaFilters'
 
   /**
    * The shape one provider's auto-ping settings key holds on the server.
@@ -136,6 +137,7 @@
   let accountFilter = $state('all')
   let quotaSortMode = $state('default')
   let expiringFirst = $state(false)
+  let hasHydratedFilters = $state(false)
 
   // The panel's width is only known once it renders, so placement runs on the
   // render that opens it rather than on the click.
@@ -281,6 +283,46 @@
   const AUTO_PING_TOOLTIPS: Record<string, string> = {
     claude: 'When your 5h quota runs out, auto-sends a request the moment it resets so a new window starts right away.',
     codex: 'Auto-starts the next 5h Codex window after reset by sending a tiny request. Consumes a small amount of quota.',
+  }
+
+  // ─── Filter persistence ───────────────────────────────────────────────────────
+  function loadFiltersFromStorage(): boolean {
+    if (typeof window === 'undefined') {
+      hasHydratedFilters = true
+      return false
+    }
+    let loaded = false
+    try {
+      const stored = window.sessionStorage.getItem(FILTER_STORAGE_KEY)
+      if (!stored) return false
+      const f = JSON.parse(stored) as Record<string, unknown>
+      const p = Number(f.page)
+      const ps = Number(f.pageSize)
+      page = Number.isFinite(p) && p >= 1 ? p : 1
+      pageSize = Number.isFinite(ps) && ps > 0 ? ps : CONNECTIONS_PAGE_SIZE
+      accountFilter = typeof f.accountFilter === 'string' ? f.accountFilter : 'all'
+      providerFilter = typeof f.providerFilter === 'string' ? f.providerFilter : 'all'
+      quotaSortMode = typeof f.quotaSortMode === 'string' ? f.quotaSortMode : 'default'
+      expiringFirst = f.expiringFirst === true
+      loaded = true
+    } catch {
+      // corrupt or missing data: keep defaults
+    } finally {
+      hasHydratedFilters = true
+    }
+    return loaded
+  }
+
+  function saveFiltersToStorage(): void {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(
+        FILTER_STORAGE_KEY,
+        JSON.stringify({ page, pageSize, accountFilter, providerFilter, quotaSortMode, expiringFirst }),
+      )
+    } catch {
+      // storage full or unavailable: filters stay in memory
+    }
   }
 
   function kiroMethodLabel(conn: ProviderConnectionLike): string {
@@ -820,10 +862,26 @@
     void accountFilter
     void providerFilter
     if (!initialLoadDone) return
-    void fetchConnections(page)
+    void (async () => {
+      const visibleConnections = await fetchConnections(page)
+      await fetchQuotasFor(visibleConnections, visibleConnections)
+    })()
+  })
+
+  // Persist quota filters for the browser session until program closes
+  $effect(() => {
+    if (!hasHydratedFilters) return
+    void page
+    void pageSize
+    void accountFilter
+    void providerFilter
+    void quotaSortMode
+    void expiringFirst
+    saveFiltersToStorage()
   })
 
   onMount(() => {
+    const restoredFilters = loadFiltersFromStorage()
     // Seed from props to avoid a flash of empty state
     if (initialConns.length > 0 && connections.length === 0) {
       connections = initialConns
@@ -860,7 +918,7 @@
     // kept until the option list arrives, then dropped — ignoring it up front
     // would silently un-filter the page for anyone holding an old bookmark.
     const deepLinkProvider = new URLSearchParams(window.location.search).get('provider')
-    if (deepLinkProvider) providerFilter = deepLinkProvider
+    if (!restoredFilters && deepLinkProvider) providerFilter = deepLinkProvider
 
     // Hydrate auto-refresh preference
     const stored = window.localStorage.getItem(AUTO_REFRESH_STORAGE_KEY)
