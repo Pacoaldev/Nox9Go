@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   formatCheckAllSummary,
   getBlockedModelIds,
+  getFailedModelIds,
   parseModelTestVerdict,
 } from './modelCheckAll'
 
@@ -134,5 +135,22 @@ describe('getBlockedModelIds', () => {
       m4: 'blocked',
     })
     expect(ids).toEqual(['m2', 'm4'])
+  })
+})
+
+describe('getFailedModelIds', () => {
+  test('extracts failed model ids and ignores ok and blocked', () => {
+    const ids = getFailedModelIds({
+      m1: 'ok',
+      m2: 'blocked',
+      m3: 'error',
+      m4: 'error',
+    })
+    expect(ids).toEqual(['m3', 'm4'])
+  })
+
+  test('returns an empty list when nothing failed', () => {
+    expect(getFailedModelIds({ m1: 'ok', m2: 'blocked' })).toEqual([])
+    expect(getFailedModelIds({})).toEqual([])
   })
 })

@@ -55,6 +55,7 @@
   import {
     formatCheckAllSummary,
     getBlockedModelIds,
+    getFailedModelIds,
     parseModelTestVerdict,
     type CheckAllSummary,
     type ModelTestStatus,
@@ -333,6 +334,9 @@
   let modelTestErrors = $state<Record<string, string | null>>({})
   let activeModelTestError = $state<string | null>(null)
   let checkAllSummary = $state<CheckAllSummary | null>(null)
+  // Models the last sweep marked as failed. Drives the bulk-disable action, so
+  // it stays valid after the summary banner is dismissed.
+  let failedModelCount = $derived(getFailedModelIds(modelTestStatuses).length)
 
   // Modals state
   let showRiskNoticeModal = $state(false)
@@ -2801,6 +2805,23 @@
     await runModelSweep(blockedIds)
   }
 
+  // Bulk-disable every model that failed the sweep, so the operator does not
+  // have to click the per-row X on each broken model.
+  async function handleDisableFailedModels() {
+    const failedIds = getFailedModelIds(modelTestStatuses)
+    if (failedIds.length === 0) return
+    const updated = Array.from(new Set([...disabledModelIds, ...failedIds]))
+    disabledModelIds = updated
+    try {
+      await api.saveDisabledModels(storageAlias, updated)
+      activeModelTestError = null
+      checkAllSummary = null
+    } catch (err) {
+      console.error('Failed to disable failed models:', err)
+      alert(`Failed to disable models: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   // Delete is only real for custom models; registry models are static, so an
   // unusable built-in model is disabled instead (the existing disable path).
   async function handleDeleteModel(modelId: string) {
@@ -3942,7 +3963,19 @@
         {/if}
       </div>
 
-      <div class="flex gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        {#if failedModelCount > 0}
+          <button
+            type="button"
+            onclick={handleDisableFailedModels}
+            disabled={isCheckingAll}
+            class="inline-flex items-center justify-center gap-1.5 font-semibold transition-all duration-150 ease-out cursor-pointer active:scale-[0.97] bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 h-7 px-3 text-xs rounded-[8px] disabled:opacity-50"
+            title="Disable the {failedModelCount} model(s) that failed the test"
+          >
+            <span class="material-symbols-outlined text-[16px]">do_not_disturb_on</span>
+            Disable Failed ({failedModelCount})
+          </button>
+        {/if}
         <button
           type="button"
           onclick={handleToggleAllModels}
@@ -3957,20 +3990,34 @@
     {#if activeModelTestError}
       {@const isBlockedSeverity = checkAllSummary?.severity === 'blocked'}
       {@const blockedCount = getBlockedModelIds(modelTestStatuses).length}
+      {@const failedCount = getFailedModelIds(modelTestStatuses).length}
       <div class="mb-3 flex items-start gap-2.5 rounded-lg border {isBlockedSeverity ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'} p-3 text-xs">
         <span class="material-symbols-outlined shrink-0 text-base">{isBlockedSeverity ? 'schedule' : 'error'}</span>
         <div class="flex-1 font-medium leading-relaxed flex items-center justify-between gap-2 flex-wrap">
           <span>{activeModelTestError}</span>
-          {#if blockedCount > 0}
-            <button
-              type="button"
-              onclick={handleRetryBlockedModels}
-              disabled={isCheckingAll}
-              class="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 font-semibold text-xs cursor-pointer disabled:opacity-50"
-            >
-              Retry blocked ({blockedCount})
-            </button>
-          {/if}
+          <div class="flex items-center gap-1.5 flex-wrap">
+            {#if failedCount > 0}
+              <button
+                type="button"
+                onclick={handleDisableFailedModels}
+                disabled={isCheckingAll}
+                class="px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-700 dark:text-red-300 font-semibold text-xs cursor-pointer disabled:opacity-50 transition-colors"
+                title="Disable every model that failed the test"
+              >
+                Disable Failed ({failedCount})
+              </button>
+            {/if}
+            {#if blockedCount > 0}
+              <button
+                type="button"
+                onclick={handleRetryBlockedModels}
+                disabled={isCheckingAll}
+                class="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 font-semibold text-xs cursor-pointer disabled:opacity-50 transition-colors"
+              >
+                Retry blocked ({blockedCount})
+              </button>
+            {/if}
+          </div>
         </div>
         <button
           type="button"

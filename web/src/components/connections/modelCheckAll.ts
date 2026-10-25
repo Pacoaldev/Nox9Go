@@ -81,3 +81,9 @@ export function getBlockedModelIds(statuses: Record<string, ModelTestStatus>): s
     .filter(([, s]) => s === 'blocked')
     .map(([id]) => id)
 }
+
+export function getFailedModelIds(statuses: Record<string, ModelTestStatus>): string[] {
+  return Object.entries(statuses)
+    .filter(([, s]) => s === 'error')
+    .map(([id]) => id)
+}
