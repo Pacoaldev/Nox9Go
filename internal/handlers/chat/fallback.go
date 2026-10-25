@@ -676,6 +676,13 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 		pipedBody = fastBody
 	}
 
+	// Providers with strict message validators reject reasoning fields on
+	// assistant messages (cerebras, groq, mistral, kiro, kilocode, kilo-gateway).
+	// Strip them early to avoid 400 errors upstream.
+	if stripped := executor.StripStrictReasoningFields(pipedBody, provider); stripped != nil {
+		pipedBody = stripped
+	}
+
 	start := time.Now()
 	metrics := &streamMetrics{}
 	var fwdErr error

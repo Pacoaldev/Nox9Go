@@ -12,6 +12,22 @@ import (
 	"testing"
 )
 
+func TestInjectReasoningContent_CerebrasDropsUnsupportedReasoningFields(t *testing.T) {
+	input := []byte(`{"model":"qwen-3.8-27b","messages":[{"role":"assistant","content":"old","reasoning_content":"thought","reasoning_details":[{"text":"detail"}],"reasoning":"alias"}]}`)
+	result := InjectReasoningContent(input, "cerebras")
+	if strings.Contains(string(result), "reasoning_content") || strings.Contains(string(result), "reasoning_details") || strings.Contains(string(result), `"reasoning"`) {
+		t.Fatalf("unsupported reasoning fields survived Cerebras sanitization: %s", result)
+	}
+}
+
+func TestInjectReasoningContent_KiroDropsUnsupportedReasoningFields(t *testing.T) {
+	input := []byte(`{"model":"claude-sonnet-4.5","messages":[{"role":"assistant","content":"old","reasoning_content":"x","reasoning":"y"}]}`)
+	result := InjectReasoningContent(input, "kiro")
+	if strings.Contains(string(result), "reasoning_content") || strings.Contains(string(result), `"reasoning"`) {
+		t.Fatalf("unsupported reasoning fields survived Kiro sanitization: %s", result)
+	}
+}
+
 func TestInjectReasoningContent(t *testing.T) {
 	input := []byte(`{
 		"model": "deepseek-v4-flash-free",

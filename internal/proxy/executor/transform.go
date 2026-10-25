@@ -847,6 +847,83 @@ func normalizeTopLevelReasoning(reqMap map[string]any) bool {
 	return true
 }
 
+// strictReasoningMessageProviders are upstreams whose OpenAI-compatible
+// validator rejects unknown assistant-message fields. A client that talked to a
+// reasoning model echoes the prior turn's reasoning back on every assistant
+// message, and these providers answer 400 (Cerebras: "property
+// 'messages.N.assistant.reasoning_content' is unsupported", Mistral 422
+// "extra_forbidden", Groq 400).
+//
+// Providers that *require* the field (DeepSeek, Kimi, opencode) are served by
+// InjectReasoningContent's injection path and must never be listed here.
+var strictReasoningMessageProviders = map[string]bool{
+	"cerebras":    true,
+	"groq":        true,
+	"mistral":     true,
+	"kiro":        true,
+	"kilocode":    true,
+	"kilo-gateway": true,
+	"kgw":         true,
+}
+
+// reasoningMessageFields are the vendor aliases for an assistant turn's
+// reasoning. Only these three are dropped: `thinking`/`thought` are already
+// stripped for every provider by sanitizeOpenAIMessageKeys.
+var reasoningMessageFields = []string{"reasoning_content", "reasoning_details", "reasoning"}
+
+// stripStrictReasoningFields removes the replayed reasoning fields an upstream
+// with a strict message validator refuses. Assistant turns only: that is where
+// clients replay reasoning, and a `reasoning` key on any other role is already
+// dropped by the whitelist pass.
+func stripStrictReasoningFields(reqMap map[string]any, provider string) bool {
+	if !strictReasoningMessageProviders[provider] {
+		return false
+	}
+	msgs, ok := reqMap["messages"].([]any)
+	if !ok {
+		return false
+	}
+	changed := false
+	for _, m := range msgs {
+		msgMap, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		if role, _ := msgMap["role"].(string); role != "assistant" {
+			continue
+		}
+		for _, key := range reasoningMessageFields {
+			if _, present := msgMap[key]; present {
+				delete(msgMap, key)
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
+// stripStrictReasoningFieldsForProvider returns a new body with reasoning fields
+// stripped for the given provider, or nil if no change is needed.
+func stripStrictReasoningFieldsForProvider(body []byte, provider string) []byte {
+	var reqMap map[string]any
+	if err := json.Unmarshal(body, &reqMap); err != nil {
+		return nil
+	}
+	if stripStrictReasoningFields(reqMap, provider) {
+		if out, err := marshalStable(reqMap); err == nil {
+			return out
+		}
+	}
+	return nil
+}
+
+// StripStrictReasoningFields is the exported variant that can be called from
+// other packages (e.g. the chat fallback) to remove unsupported reasoning
+// fields from a request body for providers with strict message validators.
+func StripStrictReasoningFields(body []byte, provider string) []byte {
+	return stripStrictReasoningFieldsForProvider(body, provider)
+}
+
 // InjectReasoningContent ensures assistant messages in request body have reasoning_content
 // injected (e.g. " " placeholder) for providers like opencode, deepseek, or kimi models,
 // and strips foreign/unsupported keys (such as "reasoning", "thinking", "thought") that cause
@@ -869,11 +946,21 @@ func InjectReasoningContent(body []byte, provider string) []byte {
 	isDeepSeek := strings.Contains(modelLower, "deepseek") || isOpenCode
 	isKimi := strings.HasPrefix(modelLower, "kimi-")
 
+	changed := false
+	if stripStrictReasoningFields(reqMap, provider) {
+		changed = true
+	}
+
 	if !isDeepSeek && !isKimi {
+		if changed {
+			if newBody, err := marshalStable(reqMap); err == nil {
+				return newBody
+			}
+		}
 		return body
 	}
 
-	changed := normalizeTopLevelReasoning(reqMap)
+	changed = normalizeTopLevelReasoning(reqMap) || changed
 
 	for i, m := range msgs {
 		msgMap, ok := m.(map[string]any)

@@ -242,6 +242,16 @@ func kiroUpstreamBody(req *Request) ([]byte, error) {
 		return req.Body, nil
 	}
 
+	// Kiro rejects reasoning fields on assistant messages; strip them early.
+	if req.Body != nil {
+		if stripped := stripStrictReasoningFieldsForProvider(req.Body, "kiro"); stripped != nil {
+			req.Body = stripped
+			if err := json.Unmarshal(req.Body, &probe); err != nil {
+				return nil, fmt.Errorf("ForwardKiro: re-parse stripped body: %w", err)
+			}
+		}
+	}
+
 	model := req.ModelName
 	if model == "" {
 		var oreq struct {
