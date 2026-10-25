@@ -1,38 +1,49 @@
 <script lang="ts">
-  // ServiceStatus: Gateway health & latency
-  let status = $state<'loading'|'ok'|'error'>('loading')
-  let latency = $state<number | null>(null)
+  import { dashboardStatus, type ServiceState } from '../lib/systemStatus.svelte'
 
-  $effect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch('/api/health')
-        if (res.ok) {
-          const data = await res.json()
-          status = 'ok'
-          if (typeof data.latencyMs === 'number') latency = data.latencyMs
-        } else {
-          status = 'error'
-        }
-      } catch {
-        status = 'error'
-      }
-    }
-    fetchStatus()
-    const id = setInterval(fetchStatus, 10000)
-    return () => clearInterval(id)
-  })
+  interface Props {
+    collapsed?: boolean
+  }
+
+  let { collapsed = false }: Props = $props()
+
+  const status = $derived(dashboardStatus())
+
+  const STATE_CLASSES: Record<ServiceState, string> = {
+    ok: 'bg-[#27C93F] shadow-[0_0_8px_rgba(39,201,63,0.3)]',
+    error: 'bg-[#FF5F56] shadow-[0_0_8px_rgba(255,95,86,0.3)]',
+    idle: 'bg-[#FFBD2E]/50',
+    unknown: 'bg-surface-3',
+  }
+
+  const STATE_LABELS: Record<ServiceState, string> = {
+    ok: 'En línea',
+    error: 'Fallo',
+    idle: 'Inactivo',
+    unknown: 'Comprobando...',
+  }
 </script>
 
-<div class="flex items-center gap-1">
-  {#if status === 'loading'}
-    <div class="size-3 rounded-full bg-gray-400"></div>
-  {:else if status === 'ok'}
-    <div class="size-3 rounded-full bg-green-500"></div>
-  {:else}
-    <div class="size-3 rounded-full bg-red-500"></div>
-  {/if}
-  {#if latency !== null}
-    <span class="text-xs">{latency}ms</span>
-  {/if}
+<div
+  class="flex items-center gap-2 select-none {collapsed ? 'justify-center py-1' : ''}"
+  role="status"
+  aria-label="Estado de servicios"
+>
+  <!-- Dot 1: Gateway -->
+  <span
+    class="size-3 rounded-full transition-colors {STATE_CLASSES[status.gateway]}"
+    title="Gateway API: {STATE_LABELS[status.gateway]}{status.latencyMs !== null ? ` (${status.latencyMs} ms)` : ''}"
+  ></span>
+
+  <!-- Dot 2: SQLite DB -->
+  <span
+    class="size-3 rounded-full transition-colors {STATE_CLASSES[status.database]}"
+    title="Base de datos SQLite: {STATE_LABELS[status.database]}"
+  ></span>
+
+  <!-- Dot 3: Cloudflare Tunnel -->
+  <span
+    class="size-3 rounded-full transition-colors {STATE_CLASSES[status.tunnel]}"
+    title="Túnel Cloudflare: {STATE_LABELS[status.tunnel]}"
+  ></span>
 </div>

@@ -36,6 +36,10 @@
   import TerminalView from './components/TerminalView.svelte'
   import TokenSaverView from './components/TokenSaverView.svelte'
   import TopBar from './components/TopBar.svelte'
+  import {
+    startDashboardStatusPolling,
+    stopDashboardStatusPolling,
+  } from './lib/systemStatus.svelte'
   import { parseMediaProvider, parseProviderId, pathToTab, providerPath, mediaProviderPath, TAB_ROUTES, type ActiveTab, type MediaProviderRoute } from './lib/router'
   import { PROVIDER_CATALOG } from './lib/providers'
   import { getIconPath } from './components/connections/types'
@@ -204,6 +208,7 @@
           navigate('endpoint', true)
         }
         loadData()
+        startDashboardStatusPolling()
       }
     })
 
@@ -236,6 +241,7 @@
 
     return () => {
       clearInterval(interval)
+      stopDashboardStatusPolling()
       window.removeEventListener('popstate', handlePopState)
       unsubscribeUnauthorized()
     }
@@ -377,11 +383,11 @@
       <TopBar
         {activeTab}
         pageTitle={pageMeta[activeTab]?.title}
-        onToggleSidebar={() => (sidebarCollapsed = !sidebarCollapsed)}
         pageDescription={pageMeta[activeTab]?.description}
         selectedProvider={selectedProviderMeta}
         onBackToProviders={() => navigate('connections', false, null)}
         onMenuClick={() => (isMobileMenuOpen = !isMobileMenuOpen)}
+        onAlertsClick={() => navigate('connections', false, null)}
         onLogout={() => {
           isAuthenticatedState = false
           navigate('login')

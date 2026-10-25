@@ -1,30 +1,46 @@
 <script lang="ts">
-  // AlertsBadge: red dot if any provider alerts
-  let hasAlert = $state<boolean>(false)
+  import { dashboardStatus } from '../lib/systemStatus.svelte'
 
-  $effect(() => {
-    const fetchAlerts = async () => {
-      try {
-        const res = await fetch('/api/providers/alerts')
-        if (!res.ok) throw new Error()
-        const data = await res.json()
-        // Expect array of alerts
-        hasAlert = Array.isArray(data) && data.length > 0
-      } catch {
-        hasAlert = false
-      }
+  interface Props {
+    onClick?: () => void
+  }
+
+  let { onClick }: Props = $props()
+
+  const status = $derived(dashboardStatus())
+  const totalAlerts = $derived(status.alertConnections + status.lockedConnections)
+
+  function formatTitle(): string {
+    if (totalAlerts === 0) return 'Todos los proveedores operativos'
+    const parts: string[] = []
+    if (status.alertConnections > 0) {
+      parts.push(`${status.alertConnections} con error de prueba`)
     }
-    fetchAlerts()
-    const id = setInterval(fetchAlerts, 15000)
-    return () => clearInterval(id)
-  })
+    if (status.lockedConnections > 0) {
+      parts.push(`${status.lockedConnections} en bloqueo/límite de cuota`)
+    }
+    return `Alertas activas: ${parts.join(', ')}`
+  }
 </script>
 
-<div class="relative">
-  <svg xmlns="http://www.w3.org/2000/svg" class="size-5 text-text-main" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-5-5.917V5a3 3 0 10-6 0v.083A6 6 0 002 11v3.159c0 .538-.214 1.055-.595 1.436L0 17h5m10 0a3 3 0 11-6 0h6z" />
-  </svg>
-  {#if hasAlert}
-    <span class="absolute top-0 right-0 block size-2 rounded-full bg-red-500"></span>
+<button
+  type="button"
+  onclick={onClick}
+  class="relative p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer select-none"
+  aria-label={totalAlerts > 0 ? `${totalAlerts} alertas de proveedores` : 'Sin alertas de proveedores'}
+  title={formatTitle()}
+>
+  <span
+    class="material-symbols-outlined text-[20px] {totalAlerts > 0 ? 'text-amber-500 animate-pulse' : ''}"
+  >
+    {totalAlerts > 0 ? 'notifications_active' : 'notifications'}
+  </span>
+
+  {#if totalAlerts > 0}
+    <span
+      class="absolute top-0.5 right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none shadow-[0_0_6px_rgba(239,68,68,0.5)]"
+    >
+      {totalAlerts > 99 ? '99+' : totalAlerts}
+    </span>
   {/if}
-</div>
+</button>

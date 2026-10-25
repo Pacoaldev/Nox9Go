@@ -8,7 +8,7 @@
   import { promptInstall, subscribeInstallPrompt } from '../lib/pwa'
   import { type Locale } from '../lib/i18n/config'
   import { getCurrentLocale, setLocale } from '../lib/i18n/runtime'
-  import ServiceStatus from './ServiceStatus.svelte'
+  import { dashboardStatus } from '../lib/systemStatus.svelte'
   import TokenWidget from './TokenWidget.svelte'
   import AlertsBadge from './AlertsBadge.svelte'
 
@@ -19,7 +19,7 @@
     selectedProvider = null,
     onBackToProviders,
     onMenuClick,
-    onToggleSidebar,
+    onAlertsClick,
     onLogout,
   }: {
     activeTab?: ActiveTab
@@ -28,9 +28,11 @@
     selectedProvider?: { id: string; name: string; icon: string } | null
     onBackToProviders?: () => void
     onMenuClick?: () => void
-    onToggleSidebar?: () => void
+    onAlertsClick?: () => void
     onLogout?: () => void
   } = $props()
+
+  const status = $derived(dashboardStatus())
 
   let uiLocale = $state<Locale>('en')
 
@@ -291,10 +293,24 @@
 
   <!-- Right: one menu (issue #224). Language is back with a real handler:
        only English + Español (España), via the runtime DOM translator. -->
-  <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-    <ServiceStatus />
+  <div class="flex items-center gap-2 shrink-0">
+    <!-- Latency chip (Idea 1) -->
+    {#if status.latencyMs !== null}
+      <div
+        class="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border-subtle bg-surface-2 text-[11px] font-mono text-text-muted"
+        title="Latencia al gateway local"
+      >
+        <span class="size-1.5 rounded-full bg-emerald-500"></span>
+        <span>{status.latencyMs} ms</span>
+      </div>
+    {/if}
+
+    <!-- Token savings / usage today (Idea 6) -->
     <TokenWidget />
-    <AlertsBadge />
+
+    <!-- Alerts bell (Idea 7) -->
+    <AlertsBadge onClick={onAlertsClick} />
+
     <Menu label="Account and display options" triggerIcon="account_circle" minWidth="15rem">
       <MenuItem label="Donate" icon="volunteer_activism" onSelect={() => (isDonateOpen = true)} />
 

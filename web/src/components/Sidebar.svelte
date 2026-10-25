@@ -3,6 +3,7 @@
   import { copyToClipboard } from '../lib/clipboard'
   import { TAB_ROUTES, type ActiveTab } from '../lib/router'
   import { isNavLinkActive, orderedNavGroups } from '../lib/nav'
+  import ServiceStatus from './ServiceStatus.svelte'
 
   export type { ActiveTab }
   let {
@@ -96,12 +97,13 @@
     class:w-16={collapsed}
   >
   <!-- Collapse/expand toggle -->
-  <div class="flex justify-end px-2 pt-2 shrink-0">
+  <div class="flex shrink-0 {collapsed ? 'justify-center px-1 pt-2' : 'justify-end px-2 pt-2'}">
     <button
       type="button"
       onclick={() => (collapsed = !collapsed)}
       class="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
       aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
     >
       <span class="material-symbols-outlined text-[20px]">
         {collapsed ? 'menu' : 'menu_open'}
@@ -109,37 +111,39 @@
     </button>
   </div>
 
-  <!-- Window control / traffic lights -->
-  <div class="flex items-center gap-2 px-6 pt-2 pb-2 shrink-0">
-    <div class="w-3 h-3 rounded-full bg-[#FF5F56]"></div>
-    <div class="w-3 h-3 rounded-full bg-[#FFBD2E]"></div>
-    <div class="w-3 h-3 rounded-full bg-[#27C93F]"></div>
+  <!-- Window control / traffic lights → live service semaphore (Gateway, DB, Tunnel) -->
+  <div class="flex shrink-0 items-center {collapsed ? 'justify-center px-1 pb-1' : 'px-6 pb-2'}">
+    <ServiceStatus {collapsed} />
   </div>
 
   <!-- Brand header: same footprint as before (size-11), no plate — logo fills the badge -->
-  <div class="px-6 py-4 flex flex-col gap-2 shrink-0">
+  <div class="flex flex-col gap-2 shrink-0 {collapsed ? 'px-2 py-3 items-center' : 'px-6 py-4'}">
     <a
       href={TAB_ROUTES.endpoint}
       onclick={(e) => handleNav('endpoint', e)}
-      class="flex items-center gap-3 cursor-pointer group"
+      class="flex items-center cursor-pointer group {collapsed ? 'justify-center w-full' : 'gap-3'}"
+      aria-label="NOX9GO home"
+      title={collapsed ? 'NOX9GO' : undefined}
     >
       <img
         src="/icons/icon-192.png"
         alt="NOX9GO"
         class="size-11 rounded-[12px] object-cover flex-shrink-0 group-hover:scale-105 transition-transform shadow-[var(--shadow-warm)]"
       />
-      <div class="flex flex-col min-w-0">
-        <h1 class="text-lg font-semibold tracking-tight text-text-main truncate leading-snug">
-          NOX9GO
-        </h1>
-        <span class="text-xs text-text-muted leading-tight">
-          {version ? `v${version}` : 'v1.9.9'}
-        </span>
-      </div>
+      {#if !collapsed}
+        <div class="flex flex-col min-w-0">
+          <h1 class="text-lg font-semibold tracking-tight text-text-main truncate leading-snug">
+            NOX9GO
+          </h1>
+          <span class="text-xs text-text-muted leading-tight">
+            {version ? `v${version}` : 'v1.9.9'}
+          </span>
+        </div>
+      {/if}
     </a>
 
     <!-- Update notification banner below version (matches upstream 9router) -->
-    {#if updateInfo && updateInfo.hasUpdate}
+    {#if updateInfo && updateInfo.hasUpdate && !collapsed}
       <div
         class="flex flex-col gap-1.5 rounded-lg p-2 bg-green-500/10 dark:bg-amber-500/10 border border-green-500/30 dark:border-amber-500/30 text-green-700 dark:text-amber-400 mt-0.5 animate-in fade-in duration-200"
       >
@@ -171,10 +175,10 @@
   </div>
 
   <!-- Navigation -->
-  <nav class="flex-1 min-h-0 px-4 py-2 space-y-0.5 overflow-y-auto custom-scrollbar">
+  <nav class="flex-1 min-h-0 space-y-0.5 overflow-y-auto custom-scrollbar {collapsed ? 'px-1.5 py-2' : 'px-4 py-2'}">
     {#each navGroups as group (group.id)}
-      <div class="{group.label ? 'pt-3 mt-2' : ''} space-y-0.5">
-        {#if group.label}
+      <div class="{group.label && !collapsed ? 'pt-3 mt-2' : ''} space-y-0.5">
+        {#if group.label && !collapsed}
           <p class="px-3 text-xs font-semibold text-text-muted/60 uppercase tracking-wider mb-2">
             {group.label}
           </p>
@@ -184,14 +188,23 @@
           {#if entry.kind === 'accordion'}
             <button
               type="button"
-              onclick={() => (isMediaOpen = !isMediaOpen)}
-              class="w-full flex items-center gap-3 px-3 py-1.5 rounded-lg transition-all group cursor-pointer {activeTab.startsWith(
-                'media-'
-              )
+              onclick={() => {
+                if (collapsed) {
+                  collapsed = false
+                  isMediaOpen = true
+                } else {
+                  isMediaOpen = !isMediaOpen
+                }
+              }}
+              class="w-full flex items-center rounded-lg transition-all group cursor-pointer {collapsed
+                ? 'justify-center px-2 py-2'
+                : 'gap-3 px-3 py-1.5'} {activeTab.startsWith('media-')
                 ? 'bg-primary/10 text-primary font-medium'
                 : 'text-text-muted hover:bg-surface-2 hover:text-text-main'}"
+              aria-label={collapsed ? entry.label : undefined}
+              title={collapsed ? entry.label : undefined}
             >
-              <span class="material-symbols-outlined text-[18px]">{entry.icon}</span>
+              <span class="material-symbols-outlined text-[18px] flex-shrink-0">{entry.icon}</span>
               {#if !collapsed}
                 <span class="text-[13px] flex-1 text-left">{entry.label}</span>
                 <span
@@ -231,12 +244,16 @@
             <a
               href={TAB_ROUTES[entry.id]}
               onclick={(e) => handleNav(entry.id, e)}
-              class="flex items-center gap-3 px-3 py-1.5 rounded-lg transition-all group cursor-pointer {active
+              class="flex items-center rounded-lg transition-all group cursor-pointer {collapsed
+                ? 'justify-center px-2 py-2'
+                : 'gap-3 px-3 py-1.5'} {active
                 ? 'bg-primary/10 text-primary font-medium'
                 : 'text-text-muted hover:bg-surface-2 hover:text-text-main'}"
+              aria-label={collapsed ? entry.label : undefined}
+              title={collapsed ? entry.label : undefined}
             >
               <span
-                class="material-symbols-outlined text-[18px] {active
+                class="material-symbols-outlined text-[18px] flex-shrink-0 {active
                   ? 'fill-1'
                   : 'group-hover:text-primary transition-colors'}"
               >
@@ -253,17 +270,24 @@
   </nav>
 
   <!-- Bottom connection summary -->
-  <div class="p-4 border-t border-border-subtle shrink-0">
+  <div class="border-t border-border-subtle shrink-0 {collapsed ? 'px-1.5 py-2' : 'p-4'}">
     <div
-      class="p-2.5 rounded-[10px] bg-surface border border-border-subtle flex items-center justify-between"
+      class="rounded-[10px] bg-surface border border-border-subtle flex items-center {collapsed
+        ? 'justify-center p-2'
+        : 'justify-between p-2.5'}"
+      title={collapsed ? `${activeConnections} / ${totalConnections} providers active` : undefined}
     >
-      <div class="min-w-0">
-        <p class="text-[11px] text-text-muted uppercase tracking-wide">Providers</p>
-        <p class="text-xs font-semibold text-text-main mt-0.5 truncate">
-          {activeConnections} <span class="text-text-muted font-normal">/ {totalConnections} active</span>
-        </p>
-      </div>
-      <span class="material-symbols-outlined text-primary text-[18px]">radio_button_checked</span>
+      {#if collapsed}
+        <span class="material-symbols-outlined text-primary text-[18px]">radio_button_checked</span>
+      {:else}
+        <div class="min-w-0">
+          <p class="text-[11px] text-text-muted uppercase tracking-wide">Providers</p>
+          <p class="text-xs font-semibold text-text-main mt-0.5 truncate">
+            {activeConnections} <span class="text-text-muted font-normal">/ {totalConnections} active</span>
+          </p>
+        </div>
+        <span class="material-symbols-outlined text-primary text-[18px]">radio_button_checked</span>
+      {/if}
     </div>
   </div>
 </aside>
