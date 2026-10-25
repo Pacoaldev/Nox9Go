@@ -129,6 +129,10 @@ func connectionAlertCount(repo *db.Repo) (alerts, locked int) {
 		if c == nil || c.Data == "" {
 			continue
 		}
+		// Inactive (disabled) connections are parked on purpose; they do not alert.
+		if c.IsActive == 0 {
+			continue
+		}
 		var data map[string]any
 		if err := json.Unmarshal([]byte(c.Data), &data); err != nil || data == nil {
 			continue
@@ -138,6 +142,10 @@ func connectionAlertCount(repo *db.Repo) (alerts, locked int) {
 			continue
 		}
 		if status, _ := data["testStatus"].(string); status == "error" || status == "failed" {
+			// Probe not supported is a limitation of the test suite, not a broken credential.
+			if errText, _ := data["lastError"].(string); errText == "Provider test not supported" {
+				continue
+			}
 			alerts++
 		}
 	}

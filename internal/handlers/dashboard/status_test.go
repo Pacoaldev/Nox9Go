@@ -26,7 +26,7 @@ func TestHandleStatus(t *testing.T) {
 		t.Fatalf("seed usageDaily: %v", err)
 	}
 
-	// Seed one healthy connection, one locked, one failed
+	// Seed one healthy, one locked, one failed, one inactive-with-error, one unsupported-test
 	lockUntil := time.Now().Add(10 * time.Minute).UTC().Format(time.RFC3339)
 	if err := repo.CreateProviderConnectionFull("c1", "openai", "apikey", "c1", nil, `{"testStatus": "active"}`); err != nil {
 		t.Fatalf("create connection c1: %v", err)
@@ -36,6 +36,17 @@ func TestHandleStatus(t *testing.T) {
 	}
 	if err := repo.CreateProviderConnectionFull("c3", "groq", "apikey", "c3", nil, `{"testStatus": "failed"}`); err != nil {
 		t.Fatalf("create connection c3: %v", err)
+	}
+	// Inactive connection: should not alert
+	if err := repo.CreateProviderConnectionFull("c4", "deepseek", "apikey", "c4", nil, `{"testStatus": "error"}`); err != nil {
+		t.Fatalf("create connection c4: %v", err)
+	}
+	if err := repo.SetConnectionStatus("c4", false); err != nil {
+		t.Fatalf("deactivate c4: %v", err)
+	}
+	// Unsupported test: should not alert
+	if err := repo.CreateProviderConnectionFull("c5", "tavily", "apikey", "c5", nil, `{"testStatus": "error", "lastError": "Provider test not supported"}`); err != nil {
+		t.Fatalf("create connection c5: %v", err)
 	}
 
 	r := chi.NewRouter()
