@@ -55,20 +55,23 @@ func TestFindBrowserFindsNothingWhenThereIsNone(t *testing.T) {
 // A browser that is not on the list is one this flow cannot open, and the
 // operator gets the "no browser found" message instead of a window.
 func TestBrowserNamesCoverTheBrowsersTheFlowCanDrive(t *testing.T) {
+	want := []string{"google-chrome", "chromium", "brave-browser", "microsoft-edge"}
+	if runtime.GOOS == "windows" {
+		// Windows executable names omit the Unix package suffixes.
+		want = []string{"chrome", "chromium", "brave", "msedge"}
+	}
+
 	names := browserNames()
-	for _, want := range []string{"google-chrome", "chromium", "brave-browser", "microsoft-edge"} {
-		if runtime.GOOS == "windows" && want == "google-chrome" {
-			continue
-		}
+	for _, expected := range want {
 		found := false
 		for _, name := range names {
-			if name == want {
+			if name == expected {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("the browser list %v does not name %q", names, want)
+			t.Errorf("the browser list %v does not name %q", names, expected)
 		}
 	}
 }
