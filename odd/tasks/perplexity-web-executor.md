@@ -30,11 +30,11 @@ S7. The first turn must carry the conversation the way upstream does: the curren
 
 | ID | Spec | Route | Status | Evidence |
 | :-- | :-- | :-- | :-- | :-- |
-| T1 | S1, S2 | inline | done | RED→GREEN unit tests: request body carries `query_str` at both levels; credential becomes the session cookie header |
-| T2 | S3, S7 | inline | done | RED→GREEN unit tests: Perplexity events → OpenAI chunks (stream) and `chat.completion` (non-stream) |
-| T3 | S4, S5 | inline | done | RED→GREEN unit tests: model map, thinking map, bounded session cache with TTL |
-| T4 | S6 | inline | done | executor registered for `perplexity-web`; `go build ./...`; no other provider touched |
-| T5 | S1-S7 | inline | done | `go test ./internal/proxy/...` green; `go vet` clean; ready for commit + native review post commit |
+| T1 | S1, S2 | inline | done | `perplexity_web_test.go`: request body carries `query_str` at both levels; credential becomes the session cookie header. Commit `e7dec11` |
+| T2 | S3, S7 | inline | done | `perplexity_web_stream.go`: Perplexity events → OpenAI chunks (stream) and `chat.completion` (non-stream). Commit `e7dec11` |
+| T3 | S4, S5 | inline | done | `perplexity_web_payload.go`: model map, thinking map, FNV-1a session cache (200 / 1 h). Commit `e7dec11` |
+| T4 | S6 | inline | done | executor registered for `perplexity-web` in `init.go`; `go build ./...`; no other provider touched. Commit `e7dec11` |
+| T5 | S1-S7 | inline | done | `go test ./internal/proxy/executor/...` ok; `go vet ./...` clean; `go build ./cmd/nox9go/ ./cmd/nox9go-tray/` clean. Commit `e7dec11` (pushed to `main`) |
 
 Route note: the delegation trigger did not fire — one behaviour unit, one package, one writer (parent). No `gentle-ai-worker`/`gentle-ai-verify` agent is exposed by this runtime.
 
@@ -47,3 +47,7 @@ L2 (verbatim): "Y puedes arreglarlo?"
 L3: Root cause: `perplexity-web` has no entry in the executor registry (`internal/proxy/executor/init.go`), so the request falls through to the generic OpenAI passthrough and the OpenAI body (`messages`, `max_tokens`) is posted to Perplexity's own endpoint, which answers `422` naming the missing `query_str`. Upstream `decolua/9router` solves this with a dedicated executor (`open-sse/executors/perplexity-web.js`, `format: "perplexity-web"`, `authType: "cookie"`) that translates the request into `query_str` + `params` and translates the site's event stream back into OpenAI chunks.
 
 L4: Assumption (not a user requirement): the credential is the session cookie value the dashboard already asks for, so the executor sends it as `Cookie: __Secure-next-auth.session-token=<value>` and never as `Authorization: Bearer` — the site refuses a bearer there.
+
+L5: Delivered in commit `e7dec11` ("feat(perplexity-web): add dedicated executor for Perplexity Web protocol"), pushed to `main`. The `CHANGELOG.md` entry under `## [1.0.0]` records the upstream reference. The native RDD review `assess` was refused before the commit ("untracked files require an explicit declaration"), so the review transaction still has to be started against the committed candidate with `gentle_review` `inspect` → `start`.
+
+L6: Two implementation notes worth keeping. (1) The site's answer text arrives as *cumulative* markdown chunks, so the accumulator tracks the length already emitted and emits only the suffix; the `progress: "DONE"` block replaces the whole answer and is what the non-stream path returns. (2) The site reports no token counts, so usage is estimated from the text the same way the other web providers in this package do, and published on the context through `translator.SetUsage`.
