@@ -11,6 +11,7 @@
 [![Runtime](https://img.shields.io/badge/Runtime-Single%20binary-4C1D3D)](#instalacion)
 [![Providers](https://img.shields.io/badge/Providers-142%2B-6E56CF)](#proveedores)
 [![License](https://img.shields.io/badge/Status-Personal%20fork-8B5CF6)](#sobre-este-fork)
+[![Made with GentleAI](https://img.shields.io/badge/Made%20with-GentleAI-8B5CF6?logo=openai&logoColor=white)](https://github.com/Gentleman-Programming/gentle-ai)
 
 **NOX9GO** expone un único endpoint compatible con OpenAI y Anthropic para que tus herramientas de código puedan usar múltiples proveedores de IA, cuotas, claves y modelos sin cambiar de configuración.
 
@@ -353,3 +354,11 @@ No. Node.js y Bun solo son necesarios para compilar el dashboard desde el códig
 **NOX9GO** · Un gateway, muchas rutas, menos interrupciones.
 
 </div>
+
+---
+
+<p align="center">
+  <a href="https://github.com/Gentleman-Programming/gentle-ai">
+    <img width="220" src="https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/docs/assets/brand/built-with-gentle-ai.png" alt="Built with Gentle-AI" />
+  </a>
+</p>
