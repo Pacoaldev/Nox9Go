@@ -175,8 +175,24 @@
     }
   }
 
+  // Browser-side reachability probe. This is a hint, not a gate: the tunnel URL
+  // is known from the server snapshot, so the row never hides it while waiting.
+  async function runReachabilityPings() {
+    if (typeof document !== 'undefined' && document.hidden) return
+    if (tunnelEnabled && (tunnelUrl || publicUrl)) {
+      const direct = tunnelUrl ? clientPingUrl(tunnelUrl) : Promise.resolve(false)
+      const pub = publicUrl ? clientPingUrl(publicUrl) : Promise.resolve(false)
+      markReachable((await direct) || (await pub), 'tunnel')
+    }
+    if (tailscaleEnabled && tailscaleUrl) {
+      markReachable(await clientPingUrl(tailscaleUrl), 'tailscale')
+    }
+  }
+
   onMount(() => {
-    loadStatus()
+    // Ping as soon as the snapshot lands: waiting for the first interval tick
+    // left the row amber for up to 10s on every visit.
+    void loadStatus().then(() => runReachabilityPings())
     // Status poll only while degraded; healthy tunnels rely on the browser
     // ping below (upstream STATUS_POLL_FAST_MS behaviour).
     const statusTimer = setInterval(async () => {
@@ -189,18 +205,7 @@
         if (res) applyTunnelStatus(res)
       } catch {}
     }, 5000)
-    // Browser-side ping: probe tunnel/tailscale URLs directly every 10s.
-    const pingTimer = setInterval(async () => {
-      if (typeof document !== 'undefined' && document.hidden) return
-      if (tunnelEnabled && (tunnelUrl || publicUrl)) {
-        const direct = tunnelUrl ? clientPingUrl(tunnelUrl) : Promise.resolve(false)
-        const pub = publicUrl ? clientPingUrl(publicUrl) : Promise.resolve(false)
-        markReachable((await direct) || (await pub), 'tunnel')
-      }
-      if (tailscaleEnabled && tailscaleUrl) {
-        markReachable(await clientPingUrl(tailscaleUrl), 'tailscale')
-      }
-    }, 10000)
+    const pingTimer = setInterval(runReachabilityPings, 10000)
     return () => {
       clearInterval(statusTimer)
       clearInterval(pingTimer)
@@ -439,13 +444,26 @@
           Tunnel
         </span>
 
-        {#if tunnelEnabled && !isTunnelLoading && tunnelReachable}
+        <!-- Show the input as long as the tunnel is running with a known URL.
+             Reachability from the browser is a live badge, not a gate that hides
+             the copyable address while the ping settles. -->
+        {#if tunnelEnabled && !isTunnelLoading && tunnelRunning && (publicUrl || tunnelUrl)}
           <input
             type="text"
             value="{publicUrl || tunnelUrl}/v1"
             readonly
             class="flex-1 font-mono text-sm bg-bg border border-border rounded-lg px-3 py-2 text-text-main selection:bg-brand-500/30"
           />
+          <!-- Reachability badge: the ping's only job now is to describe the
+               connection, never to withhold the address. -->
+          <span
+            class="shrink-0 size-2.5 rounded-full {tunnelReachable
+              ? 'bg-emerald-500'
+              : 'bg-amber-500 animate-pulse'}"
+            title={tunnelReachable
+              ? 'Túnel alcanzable desde el navegador'
+              : 'Verificando alcance del túnel…'}
+          ></span>
           <button
             type="button"
             onclick={() => copy(`${publicUrl || tunnelUrl}/v1`, 'tunnel_url')}
@@ -480,7 +498,7 @@
           >
             <Power class="w-4 h-4" />
           </button>
-        {:else if tunnelEnabled && !isTunnelLoading && !tunnelReachable}
+        {:else if tunnelEnabled && !isTunnelLoading && !tunnelRunning}
           <div class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/25 bg-amber-500/5 text-sm text-amber-600 dark:text-amber-400">
             <Loader2 class="w-4 h-4 animate-spin text-amber-500" />
             <span>{tunnelEverReachable ? 'Tunnel reconnecting...' : 'Tunnel checking...'}</span>
@@ -552,13 +570,21 @@
           Tailscale
         </span>
 
-        {#if tailscaleEnabled && !isTailscaleLoading && tailscaleReachable}
+        {#if tailscaleEnabled && !isTailscaleLoading && tailscaleRunning && tailscaleUrl}
           <input
             type="text"
             value="{tailscaleUrl}/v1"
             readonly
             class="flex-1 font-mono text-sm bg-bg border border-border rounded-lg px-3 py-2 text-text-main selection:bg-indigo-500/30"
           />
+          <span
+            class="shrink-0 size-2.5 rounded-full {tailscaleReachable
+              ? 'bg-emerald-500'
+              : 'bg-amber-500 animate-pulse'}"
+            title={tailscaleReachable
+              ? 'Tailscale alcanzable desde el navegador'
+              : 'Verificando alcance de Tailscale…'}
+          ></span>
           <button
             type="button"
             onclick={() => copy(`${tailscaleUrl}/v1`, 'ts_url')}
@@ -579,7 +605,7 @@
           >
             <Power class="w-4 h-4" />
           </button>
-        {:else if tailscaleEnabled && !isTailscaleLoading && !tailscaleReachable}
+        {:else if tailscaleEnabled && !isTailscaleLoading && !tailscaleRunning}
           <div class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-500/25 bg-amber-500/5 text-sm text-amber-600 dark:text-amber-400">
             <Loader2 class="w-4 h-4 animate-spin text-amber-500" />
             <span>{tailscaleEverReachable ? 'Tailscale reconnecting...' : 'Tailscale checking...'}</span>
