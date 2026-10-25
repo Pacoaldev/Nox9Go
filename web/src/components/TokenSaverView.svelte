@@ -1525,7 +1525,7 @@ f6e5d4c3b2a1   redis:7-alpine "docker-entrypoint.s…"   2 hours ago     Up 2 ho
                 <div class="flex items-center gap-2">
                   {#each [
                     { id: 'en', label: 'English' },
-                    { id: 'id', label: 'Bahasa Indonesia' }
+                    { id: 'es', label: 'Español (España)' }
                   ] as lang}
                     <button
                       type="button"

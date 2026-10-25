@@ -5,10 +5,31 @@ import (
 	"sync/atomic"
 )
 
-// committedResponseWriter wraps http.ResponseWriter to track whether
-// response headers have been sent to the client (i.e., WriteHeader or
-// first Write has been called). This is used by fallback logic to
-// determine if a retry is safe.
+type comboAttemptWriter struct {
+	http.ResponseWriter
+	onCommit func()
+}
+
+func (w comboAttemptWriter) WriteHeader(status int) {
+	w.onCommit()
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w comboAttemptWriter) Write(data []byte) (int, error) {
+	w.onCommit()
+	return w.ResponseWriter.Write(data)
+}
+
+func (w comboAttemptWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w comboAttemptWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 type committedResponseWriter struct {
 	http.ResponseWriter
 	committed int32 // atomic: 1 if headers have been sent

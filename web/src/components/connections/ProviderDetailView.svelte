@@ -3323,7 +3323,7 @@
       <!-- relative z-50: the open row proxy dropdown paints a fixed inset-0
            click-away backdrop over the whole viewport, which otherwise swallows
            the first click on any priority chevron. -->
-      <div class="relative z-50 flex min-w-0 flex-col divide-y divide-black/[0.03] dark:divide-white/[0.03] max-h-[500px] overflow-y-auto pr-1">
+      <div class="relative z-50 flex min-w-0 flex-col divide-y divide-black/[0.03] dark:divide-white/[0.03] max-h-[500px] overflow-y-auto p-1">
         {#each providerConnections as conn, idx (conn.id)}
           {@const isFirst = idx === 0}
           {@const isLast = idx === providerConnections.length - 1}
@@ -3340,9 +3340,9 @@
                connection's persisted testStatus; the markup below only renders
                the verdict it returns. -->
           {@const connBadge = badgeFor(status, conn.testStatus, lastErr)}
-          <div class="flex min-w-0 items-stretch">
+          <div class="flex min-w-0 items-stretch py-1">
             <!-- Multi-select checkbox -->
-            <div class="flex shrink-0 items-center pl-1 sm:pl-2">
+            <div class="flex shrink-0 items-center pl-1 sm:pl-2 pr-2.5">
               <input
                 type="checkbox"
                 checked={isSelected}
@@ -3354,11 +3354,11 @@
             <!-- Connection Row Content -->
             <div class="flex-1 min-w-0">
               <div
-                class="group flex min-w-0 flex-col gap-3 rounded-lg p-2 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between {cooldownInfo
+                class="group flex min-w-0 flex-col gap-3 rounded-lg p-2 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between border {cooldownInfo
                   ? cooldownInfo.isExhausted
-                    ? 'ring-1 ring-rose-500/40 bg-rose-500/[0.06]'
-                    : 'ring-1 ring-amber-500/40 bg-amber-500/[0.06]'
-                  : ''}"
+                    ? 'border-rose-500/40 bg-rose-500/[0.05]'
+                    : 'border-amber-500/40 bg-amber-500/[0.05]'
+                  : 'border-transparent'}"
               >
                 <!-- Left info -->
                 <div class="flex min-w-0 flex-1 items-start gap-2 sm:items-center sm:gap-3">

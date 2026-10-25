@@ -646,23 +646,34 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 					break
 				}
 
-				var fwdErr error
 				fwdCtx := ctx
 				if !isStream {
 					fwdCtx = internalproxy.WithZeroContentProbe(ctx, !isLastModel)
 				}
+				fwdCtx, cancelMember := context.WithCancel(fwdCtx)
+				timeoutTimer := time.AfterFunc(comboMemberTimeout, cancelMember)
+				attemptWriter := comboAttemptWriter{ResponseWriter: cw, onCommit: func() { timeoutTimer.Stop() }}
+				var fwdErr error
 				if modelInfo.Provider == "mimo-free" {
 					comboMetrics := &streamMetrics{}
-					fwdErr = h.MimoFreeChat(fwdCtx, cw, upstreamJSON, isStream, comboMetrics)
+					fwdErr = h.MimoFreeChat(fwdCtx, attemptWriter, upstreamJSON, isStream, comboMetrics)
 				} else {
 					fwdErr = h.tryForwardWithConnection(forwardRequestParams{
-						Ctx: fwdCtx, W: cw, Provider: modelInfo.Provider, Model: modelInfo.Model,
+						Ctx: fwdCtx, W: attemptWriter, Provider: modelInfo.Provider, Model: modelInfo.Model,
 						RequestedModel: comboName, ComboName: comboName,
 						ConnectionID: connID, ConnName: connObjName(picked), ConnEmail: connObjEmail(picked),
 						ConnData: connData, Body: upstreamJSON,
 						IsStream: isStream, TranslateResponse: translateResponse,
 						Endpoint: forwardEndpoint(ctx, "/v1/chat/completions"),
 					})
+				}
+				memberTimedOut := errors.Is(fwdCtx.Err(), context.Canceled) && ctx.Err() == nil && !cw.IsCommitted()
+				timeoutTimer.Stop()
+				cancelMember()
+				if memberTimedOut {
+					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", comboMemberTimeout)
+					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, comboMemberTimeout))}
+					break
 				}
 
 				if fwdErr != nil {
@@ -917,14 +928,25 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 				if !isStream {
 					fwdCtx = internalproxy.WithZeroContentProbe(ctx, !isLastModel)
 				}
+				fwdCtx, cancelMember := context.WithCancel(fwdCtx)
+				timeoutTimer := time.AfterFunc(comboMemberTimeout, cancelMember)
+				attemptWriter := comboAttemptWriter{ResponseWriter: cw, onCommit: func() { timeoutTimer.Stop() }}
 				fwdErr := h.tryForwardWithConnection(forwardRequestParams{
-					Ctx: fwdCtx, W: cw, Provider: modelInfo.Provider, Model: modelInfo.Model,
+					Ctx: fwdCtx, W: attemptWriter, Provider: modelInfo.Provider, Model: modelInfo.Model,
 					RequestedModel: comboName, ComboName: comboName,
 					ConnectionID: connID, ConnName: connObjName(picked), ConnEmail: connObjEmail(picked),
 					ConnData: connData, Body: upstreamJSON,
 					IsStream: isStream, TranslateResponse: !translator.IsResponsesClient(ctx),
 					Endpoint: forwardEndpoint(ctx, "/v1/messages"),
 				})
+				memberTimedOut := errors.Is(fwdCtx.Err(), context.Canceled) && ctx.Err() == nil && !cw.IsCommitted()
+				timeoutTimer.Stop()
+				cancelMember()
+				if memberTimedOut {
+					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", comboMemberTimeout)
+					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, comboMemberTimeout))}
+					break
+				}
 
 				if fwdErr != nil {
 					var zcErr *internalproxy.ZeroContentError

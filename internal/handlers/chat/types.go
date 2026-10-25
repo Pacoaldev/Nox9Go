@@ -33,7 +33,7 @@ type ChatHandler struct {
 	// The handler holds it so the metering path can reconcile a TPM
 	// reservation once the real usage is known: the estimate is taken
 	// pre-dispatch, but only the response knows what the turn actually cost.
-RateLimiter   *middleware.RateLimiter
+	RateLimiter   *middleware.RateLimiter
 	SemanticCache *semanticcache.Cache
 	stickyMu      sync.Mutex
 	stickyState   map[string]*comboStickyState
@@ -47,6 +47,8 @@ RateLimiter   *middleware.RateLimiter
 	deprecationMu    sync.Mutex
 	deprecationCache map[string]time.Time
 }
+
+var comboMemberTimeout = 15 * time.Second
 
 // Type aliases for shared types
 type ModelInfo = shared.ModelInfo

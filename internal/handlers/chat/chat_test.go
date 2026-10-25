@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/dbtest"
@@ -1097,6 +1099,67 @@ func TestHandleChatCompletions_ComboFallback(t *testing.T) {
 	}
 	if resp["id"] != "resp-fallback" {
 		t.Errorf("expected response id 'resp-fallback', got '%v'", resp["id"])
+	}
+}
+
+func TestHandleChatCompletions_ComboTimeoutFailsOver(t *testing.T) {
+	oldTimeout := comboMemberTimeout
+	comboMemberTimeout = 40 * time.Millisecond
+	defer func() { comboMemberTimeout = oldTimeout }()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+
+	// Clear pre-seeded connections so only the mocks below can be selected. A
+	// seeded row has no baseUrl, so it would resolve to the real provider URL
+	// and the test would leave the machine.
+	if _, err := database.Exec(`DELETE FROM providerConnections WHERE id IN ('conn-1', 'conn-2')`); err != nil {
+		t.Fatalf("clear seeded connections: %v", err)
+	}
+
+	var slowHits int32
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&slowHits, 1)
+		// Answer only when the gateway aborts this member, or after a bounded
+		// wait, so a missing timeout fails the assertion instead of hanging the
+		// suite (and the server's own Close waits for in-flight handlers).
+		select {
+		case <-r.Context().Done():
+		case <-time.After(400 * time.Millisecond):
+		}
+	}))
+	defer slow.Close()
+
+	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"timeout-fallback","choices":[{"message":{"content":"fallback worked"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
+	}))
+	defer fast.Close()
+
+	for _, item := range []struct{ id, provider, baseURL string }{
+		{"slow-ds", "deepseek", slow.URL}, {"fast-gq", "groq", fast.URL},
+	} {
+		data, _ := json.Marshal(map[string]any{"apiKey": "test-key", "baseUrl": item.baseURL})
+		if _, err := database.Exec(`INSERT INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES (?, ?, 'apikey', ?, 0, 1, ?, '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`, item.id, item.provider, item.id, string(data)); err != nil {
+			t.Fatalf("insert connection %s: %v", item.id, err)
+		}
+	}
+	models, _ := json.Marshal([]string{"deepseek/deepseek-chat", "groq/qwen3-32b"})
+	if _, err := database.Exec(`INSERT INTO combos (id, name, models, createdAt, updatedAt) VALUES ('timeout-combo', 'timeout-combo', ?, '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`, string(models)); err != nil {
+		t.Fatalf("insert combo: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/chat/completions", strings.NewReader(`{"model":"timeout-combo","messages":[{"role":"user","content":"hello"}]}`))
+	rec := httptest.NewRecorder()
+
+	NewChatHandler(db.NewRepo(database)).HandleChatCompletions(rec, req)
+
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "timeout-fallback") {
+		t.Fatalf("response = %d %s, want the next combo member's answer", rec.Code, rec.Body.String())
+	}
+	if hits := atomic.LoadInt32(&slowHits); hits != 1 {
+		t.Fatalf("slow member hits = %d, want 1 (the timeout must not retry other accounts for the same member)", hits)
 	}
 }
 

@@ -15,6 +15,15 @@ const (
 	CavemanUltraID = `Sangat ringkas. Fragment kata saja jika jelas. Hilangkan semua kata sambung yang tidak perlu. Kode dan error tetap persis.`
 )
 
+// Caveman prompt translations for Spanish (Spain, "es").
+const (
+	CavemanLiteES = `Responde de forma muy concisa. Mantén la gramática y las frases completas, pero elimina la cortesía, las vacilaciones y los rellenos (por favor, gracias, claro, por supuesto). Patrón: indica el asunto, la acción y el motivo. Después, el paso siguiente. Bloques de código, rutas de archivo, comandos, errores y URL: consérvalos exactos. Advertencias de seguridad, confirmación de acciones destructivas y secuencias de pasos ordenados: escríbelas de forma normal. Retoma después el estilo conciso. Auto-Clarity: desactiva el estilo conciso ante advertencias de seguridad o riesgo de malinterpretación. Sin emojis decorativos. Sin narrar las llamadas a herramientas. Ve directo al contenido técnico.`
+
+	CavemanFullES = `Responde como un humano prehistórico muy conciso (caveman mode). Toda la sustancia técnica se mantiene exacta; solo se elimina el relleno. Breve, denso, sin palabras de relleno. No uses fórmulas de cortesía al empezar ni al terminar. Ve directo al contenido técnico. Código, rutas de archivo, comandos y errores: intactos y exactos. Advertencias de peligro o seguridad: escríbelas con claridad y normalidad. Conserva el idioma del usuario.`
+
+	CavemanUltraES = `Máxima concisión. Solo fragmentos cuando quede claro. Elimina todas las conjunciones innecesarias. El código y los errores se mantienen exactos.`
+)
+
 // GetCavemanPromptWithLang returns the caveman prompt for the specified level and language.
 func GetCavemanPromptWithLang(level string, lang string) string {
 	if strings.EqualFold(lang, "id") {
@@ -27,6 +36,18 @@ func GetCavemanPromptWithLang(level string, lang string) string {
 			return CavemanFullID
 		default:
 			return CavemanFullID
+		}
+	}
+	if strings.EqualFold(lang, "es") {
+		switch strings.ToLower(level) {
+		case "lite":
+			return CavemanLiteES
+		case "ultra":
+			return CavemanUltraES
+		case "full":
+			return CavemanFullES
+		default:
+			return CavemanFullES
 		}
 	}
 	return GetCavemanPrompt(level)

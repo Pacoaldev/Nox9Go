@@ -18,6 +18,29 @@ func TestCaveman_PromptLanguages(t *testing.T) {
 	}
 }
 
+func TestCaveman_PromptLanguages_Spanish(t *testing.T) {
+	tests := []struct {
+		level   string
+		lang    string
+		wantSub string
+	}{
+		{level: "lite", lang: "es", wantSub: "muy concisa"},
+		{level: "full", lang: "es", wantSub: "humano prehistórico"},
+		{level: "ultra", lang: "es", wantSub: "Máxima concisión"},
+		{level: "full", lang: "ES", wantSub: "humano prehistórico"},
+		{level: "full", lang: "en", wantSub: "terse caveman"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.lang+"/"+tt.level, func(t *testing.T) {
+			got := GetCavemanPromptWithLang(tt.level, tt.lang)
+			if !strings.Contains(got, tt.wantSub) {
+				t.Errorf("GetCavemanPromptWithLang(%q, %q) = %q, want it to contain %q", tt.level, tt.lang, got, tt.wantSub)
+			}
+		})
+	}
+}
+
 func TestCaveman_ShouldBypassCaveman(t *testing.T) {
 	destructive := "Please run rm -rf /var/log/* and restart the server"
 	if !ShouldBypassCaveman(destructive) {
