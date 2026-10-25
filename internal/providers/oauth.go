@@ -40,7 +40,7 @@ type OAuthTokenResponse struct {
 var KnownOAuthConfigs = map[string]OAuthClientConfig{
 	"antigravity": {
 		ClientID:     envOr("ANTIGRAVITY_OAUTH_CLIENT_ID", "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"),
-		ClientSecret: envOr("ANTIGRAVITY_OAUTH_CLIENT_SECRET", "***REMOVED***"),
+		ClientSecret: envOr("ANTIGRAVITY_OAUTH_CLIENT_SECRET", ""),
 		TokenURL:     "https://oauth2.googleapis.com/token",
 	},
 	"xai": {
@@ -60,12 +60,12 @@ var KnownOAuthConfigs = map[string]OAuthClientConfig{
 	},
 	"iflow": {
 		ClientID:     envOr("IFLOW_OAUTH_CLIENT_ID", "10009311001"),
-		ClientSecret: envOr("IFLOW_OAUTH_CLIENT_SECRET", "***REMOVED***"),
+		ClientSecret: envOr("IFLOW_OAUTH_CLIENT_SECRET", ""),
 		TokenURL:     "https://iflow.cn/oauth/token",
 	},
 	"gemini-cli": {
 		ClientID:     envOr("GEMINI_CLI_OAUTH_CLIENT_ID", "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"),
-		ClientSecret: envOr("GEMINI_CLI_OAUTH_CLIENT_SECRET", "***REMOVED***"),
+		ClientSecret: envOr("GEMINI_CLI_OAUTH_CLIENT_SECRET", ""),
 		TokenURL:     "https://oauth2.googleapis.com/token",
 	},
 	"kimi-coding": {

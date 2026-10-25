@@ -343,6 +343,16 @@ No. Node.js y Bun solo son necesarios para compilar el dashboard desde el códig
 
 ---
 
+## Aviso legal / Disclaimer
+
+NOX9GO es un proyecto de software experimental desarrollado para fines de **investigación, interoperabilidad técnica y uso personal privado**.
+
+- El software se proporciona "tal cual" (*as-is*), bajo licencia MIT, sin garantías explícitas ni implícitas de disponibilidad, rendimiento o idoneidad para un fin específico.
+- Cada usuario u operador es el único responsable de asegurar que el uso del software cumpla con los Términos y Condiciones de Servicio (ToS), políticas de uso aceptable y límites contractuales de las APIs y proveedores de terceros con los que decida conectarse.
+- Los desarrolladores y colaboradores de NOX9GO no asumen ninguna responsabilidad por el mal uso, suspensión de cuentas, cargos de facturación o cualquier otra consecuencia derivada del uso de servicios de terceros a través de este gateway.
+
+---
+
 ## Enlaces
 
 - Proyecto original: [9Router](https://github.com/decolua/9router)

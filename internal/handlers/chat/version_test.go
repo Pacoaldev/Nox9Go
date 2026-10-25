@@ -121,6 +121,39 @@ func TestHandleCheckUpdate_Mock(t *testing.T) {
 	}
 }
 
+// When the remote update channel is unconfigured, unreachable, or 404, the
+// endpoint falls back to cached info with HTTP 200 rather than returning a 502
+// that fills browser devtools with errors on every dashboard open.
+func TestHandleCheckUpdate_FallbackOnFailure(t *testing.T) {
+	updater.ResetCache()
+	defer updater.ResetCache()
+
+	os.Setenv("UPDATE_URL", "http://127.0.0.1:0/unreachable")
+	defer os.Unsetenv("UPDATE_URL")
+	os.Setenv("UPDATE_REPO", "")
+	defer os.Unsetenv("UPDATE_REPO")
+
+	handler := NewChatHandler(nil, nil)
+	req := httptest.NewRequest("GET", "/api/version/check", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleCheckUpdate(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 fallback, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var info updater.UpdateInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatalf("unmarshal fallback: %v", err)
+	}
+	if info.HasUpdate {
+		t.Errorf("expected HasUpdate=false on fallback, got %v", info)
+	}
+	if info.CurrentVersion == "" {
+		t.Errorf("expected CurrentVersion populated, got %v", info)
+	}
+}
+
 func TestHandleTriggerUpdate_UpToDate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		manifest := map[string]any{

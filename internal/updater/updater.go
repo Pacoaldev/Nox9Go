@@ -93,6 +93,14 @@ func IsAutoUpdateEnabled() bool {
 	return autoUpdateEnabled
 }
 
+// ResetCache clears any cached UpdateInfo (used by tests).
+func ResetCache() {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	cachedInfo = nil
+	lastCheckTime = time.Time{}
+}
+
 // GetCachedInfo returns the latest cached UpdateInfo or a default.
 func GetCachedInfo() *UpdateInfo {
 	cacheMu.RLock()

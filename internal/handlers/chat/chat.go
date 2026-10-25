@@ -476,7 +476,12 @@ func (h *ChatHandler) HandleToggleAutoUpdate(w http.ResponseWriter, r *http.Requ
 func (h *ChatHandler) HandleCheckUpdate(w http.ResponseWriter, r *http.Request) {
 	info, err := updater.CheckUpdate(r.Context())
 	if err != nil {
-		handlerutil.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("check update failed: %v", err))
+		// A private fork or an unreleased repository is not broken: returning
+		// HTTP 502 fills the browser console with error noise on every dashboard
+		// open. Fall back to the cached / local version info with HasUpdate=false
+		// so the UI receives a valid 200 payload.
+		log.Debug("updater", "remote update check failed, using cached info", "error", err)
+		handlerutil.WriteJSON(w, http.StatusOK, updater.GetCachedInfo())
 		return
 	}
 	handlerutil.WriteJSON(w, http.StatusOK, info)
