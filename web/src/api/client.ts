@@ -1173,8 +1173,9 @@ export function normalizeConnection(c: ProviderConnection): ProviderConnection {
 }
 
 export interface AlertDetail {
-  connectionId: string
-  connectionName: string
+  connectionId?: string
+  connectionName?: string
+  scope?: 'provider-model'
   provider: string
   alertType: 'lock' | 'error'
   message: string
@@ -1196,6 +1197,7 @@ export interface AlertsResponse {
     locked: number
     errored: number
     modelLock: number
+    providerLock?: number
   }
   generatedAt: string
 }

@@ -15,6 +15,7 @@ import (
 type alertEntry struct {
 	ConnectionID   string `json:"connectionId"`
 	ConnectionName string `json:"connectionName"`
+	Scope          string `json:"scope"`
 	Provider       string `json:"provider"`
 	AlertType      string `json:"alertType"`
 	Message        string `json:"message"`
@@ -31,10 +32,11 @@ type alertEntry struct {
 type alertsPayload struct {
 	Alerts      []alertEntry `json:"alerts"`
 	Counts      struct {
-		Total     int `json:"total"`
-		Locked    int `json:"locked"`
-		Errored   int `json:"errored"`
-		ModelLock int `json:"modelLock"`
+		Total        int `json:"total"`
+		Locked       int `json:"locked"`
+		Errored      int `json:"errored"`
+		ModelLock    int `json:"modelLock"`
+		ProviderLock int `json:"providerLock"`
 	} `json:"counts"`
 	GeneratedAt string `json:"generatedAt"`
 }
@@ -43,6 +45,17 @@ type alertsPayload struct {
 func findAlert(payload alertsPayload, connectionID string) (alertEntry, bool) {
 	for _, a := range payload.Alerts {
 		if a.ConnectionID == connectionID {
+			return a, true
+		}
+	}
+	return alertEntry{}, false
+}
+
+// findScopeAlert returns the alert recorded for one alert scope, keyed by the
+// provider it names, so a pair-level alert with no connection can be found.
+func findScopeAlert(payload alertsPayload, scope, provider string) (alertEntry, bool) {
+	for _, a := range payload.Alerts {
+		if a.Scope == scope && a.Provider == provider {
 			return a, true
 		}
 	}
@@ -98,6 +111,17 @@ func TestHandleAlerts(t *testing.T) {
 		t.Fatalf("create unsupported connection: %v", err)
 	}
 
+	// A provider-model lockout has no connection row: the quota is spent for
+	// every key of the pair, so it is reported once, at pair scope.
+	pairUntil := time.Now().Add(20 * time.Minute).UTC()
+	if err := repo.LockProviderModel("nvidia", "nemotron-4-340b", pairUntil, "quota_exhausted", 429); err != nil {
+		t.Fatalf("lock provider model: %v", err)
+	}
+	// An expired pair lockout is not an alert.
+	if err := repo.LockProviderModel("chutes", "deepseek-r1", time.Now().Add(-time.Minute).UTC(), "quota_exhausted", 429); err != nil {
+		t.Fatalf("lock expired provider model: %v", err)
+	}
+
 	r := chi.NewRouter()
 	RegisterRoutes(r, NewDashboardHandler(repo))
 
@@ -114,14 +138,17 @@ func TestHandleAlerts(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 
-	if payload.Counts.Total != 3 {
-		t.Errorf("counts.total = %d, want 3 (one lock, one model lock, one error)", payload.Counts.Total)
+	if payload.Counts.Total != 4 {
+		t.Errorf("counts.total = %d, want 4 (one lock, one model lock, one error, one pair lock)", payload.Counts.Total)
 	}
-	if payload.Counts.Locked != 1 {
-		t.Errorf("counts.locked = %d, want 1", payload.Counts.Locked)
+	if payload.Counts.Locked != 2 {
+		t.Errorf("counts.locked = %d, want 2 (account cooldown plus pair lockout)", payload.Counts.Locked)
 	}
 	if payload.Counts.ModelLock != 1 {
 		t.Errorf("counts.modelLock = %d, want 1", payload.Counts.ModelLock)
+	}
+	if payload.Counts.ProviderLock != 1 {
+		t.Errorf("counts.providerLock = %d, want 1", payload.Counts.ProviderLock)
 	}
 	if payload.Counts.Errored != 1 {
 		t.Errorf("counts.errored = %d, want 1", payload.Counts.Errored)
@@ -196,6 +223,32 @@ func TestHandleAlerts(t *testing.T) {
 		if _, ok := findAlert(payload, id); ok {
 			t.Errorf("%s reported an alert, want none", id)
 		}
+	}
+
+	// The pair lockout is reported once, at pair scope, naming the model and
+	// the deadline the operator can act on.
+	pair, ok := findScopeAlert(payload, "provider-model", "nvidia")
+	if !ok {
+		t.Fatal("nvidia did not report a provider-model alert")
+	}
+	if pair.ConnectionID != "" {
+		t.Errorf("pair alert connectionId = %q, want empty (the lock is not tied to a key)", pair.ConnectionID)
+	}
+	if pair.Model != "nemotron-4-340b" {
+		t.Errorf("pair alert model = %q, want nemotron-4-340b", pair.Model)
+	}
+	if pair.AlertType != "lock" {
+		t.Errorf("pair alert type = %q, want lock", pair.AlertType)
+	}
+	if pair.Status != 429 {
+		t.Errorf("pair alert status = %d, want 429", pair.Status)
+	}
+	if pair.RateLimitedAt != pairUntil.Format(time.RFC3339) {
+		t.Errorf("pair alert rateLimitedAt = %q, want %q", pair.RateLimitedAt, pairUntil.Format(time.RFC3339))
+	}
+	// The expired pair lockout must stay silent.
+	if _, ok := findScopeAlert(payload, "provider-model", "chutes"); ok {
+		t.Error("an expired provider-model lockout reported an alert, want none")
 	}
 }
 

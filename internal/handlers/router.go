@@ -225,6 +225,11 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 
 	// Top-bar and semaphore status snapshot
 	r.Get("/api/dashboard/status", dashH.HandleStatus)
+	// The alert bell's detail list. It lives here as well as in
+	// dashboard.RegisterRoutes for the same reason the node-limit pair does:
+	// that table is mounted by tests only, so a route registered there alone
+	// answers 200 in a unit test and 404s on the real server.
+	r.Get("/api/dashboard/alerts", dashH.HandleAlerts)
 
 	r.Get("/api/provider-nodes", dashH.HandleGetProviderNodes)
 	r.Post("/api/provider-nodes", dashH.HandleCreateProviderNode)

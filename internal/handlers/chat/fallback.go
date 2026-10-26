@@ -87,6 +87,17 @@ func (h *ChatHandler) handleAccountFallback(
 		return fmt.Errorf("provider %s/%s is unhealthy", provider, model)
 	}
 
+	// A parked pair is out as a unit: the quota is spent for every key of
+	// this provider, so no connection of it may serve this model until the
+	// deadline passes. A probe is exempt — it exists to learn whether the
+	// provider answers at all.
+	if !handlerutil.IsProbeContext(ctx) {
+		if until, locked := h.providerModelLocked(provider, model); locked {
+			log.Warn("fallback", "skip locked provider-model", "provider", provider, "model", model, "until", until.Format(time.RFC3339))
+			return fmt.Errorf("provider %s/%s is in quota lockout until %s", provider, model, until.UTC().Format(time.RFC3339))
+		}
+	}
+
 	observ.IncFallback(provider, model, observ.FallbackReasonUnhealthy)
 
 	allConns, err := h.Repo.GetProviderConnections(provider, true)
@@ -262,6 +273,17 @@ func (h *ChatHandler) handleAccountFallback(
 				"lockKey", lockKey, "status", ue.StatusCode, "cooldown_s", cooldownSec,
 			}, connIdentityKV(connObj)...)...)
 			excludeIDs = append(excludeIDs, connObj.ID)
+			// A spent quota is a fact about the (provider, model) pair, not
+			// about the credential: every key of this provider answers the
+			// same way, so the remaining accounts must not be walked. Park the
+			// pair and stop the failover here. The per-connection cooldown
+			// written above keeps its own meaning — it is the connection that
+			// failed — while the pair lockout is the wider scope.
+			if isProviderModelLockout(provider, ue.StatusCode, ue.Body) {
+				h.recordProviderModelLockout(ctx, provider, model, connObj.ID, ue)
+				lastErr = ue
+				break
+			}
 			continue
 		}
 		return lastErr
@@ -970,6 +992,11 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 		}
 		if lockKey != model {
 			_ = h.Repo.UnlockConnectionModel(connectionID, model)
+		}
+		// A served request proves the pair is alive, so the provider+model
+		// lockout is dropped instead of waiting out its deadline.
+		if clearErr := h.Repo.ClearProviderModelLock(provider, lockKey); clearErr != nil {
+			log.Warn("fallback", "provider model lock clear failed", "provider", provider, "model", lockKey, "error", clearErr)
 		}
 		// A served request also clears the account-scoped cooldown, so an
 		// account that recovered is not kept out of rotation until the

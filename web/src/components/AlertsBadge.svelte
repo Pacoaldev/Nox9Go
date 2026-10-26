@@ -125,7 +125,7 @@
 
   /** The name the operator gave the key, or a readable fallback. */
   function keyName(alert: AlertDetail): string {
-    return alert.connectionName || alert.displayName || alert.connectionId
+    return alert.connectionName || alert.displayName || alert.connectionId || '—'
   }
 
   /** The provider's display name, from the dashboard's own catalog. */
@@ -216,7 +216,7 @@
           {/if}
         </div>
       {:else}
-        {#each details.alerts as alert (alert.connectionId + alert.model + alert.alertType + alert.timestamp)}
+        {#each details.alerts as alert ((alert.connectionId || alert.provider) + (alert.model || '') + alert.alertType + alert.timestamp)}
           {@const remaining = remainingLabel(alert)}
           <div class="px-3.5 py-2.5 border-b border-border-subtle last:border-b-0">
             <div class="flex items-start gap-2">
@@ -233,10 +233,17 @@
                     {providerName(alert)}
                   </span>
                   <span class="text-[10px] text-text-subtle">·</span>
-                  <span class="text-[11px] text-text-muted">API KEY:</span>
-                  <span class="text-[11px] font-mono text-text-main truncate">
-                    {keyName(alert)}
-                  </span>
+                  {#if alert.scope === 'provider-model'}
+                    <span class="text-[11px] text-text-muted">MODELO:</span>
+                    <span class="text-[11px] font-mono text-text-main truncate">
+                      {alert.model || '—'}
+                    </span>
+                  {:else}
+                    <span class="text-[11px] text-text-muted">API KEY:</span>
+                    <span class="text-[11px] font-mono text-text-main truncate">
+                      {keyName(alert)}
+                    </span>
+                  {/if}
                 </div>
 
                 <div class="text-[11px] text-text-muted mt-0.5 break-words">

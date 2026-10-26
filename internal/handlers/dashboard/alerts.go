@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlerutil"
 )
 
@@ -16,10 +17,11 @@ const modelLockPrefix = "modelLock_"
 
 // AlertCounts is the tally of the alerts in one answer.
 type AlertCounts struct {
-	Total     int `json:"total"`
-	Locked    int `json:"locked"`
-	Errored   int `json:"errored"`
-	ModelLock int `json:"modelLock"`
+	Total        int `json:"total"`
+	Locked       int `json:"locked"`
+	Errored      int `json:"errored"`
+	ModelLock    int `json:"modelLock"`
+	ProviderLock int `json:"providerLock"`
 }
 
 // AlertDetail is one parked or failing connection, with the context the
@@ -31,6 +33,7 @@ type AlertCounts struct {
 // here is how the two catalogs drift apart.
 type AlertDetail struct {
 	ConnectionID   string `json:"connectionId"`
+	Scope          string `json:"scope,omitempty"` // "provider-model" for a pair lockout without a connection
 	ConnectionName string `json:"connectionName"`
 	Provider       string `json:"provider"`
 	AlertType      string `json:"alertType"` // "lock" | "error"
@@ -184,7 +187,37 @@ func (h *DashboardHandler) connectionAlerts(now time.Time) ([]AlertDetail, Alert
 		counts.Total++
 	}
 
+	// Provider-model lockouts have no connection row by design: the quota is
+	// shared across every key in the pair, so report one pair-level alert.
+	if locks, err := h.Repo.ListProviderModelLocks(); err == nil {
+		for _, lock := range locks {
+			if !lock.LockedUntil.After(now) {
+				continue
+			}
+			alerts = append(alerts, AlertDetail{
+				Provider:      lock.Provider,
+				AlertType:     "lock",
+				Scope:         "provider-model",
+				Message:       providerModelLockMessage(lock),
+				Status:        lock.Status,
+				Model:         lock.Model,
+				Timestamp:     lock.LockedUntil.UTC().Format(time.RFC3339),
+				RateLimitedAt: lock.LockedUntil.UTC().Format(time.RFC3339),
+			})
+			counts.ProviderLock++
+			counts.Locked++
+			counts.Total++
+		}
+	}
+
 	return alerts, counts
+}
+
+func providerModelLockMessage(lock db.ProviderModelLock) string {
+	if lock.Reason == "quota_exhausted" {
+		return "Provider-model quota lockout"
+	}
+	return "Provider-model lockout"
 }
 
 // alertErrorMessage reads the message the upstream produced, falling back to

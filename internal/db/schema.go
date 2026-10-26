@@ -301,6 +301,12 @@ func coreSchema() []tableDef {
 				"CREATE INDEX IF NOT EXISTS idx_sce_stored ON semanticCacheEntries(storedAt)",
 			},
 		},
+		// providerModelLocks parks a (provider, model) pair whose quota is
+		// spent. It is a fork-local table: the upstream Next.js dashboard
+		// does not know it and ignores it, exactly like upstream_leases.
+		// The per-connection modelLock_* fields stay where they are, so the
+		// shared dashboard keeps reading them unchanged.
+		providerModelLocksTable,
 	}
 }
 

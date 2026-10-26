@@ -149,6 +149,16 @@ func connectionAlertCount(repo *db.Repo) (alerts, locked int) {
 			alerts++
 		}
 	}
+
+	// Provider-model lockouts are the other reason a turn is refused.
+	if locks, err := repo.ListProviderModelLocks(); err == nil {
+		for _, lock := range locks {
+			if lock.LockedUntil.After(now) {
+				locked++
+			}
+		}
+	}
+
 	return alerts, locked
 }
 

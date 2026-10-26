@@ -264,7 +264,7 @@ func (h *ChatHandler) getBestConnectionWithContext(ctx context.Context, provider
 		// enable/disable toggle a no-op for every pinned request.
 		ineligible, reason := h.pinnedConnectionIneligible(conn, excludeIDs, model)
 		if ineligible && isProbe && conn.IsActive == 1 && !slices.Contains(excludeIDs, conn.ID) {
-			if strings.HasPrefix(reason, "account cooldown") || strings.HasPrefix(reason, "model lock") || reason == "quota cache" {
+			if strings.HasPrefix(reason, "account cooldown") || strings.HasPrefix(reason, "model lock") || strings.HasPrefix(reason, "provider model lockout") || reason == "quota cache" {
 				// Probes bypass cooldown / locks to test actual upstream reachability,
 				// but must still honor model enablement, disabled accounts, and strict assignment.
 				ineligible = false
@@ -420,6 +420,13 @@ func (h *ChatHandler) getBestConnectionWithContext(ctx context.Context, provider
 					"no available connections for provider: %s (all in cooldown, earliest reset %s)",
 					provider, cooldownUntil.UTC().Format(time.RFC3339))
 			}
+			// A parked pair is the other reason no candidate answered: say so
+			// with its deadline, because the operator can act on that one.
+			if until, locked := h.providerModelLocked(provider, model); locked {
+				return nil, nil, fmt.Errorf(
+					"no available connections for provider: %s (model %s is in quota lockout until %s)",
+					provider, model, until.UTC().Format(time.RFC3339))
+			}
 			return nil, nil, fmt.Errorf("no available connections for provider: %s (all excluded)", provider)
 		}
 	}
@@ -464,12 +471,20 @@ func (h *ChatHandler) getBestConnectionWithContext(ctx context.Context, provider
 }
 
 // connectionModelBlocked reports whether a connection is parked for this
-// specific model — an active per-model lock or a provider quota cache. An
-// empty model means nothing model-scoped applies (upstream parity: the lock
-// filter only runs for a model-bearing request).
+// specific model — an active per-model lock, a provider quota cache, or an
+// active provider+model lockout. An empty model means nothing model-scoped
+// applies (upstream parity: the lock filter only runs for a model-bearing
+// request).
+//
+// The provider+model lockout is the wider of the two scopes: the quota is
+// spent for every key of that provider, so no connection of it may serve that
+// model until the deadline passes.
 func (h *ChatHandler) connectionModelBlocked(c *models.ProviderConnection, provider, model string) bool {
 	if model == "" {
 		return false
+	}
+	if _, locked := h.providerModelLocked(provider, model); locked {
+		return true
 	}
 	lockKey := canonicalLockModel(provider, model)
 	if locked, _ := h.Repo.IsConnectionModelLocked(c.ID, lockKey); locked {
@@ -524,6 +539,11 @@ func (h *ChatHandler) pinnedConnectionIneligible(conn *models.ProviderConnection
 	}
 	if model == "" {
 		return false, ""
+	}
+	// A parked pair is refused for a pinned connection too: the quota is
+	// spent for every key of the provider, so the pin cannot buy a way in.
+	if _, locked := h.providerModelLocked(conn.Provider, model); locked {
+		return true, "provider model lockout"
 	}
 	lockKey := canonicalLockModel(conn.Provider, model)
 	if locked, _ := h.Repo.IsConnectionModelLocked(conn.ID, lockKey); locked {

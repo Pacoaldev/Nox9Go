@@ -581,6 +581,17 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 				continue
 			}
 
+			// Skip a parked pair whole: the quota is spent for every key of
+			// that provider, so dialling another one only burns the failback
+			// pool. The next combo member serves the turn instead.
+			if until, locked := h.providerModelLocked(modelInfo.Provider, modelInfo.Model); locked {
+				log.Warn("combo", "skip locked provider-model", "provider", modelInfo.Provider, "model", modelInfo.Model, "until", until.Format(time.RFC3339))
+				if lastErr == nil {
+					lastErr = &upstreamError{StatusCode: http.StatusTooManyRequests, Body: providerModelLockedBody(modelInfo.Provider, modelInfo.Model, until)}
+				}
+				continue
+			}
+
 			var entrySuccess bool
 			// Try up to 10 connections for this model entry
 			for connAttempt := 0; connAttempt < 10; connAttempt++ {
@@ -750,8 +761,21 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 							lastErr = ue
 							break
 						}
+						// A spent quota is a fact about the pair, not about the
+						// credential: every other key of this provider answers
+						// the same way, so the pool must not be walked. Park the
+						// pair and move to the next combo member. The
+						// per-connection cooldown above keeps its own meaning —
+						// it is the connection that failed — while the pair
+						// lockout is the wider scope.
 						if providers.RetryableStatusCodes[ue.StatusCode] {
 							h.comboLockRetryable(ctx, &excludeIDs, connID, modelInfo.Provider, modelInfo.Model, ue)
+						}
+						if isProviderModelLockout(modelInfo.Provider, ue.StatusCode, ue.Body) {
+							h.recordProviderModelLockout(ctx, modelInfo.Provider, modelInfo.Model, connID, ue)
+							retry.note(ue)
+							lastErr = ue
+							break
 						}
 						if ue.StatusCode == http.StatusServiceUnavailable || ue.StatusCode == http.StatusBadGateway || ue.StatusCode == http.StatusGatewayTimeout {
 							// In combo loops, fail over immediately to the next connection/model without blocking the client turn
@@ -863,6 +887,17 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 				log.Warn("combo", "skip unhealthy", "provider", modelInfo.Provider, "model", modelInfo.Model)
 				if lastErr == nil {
 					lastErr = &upstreamError{StatusCode: http.StatusTooManyRequests, Body: []byte(`{"error":{"message":"all connections for this provider are rate-limited","type":"rate_limit_error","code":429}}`)}
+				}
+				continue
+			}
+
+			// Skip a parked pair whole: the quota is spent for every key of
+			// that provider, so dialling another one only burns the failback
+			// pool. The next combo member serves the turn instead.
+			if until, locked := h.providerModelLocked(modelInfo.Provider, modelInfo.Model); locked {
+				log.Warn("combo", "skip locked provider-model", "provider", modelInfo.Provider, "model", modelInfo.Model, "until", until.Format(time.RFC3339))
+				if lastErr == nil {
+					lastErr = &upstreamError{StatusCode: http.StatusTooManyRequests, Body: providerModelLockedBody(modelInfo.Provider, modelInfo.Model, until)}
 				}
 				continue
 			}
@@ -1013,8 +1048,21 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 							lastErr = ue
 							break
 						}
+						// A spent quota is a fact about the pair, not about the
+						// credential: every other key of this provider answers
+						// the same way, so the pool must not be walked. Park the
+						// pair and move to the next combo member. The
+						// per-connection cooldown above keeps its own meaning —
+						// it is the connection that failed — while the pair
+						// lockout is the wider scope.
 						if providers.RetryableStatusCodes[ue.StatusCode] {
 							h.comboLockRetryable(ctx, &excludeIDs, connID, modelInfo.Provider, modelInfo.Model, ue)
+						}
+						if isProviderModelLockout(modelInfo.Provider, ue.StatusCode, ue.Body) {
+							h.recordProviderModelLockout(ctx, modelInfo.Provider, modelInfo.Model, connID, ue)
+							retry.note(ue)
+							lastErr = ue
+							break
 						}
 						if ue.StatusCode == http.StatusServiceUnavailable || ue.StatusCode == http.StatusBadGateway || ue.StatusCode == http.StatusGatewayTimeout {
 							// In combo loops, fail over immediately to the next connection/model without blocking the client turn
