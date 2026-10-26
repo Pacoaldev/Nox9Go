@@ -31,6 +31,40 @@ var channelMarkerRegex = regexp.MustCompile(`(?i)you are claude code|claude.?cod
 
 var codebuddyRateLimitRegex = regexp.MustCompile(`(?i)超出频率限制|frequency limit|限额`)
 
+// codebuddyChannelGateRegex matches the channel-verification variants of code
+// 11128. The code is overloaded upstream: it also carries "first message is not
+// system prompt", a body-shape problem, so the message decides and never the
+// code alone.
+var codebuddyChannelGateRegex = regexp.MustCompile(`(?i)conversation id missing|request illegal`)
+
+// readHeaderCI reads a header by name case-insensitively. Header names are
+// case-insensitive on the wire and Go canonicalizes them when they are written
+// to the request, so a caller's "x-conversation-id" and a generated
+// "X-Conversation-ID" are one header: whichever is set last wins and the other
+// is silently lost. Finding the caller's key first is what keeps its id.
+func readHeaderCI(headers map[string]string, name string) string {
+	if headers == nil {
+		return ""
+	}
+	for k, v := range headers {
+		if strings.EqualFold(k, name) {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+// writeHeaderCI stores a header under its canonical name, dropping a
+// differently-cased key that would otherwise be a duplicate.
+func writeHeaderCI(headers map[string]string, name, value string) {
+	for k := range headers {
+		if k != name && strings.EqualFold(k, name) {
+			delete(headers, k)
+		}
+	}
+	headers[name] = value
+}
+
 // ForwardCodebuddyCN forwards to Tencent CodeBuddy with force-stream
 // and reasoning_summary injection.
 //
@@ -59,9 +93,16 @@ func ForwardCodebuddyCN(w http.ResponseWriter, req *Request) error {
 		delete(merged, "x-requested-with")
 		delete(merged, "x-codebuddy-request")
 
-		for k, v := range codebuddyHeaders(req, cfg, body) {
+		generated := codebuddyHeaders(req, cfg, body)
+		for k, v := range generated {
+			if codebuddyIsConversationIdentityHeader(k) {
+				continue
+			}
 			merged[k] = v
 		}
+		// The conversation identity belongs to the caller when it already sent
+		// one; the generated ids fill only what is absent.
+		mergeCodebuddyConversationHeaders(merged, generated)
 		cfgCopy := *cfg
 		cfgCopy.StaticHeaders = merged
 		cfg = &cfgCopy
@@ -70,6 +111,9 @@ func ForwardCodebuddyCN(w http.ResponseWriter, req *Request) error {
 	// Always forward as stream — CodeBuddy rejects stream=false
 	resp, err := proxy.ForwardOpenAI(ctx, req.Client, cfg, req.APIKey, body, true)
 	if err != nil {
+		if msg, ok := codebuddyChannelGateMessage(upstreamErrorBody(err)); ok {
+			return proxy.UpstreamFailure(http.StatusBadRequest, msg)
+		}
 		var ue *proxy.UpstreamError
 		if errors.As(err, &ue) && isCodebuddyRateLimit(ue.Body) {
 			ue.StatusCode = http.StatusTooManyRequests
@@ -277,8 +321,17 @@ func codebuddyHeaders(req *Request, cfg *providers.ProviderConfig, body []byte) 
 			sessionKey = m
 		}
 	}
+	// The identifiers the client already tracks — `session_id`,
+	// `prompt_cache_key`, `conversation_id` — keep a conversation's id stable
+	// even when the client sends no session header. The opening message is the
+	// last resort: two different conversations that start with the same words
+	// would otherwise share one id.
+	bodyKey, bodyUserText := codebuddyBodyKeys(body)
 	if sessionKey == "" {
-		sessionKey = firstUserText(body)
+		sessionKey = bodyKey
+	}
+	if sessionKey == "" {
+		sessionKey = bodyUserText
 	}
 	var convID string
 	if sessionKey != "" {
@@ -330,6 +383,101 @@ func codebuddyConversationHeaders(req *Request, body []byte) map[string]string {
 	return codebuddyHeaders(req, nil, body)
 }
 
+// codebuddyConversationHeaderNames are the identity headers the gateway's
+// channel verification demands, in the order the official client sends them.
+var codebuddyConversationHeaderNames = []string{
+	"X-Conversation-ID",
+	"X-Conversation-Request-ID",
+	"X-Conversation-Message-ID",
+	"X-Request-ID",
+}
+
+// codebuddyIsConversationIdentityHeader reports whether name belongs to the
+// caller-owned conversation identity family. Those are merged separately, so a
+// caller tracking its own conversation keeps it.
+func codebuddyIsConversationIdentityHeader(name string) bool {
+	for _, n := range codebuddyConversationHeaderNames {
+		if strings.EqualFold(n, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// upstreamErrorBody returns the response body an upstream failure carries, or
+// nil when the error did not come from a response.
+func upstreamErrorBody(err error) []byte {
+	var ue *proxy.UpstreamError
+	if errors.As(err, &ue) {
+		return ue.Body
+	}
+	return nil
+}
+
+// mergeCodebuddyConversationHeaders writes the generated identity headers into
+// merged without discarding what the caller already sent. A connection whose
+// stored headers carry `X-Conversation-ID` is tracking its own conversation,
+// and overwriting it would restart that conversation on every turn.
+//
+// Matching is case-insensitive and the canonical casing is restored, so the
+// caller's value is found before anything writes over it.
+//
+// `X-Conversation-Message-ID` and `X-Request-ID` mirror each other, so when the
+// caller supplied only one of them both are filled from it.
+func mergeCodebuddyConversationHeaders(merged, generated map[string]string) {
+	messageID := readHeaderCI(merged, "X-Conversation-Message-ID")
+	if messageID == "" {
+		messageID = readHeaderCI(merged, "X-Request-ID")
+	}
+	if messageID == "" {
+		messageID = generated["X-Conversation-Message-ID"]
+	}
+
+	for _, name := range codebuddyConversationHeaderNames {
+		value := readHeaderCI(merged, name)
+		if value == "" {
+			switch name {
+			case "X-Conversation-Message-ID", "X-Request-ID":
+				value = messageID
+			default:
+				value = generated[name]
+			}
+		}
+		writeHeaderCI(merged, name, value)
+	}
+}
+
+// codebuddyChannelGateMessage recognises the channel-verification variants of
+// code 11128 and returns a message naming the cause. The code alone cannot
+// decide: it also carries "first message is not system prompt", a body-shape
+// problem, so a caller branching on the code would report the wrong fix.
+func codebuddyChannelGateMessage(body []byte) (string, bool) {
+	var data struct {
+		Code        int    `json:"code"`
+		Msg         string `json:"msg"`
+		DisplayTips struct {
+			En string `json:"en"`
+		} `json:"displayTips"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil || data.Code != 11128 {
+		return "", false
+	}
+	if !codebuddyChannelGateRegex.MatchString(data.Msg) {
+		return "", false
+	}
+	variant := "request illegal"
+	if strings.Contains(strings.ToLower(data.Msg), "conversation id missing") {
+		variant = "conversation id missing"
+	}
+	msg := "CodeBuddy channel verification failed (11128 \"" + variant + "\"): the upstream " +
+		"gateway requires the X-Conversation-* header family the official IDE sends, which this " +
+		"executor supplies. If this appears the gate changed, e.g. a new required header."
+	if data.DisplayTips.En != "" {
+		msg += " Upstream said: " + data.DisplayTips.En
+	}
+	return msg, true
+}
+
 // stableConversationUUID derives an RFC-4122-v5-shaped UUID from key via
 // SHA-1, matching the JS executor's derivation so the same session key maps
 // to the same conversation id across implementations.
@@ -349,10 +497,29 @@ func stableConversationUUID(key string) string {
 // firstUserText extracts the opening user message text from an OpenAI-shaped
 // body (string or typed blocks) to use as a conversation-key fallback.
 func firstUserText(body []byte) string {
+	_, userText := codebuddyBodyKeys(body)
+	return userText
+}
+
+// codebuddyBodyKeys extracts, in one parse, the identifiers the request body
+// already carries: the conversation key (`session_id`, then
+// `prompt_cache_key`, then `conversation_id`) and the opening user message.
+// The key comes from the body because that is what the official client sends;
+// only when the body carries none does the caller fall back to the message
+// text, which is weaker — two conversations opened with the same words map to
+// one id. Parsing once keeps this off the allocation path of a hot request.
+func codebuddyBodyKeys(body []byte) (key, userText string) {
 	var reqMap map[string]any
 	if err := json.Unmarshal(body, &reqMap); err != nil {
-		return ""
+		return "", ""
 	}
+	for _, name := range []string{"session_id", "prompt_cache_key", "conversation_id"} {
+		if v, ok := reqMap[name].(string); ok && v != "" {
+			key = v
+			break
+		}
+	}
+
 	msgs, _ := reqMap["messages"].([]any)
 	for _, raw := range msgs {
 		m, ok := raw.(map[string]any)
@@ -365,7 +532,7 @@ func firstUserText(body []byte) string {
 		}
 		switch content := m["content"].(type) {
 		case string:
-			return content
+			return key, content
 		case []any:
 			var sb strings.Builder
 			for _, blk := range content {
@@ -375,11 +542,11 @@ func firstUserText(body []byte) string {
 					}
 				}
 			}
-			return sb.String()
+			return key, sb.String()
 		}
-		return ""
+		return key, ""
 	}
-	return ""
+	return key, ""
 }
 
 // sseToOpenAIJSON re-aggregates OpenAI chat-completions SSE chunks into a

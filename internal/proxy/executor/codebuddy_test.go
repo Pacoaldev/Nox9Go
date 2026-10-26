@@ -528,3 +528,157 @@ func TestForwardCodebuddyCN_RateLimitMapping(t *testing.T) {
 		t.Errorf("expected mapped StatusCode = 429, got %d", ue.StatusCode)
 	}
 }
+
+// TestForwardCodebuddyCN_PreservesCallerConversationIdentity pins that a
+// connection which already sends its own X-Conversation-ID keeps it.
+//
+// The header arrives once, with the caller's value. Go canonicalizes header
+// names, so a differently-cased caller key and the generated header are the
+// same one: whichever is written last wins, and on the pre-fix code that was
+// the generated id — the caller's conversation was silently restarted.
+func TestForwardCodebuddyCN_PreservesCallerConversationIdentity(t *testing.T) {
+	ts, capturedReq := newCodebuddyCaptureServer(t)
+	defer ts.Close()
+
+	cfg := &providers.ProviderConfig{
+		BaseURL: ts.URL,
+		StaticHeaders: map[string]string{
+			"x-conversation-id": "caller-conv",
+		},
+	}
+	rec := httptest.NewRecorder()
+	req := &Request{
+		Ctx:    context.Background(),
+		Client: ts.Client(),
+		Config: cfg,
+		APIKey: "tok",
+		Body:   []byte(`{"messages":[{"role":"user","content":"hi"}]}`),
+	}
+
+	if err := ForwardCodebuddyCN(rec, req); err != nil {
+		t.Fatalf("ForwardCodebuddyCN returned error: %v", err)
+	}
+	if got := capturedReq().Header.Values("X-Conversation-ID"); len(got) != 1 || got[0] != "caller-conv" {
+		t.Errorf("X-Conversation-ID = %v, want exactly [caller-conv]", got)
+	}
+	if convReqID := capturedReq().Header.Get("X-Conversation-Request-ID"); len(convReqID) != 32 {
+		t.Errorf("X-Conversation-Request-ID = %q, want a generated 32-char id", convReqID)
+	}
+}
+
+// TestForwardCodebuddyCN_MirrorsCallerRequestID pins the pair the official
+// client mirrors: a caller that tracks X-Request-ID keeps it, and the message
+// id follows it so the two never disagree.
+func TestForwardCodebuddyCN_MirrorsCallerRequestID(t *testing.T) {
+	ts, capturedReq := newCodebuddyCaptureServer(t)
+	defer ts.Close()
+
+	cfg := &providers.ProviderConfig{
+		BaseURL:       ts.URL,
+		StaticHeaders: map[string]string{"X-Request-ID": "caller-req"},
+	}
+	rec := httptest.NewRecorder()
+	req := &Request{
+		Ctx:    context.Background(),
+		Client: ts.Client(),
+		Config: cfg,
+		APIKey: "tok",
+		Body:   []byte(`{"messages":[{"role":"user","content":"hi"}]}`),
+	}
+
+	if err := ForwardCodebuddyCN(rec, req); err != nil {
+		t.Fatalf("ForwardCodebuddyCN returned error: %v", err)
+	}
+	h := capturedReq().Header
+	if got := h.Values("X-Request-ID"); len(got) != 1 || got[0] != "caller-req" {
+		t.Errorf("X-Request-ID = %v, want exactly [caller-req]", got)
+	}
+	if got := h.Get("X-Conversation-Message-ID"); got != "caller-req" {
+		t.Errorf("X-Conversation-Message-ID = %q, want it mirrored from X-Request-ID", got)
+	}
+}
+
+// TestForwardCodebuddyCN_ChannelGateNamesTheCause pins the diagnosis of code
+// 11128. The code is overloaded upstream, so the message is what tells the
+// operator the X-Conversation family is missing rather than leaving a bare 400.
+func TestForwardCodebuddyCN_ChannelGateNamesTheCause(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"code":11128,"msg":"conversation id missing","displayTips":{"en":"send the conversation headers"}}`))
+	}))
+	defer ts.Close()
+
+	rec := httptest.NewRecorder()
+	req := &Request{
+		Ctx:    context.Background(),
+		Client: ts.Client(),
+		Config: &providers.ProviderConfig{BaseURL: ts.URL},
+		APIKey: "tok",
+		Body:   []byte(`{"messages":[{"role":"user","content":"hi"}]}`),
+	}
+
+	err := ForwardCodebuddyCN(rec, req)
+	if err == nil {
+		t.Fatal("expected an error from the 11128 gate")
+	}
+	var ue *proxy.UpstreamError
+	if !errors.As(err, &ue) {
+		t.Fatalf("expected *proxy.UpstreamError, got %T: %v", err, err)
+	}
+	if ue.StatusCode != http.StatusBadRequest {
+		t.Errorf("StatusCode = %d, want 400", ue.StatusCode)
+	}
+	body := string(ue.Body)
+	for _, want := range []string{"channel verification failed", "conversation id missing", "send the conversation headers"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("diagnosis %q does not mention %q", body, want)
+		}
+	}
+}
+
+// TestForwardCodebuddyCN_OverloadedCodeIsNotTheGate pins the other side of the
+// overloaded code: 11128 with the body-shape message must not be reported as a
+// channel-verification failure, because the fix for it is a different one.
+func TestForwardCodebuddyCN_OverloadedCodeIsNotTheGate(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"code":11128,"msg":"first message is not system prompt"}`))
+	}))
+	defer ts.Close()
+
+	rec := httptest.NewRecorder()
+	req := &Request{
+		Ctx:    context.Background(),
+		Client: ts.Client(),
+		Config: &providers.ProviderConfig{BaseURL: ts.URL},
+		APIKey: "tok",
+		Body:   []byte(`{"messages":[{"role":"user","content":"hi"}]}`),
+	}
+
+	err := ForwardCodebuddyCN(rec, req)
+	if err == nil {
+		t.Fatal("expected an error from the upstream 400")
+	}
+	if strings.Contains(err.Error(), "channel verification failed") {
+		t.Errorf("a body-shape 11128 was reported as the channel gate: %v", err)
+	}
+}
+
+// newCodebuddyCaptureServer stands in for the CodeBuddy gateway and exposes the
+// request it received, so a test asserts what actually went on the wire.
+func newCodebuddyCaptureServer(t *testing.T) (*httptest.Server, func() *http.Request) {
+	t.Helper()
+	var captured *http.Request
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("data: {\"id\":\"chatcmpl-wire\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	return ts, func() *http.Request {
+		if captured == nil {
+			t.Fatal("upstream request not captured")
+		}
+		return captured
+	}
+}

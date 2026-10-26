@@ -37,6 +37,8 @@ Personal NOX9GO fork (`Pacoaldev/Nox9Go`). Nothing from upstream release history
 
 ### Providers & proxy
 - **Replayed reasoning fields are stripped for providers with a strict message validator.** Cerebras answered `400 ... property "messages.N.assistant.reasoning_content" is unsupported` for a conversation replayed from a reasoning model; `groq`, `mistral`, `kiro`, `kilocode` and `kilo-gateway` refuse the same fields (`reasoning_content`, `reasoning_details`, `reasoning`). The strip now runs on every forwarded body and on the OpenAI → Kiro `conversationState` translation, not only inside the opencode / DeepSeek / Kimi injection path. Providers that *require* the field are untouched.
+- **CodeBuddy conversation identity follows the caller and the body.** A connection whose stored headers carry its own `X-Conversation-*` ids keeps them instead of being overwritten by a generated set — a differently-cased caller key and the generated header are one header once Go canonicalizes them, so which one survived was decided by map iteration order and the caller's conversation was silently restarted on an unpredictable subset of turns. The conversation key is now also read from the request body (`session_id`, `prompt_cache_key`, `conversation_id`) before falling back to the opening message, so turns whose first line differs stay in one conversation. Code `11128` is reported as the channel-verification failure it is — branched on the message, because the code also carries a body-shape error — instead of surfacing as a bare `400`. *Ported from `decolua/9router` #5217.*
+
 ### Version
 
 - Personal fork version pinned to **1.0.0** (`VERSION`, `version.json`, binary `-ldflags`).

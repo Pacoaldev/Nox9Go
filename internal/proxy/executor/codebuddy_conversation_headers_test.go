@@ -1,6 +1,7 @@
 package executor
 
 import (
+	json "encoding/json/v2"
 	"regexp"
 	"testing"
 
@@ -129,5 +130,82 @@ func TestCodebuddyHeaders_ChannelVerification(t *testing.T) {
 	}
 	if !hex32RE.MatchString(intlHeaders["X-Request-ID"]) {
 		t.Errorf("intl X-Request-ID = %q, want 32 hex chars", intlHeaders["X-Request-ID"])
+	}
+}
+
+// TestCodebuddyConversationHeaders_PrefersTheBodySessionKey pins where the id
+// comes from. The official client identifies a conversation in the body
+// (`session_id`, `prompt_cache_key`, `conversation_id`), so a conversation
+// whose opening message differs still keeps one id; without it the opening
+// text is the only signal and two conversations sharing a first line would
+// collapse into one id.
+func TestCodebuddyConversationHeaders_PrefersTheBodySessionKey(t *testing.T) {
+	tests := []struct {
+		name       string
+		firstBody  string
+		secondBody string
+		wantSameID bool
+	}{
+		{
+			name:       "session_id groups turns whose opening message differs",
+			firstBody:  `{"session_id":"sess-1","messages":[{"role":"user","content":"first"}]}`,
+			secondBody: `{"session_id":"sess-1","messages":[{"role":"user","content":"second"}]}`,
+			wantSameID: true,
+		},
+		{
+			name:       "a different session_id is a different conversation",
+			firstBody:  `{"session_id":"sess-1","messages":[{"role":"user","content":"same"}]}`,
+			secondBody: `{"session_id":"sess-2","messages":[{"role":"user","content":"same"}]}`,
+			wantSameID: false,
+		},
+		{
+			name:       "prompt_cache_key is used when session_id is absent",
+			firstBody:  `{"prompt_cache_key":"cache-1","messages":[{"role":"user","content":"first"}]}`,
+			secondBody: `{"prompt_cache_key":"cache-1","messages":[{"role":"user","content":"second"}]}`,
+			wantSameID: true,
+		},
+		{
+			name:       "conversation_id is used when neither is present",
+			firstBody:  `{"conversation_id":"conv-1","messages":[{"role":"user","content":"first"}]}`,
+			secondBody: `{"conversation_id":"conv-1","messages":[{"role":"user","content":"second"}]}`,
+			wantSameID: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			first := codebuddyConversationHeaders(&Request{}, []byte(tt.firstBody))
+			second := codebuddyConversationHeaders(&Request{}, []byte(tt.secondBody))
+			same := first["X-Conversation-ID"] == second["X-Conversation-ID"]
+			if same != tt.wantSameID {
+				t.Errorf("same conversation id = %v, want %v (%s vs %s)",
+					same, tt.wantSameID, first["X-Conversation-ID"], second["X-Conversation-ID"])
+			}
+		})
+	}
+}
+
+// TestTransformCodebuddyBody_KeepsSessionIdentifiers pins that the identifiers
+// the gateway uses to track a conversation survive the body rewrite. The
+// rewrite rebuilds the message list, so a rewrite that dropped unknown
+// top-level keys would silently break conversation continuity upstream.
+func TestTransformCodebuddyBody_KeepsSessionIdentifiers(t *testing.T) {
+	in := []byte(`{"session_id":"sess-1","prompt_cache_key":"cache-1","conversation_id":"conv-1","messages":[{"role":"user","content":"hi"}]}`)
+	out, err := transformCodebuddyBody(in)
+	if err != nil {
+		t.Fatalf("transformCodebuddyBody: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("unmarshal transformed body: %v", err)
+	}
+	for key, want := range map[string]string{
+		"session_id":       "sess-1",
+		"prompt_cache_key": "cache-1",
+		"conversation_id":  "conv-1",
+	} {
+		if got[key] != want {
+			t.Errorf("%s = %v, want %q", key, got[key], want)
+		}
 	}
 }
