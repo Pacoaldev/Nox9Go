@@ -256,22 +256,54 @@ function merge(a, b) {
 }
 
 function renderMarkdown(rows, stamp) {
-  const head = [
-    "# NOX9GO — Free & API-key providers",
-    "# Sources (upstream, not local):",
-    "#   - decolua/9router            open-sse/providers/registry/*.js",
-    "#   - cheaper-inference/OmniRoute open-sse/config/providers/registry/*/index.ts",
-    "#                                 + config/quality/free-catalog-evidence.json",
-    `# Generated: ${stamp}`,
-    "# Filter: API-key auth only. OAuth-only, web-cookie and localhost providers excluded.",
-    "# Format (TSV): id <TAB> name <TAB> api-base-url <TAB> key-url <TAB> tier <TAB> source",
-    "# tier: free = keyless or verified free tier | free-tier = API key with free quota | api-key = API key required",
+  const sections = [
+    {
+      tier: "free",
+      title: "1. Proveedores 100% Gratuitos (Sin clave / Free)",
+      desc: "Modelos accesibles sin coste o mediante clave pública/anónima.",
+    },
+    {
+      tier: "free-tier",
+      title: "2. Proveedores con Cuota Gratuita (Free Tier)",
+      desc: "Requieren registro y API Key propia, pero disponen de cuota, modelos o saldo gratuito recurrente.",
+    },
+    {
+      tier: "api-key",
+      title: "3. Proveedores Estándar por API Key",
+      desc: "Requieren API Key (pago por uso o saldo comercial).",
+    },
+  ];
+
+  const lines = [
+    "# Catálogo de Proveedores — NOX9GO",
+    "",
+    "> Extraído directamente de los repositorios upstream oficiales:",
+    "> - `decolua/9router` (`open-sse/providers/registry/*.js`)",
+    "> - `cheaper-inference/OmniRoute` (`open-sse/config/providers/registry/*/index.ts` + evidencia)",
+    ">",
+    `> **Total proveedores**: ${rows.length} | **Fecha**: ${stamp}`,
+    "> **Filtro**: Solo autenticación por API Key / HTTP endpoints. Excluidos flujos OAuth, sesiones por cookie y servidores locales.",
     "",
   ];
-  const body = rows.map(
-    (r) => [r.id, r.name, r.base, r.key, r.tier, r.src].join("\t"),
-  );
-  return head.join("\n") + body.join("\n") + "\n";
+
+  for (const s of sections) {
+    const list = rows.filter((r) => r.tier === s.tier);
+    lines.push(`## ${s.title} (${list.length})`);
+    lines.push("");
+    lines.push(s.desc);
+    lines.push("");
+    lines.push("| ID | Nombre | Endpoint API | Registro / API Key | Origen |");
+    lines.push("|---|---|---|---|---|");
+    for (const r of list) {
+      const id = `\`${r.id}\``;
+      const base = r.base ? `\`${r.base}\`` : "-";
+      const key = r.key ? `[Obtener Key](${r.key})` : "-";
+      lines.push(`| ${id} | ${r.name} | ${base} | ${key} | ${r.src} |`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n") + "\n";
 }
 
 // ---------------------------------------------------------------------------
