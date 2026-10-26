@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"nox9go/proxy/internal/envfile"
 	"nox9go/proxy/internal/handlerutil"
 )
 
@@ -34,6 +35,11 @@ type OAuthTokenResponse struct {
 	Scope       string `json:"scope,omitempty"`
 	TokenType   string `json:"token_type,omitempty"`
 }
+
+// The .env export runs here, not in main, because the map below is built at
+// package init and reads os.Getenv: package-level variables initialize in
+// declaration order, so this line lands before KnownOAuthConfigs exists.
+var _ = envfile.Load()
 
 // KnownOAuthConfigs maps provider IDs to their OAuth client configuration for token refresh.
 // Client secrets should be set via environment variables.
