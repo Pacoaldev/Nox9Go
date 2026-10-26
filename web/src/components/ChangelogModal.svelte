@@ -8,6 +8,7 @@
     title = 'Change Log',
     repoUrl = 'https://github.com/Pacoaldev/Nox9Go',
     load,
+    reloadKey = '',
   }: {
     isOpen?: boolean
     onClose?: () => void
@@ -21,6 +22,12 @@
      * that concatenates the notes of every repository that has something new.
      */
     load?: () => Promise<string>
+    /**
+     * Identity of the content being shown. When it changes, the cached markdown
+     * is discarded and the notes are fetched again, so a newer version does not
+     * show the previous release's notes.
+     */
+    reloadKey?: string
   } = $props()
 
   let html = $state('')
@@ -45,6 +52,20 @@
   $effect(() => {
     if (isOpen && !html && !loading) {
       fetchChangelog()
+    }
+  })
+
+  // A new content identity invalidates what was loaded: the modal is reused
+  // across opens, and the previous release's notes are not the current ones.
+  // A plain (non-reactive) tracker so the effect does not depend on what it
+  // writes.
+  let loadedKey = ''
+  $effect(() => {
+    if (!isOpen) return
+    if (reloadKey && loadedKey !== reloadKey) {
+      loadedKey = reloadKey
+      html = ''
+      error = ''
     }
   })
 
@@ -105,9 +126,9 @@
           {/if}
           <button
             type="button"
-            onclick={onClose}
-            class="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
-            aria-label="Close"
+          onclick={onClose}
+          class="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-2 transition-colors cursor-pointer"
+          aria-label="Close"
           >
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>

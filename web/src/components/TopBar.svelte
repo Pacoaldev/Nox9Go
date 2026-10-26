@@ -54,13 +54,65 @@
 
   let upstreamSources = $state<UpstreamSource[]>([])
   let isUpstreamOpen = $state(false)
+  // Sources the user has already opened and seen: { id -> latest version seen }.
+  // Persisted so a reload does not resurface the same update notice; the button
+  // stays hidden until a different, newer version is detected.
+  let seenUpstream = $state<Map<string, string>>(loadSeen())
+  // Snapshot of the sources whose notes the open modal is showing.
+  let upstreamPending = $state<UpstreamSource[]>([])
+  // Identity of those notes: the modal refetches when it changes, so a newer
+  // release does not show the previous one's notes.
+  let upstreamReloadKey = $derived(
+    upstreamPending.map((s) => `${s.id}@${s.latest}`).join(',')
+  )
+
+  function loadSeen(): Map<string, string> {
+    const map = new Map<string, string>()
+    if (typeof window === 'undefined') return map
+    try {
+      const raw = localStorage.getItem('nox9go-upstream-seen')
+      if (raw) {
+        const parsed = JSON.parse(raw) as { id: string; latest: string }[]
+        for (const entry of parsed) map.set(entry.id, entry.latest)
+      }
+    } catch {
+      // ignore corrupt storage
+    }
+    return map
+  }
+
+  function saveSeen(): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(
+        'nox9go-upstream-seen',
+        JSON.stringify([...seenUpstream.entries()].map(([id, latest]) => ({ id, latest })))
+      )
+    } catch {
+      // ignore
+    }
+  }
+
+  function markSeen(sources: UpstreamSource[]): void {
+    // The map is re-created on every change so Svelte 5 sees it: mutating it
+    // in place is not tracked.
+    const next = new Map(seenUpstream)
+    for (const s of sources) next.set(s.id, s.latest)
+    seenUpstream = next
+    saveSeen()
+  }
   // One read per ten minutes at most: the gateway caches the answer for half an
   // hour, and a window focus must not become a poll. GitHub's unauthenticated
   // budget is 60 requests an hour, shared with everything else on this IP.
   let lastUpstreamCheck = 0
   const UPSTREAM_CHECK_INTERVAL_MS = 10 * 60 * 1000
 
-  let upstreamNew = $derived(upstreamSources.filter((s) => s.hasNew))
+  // A source counts as new until the user has actually seen that exact
+  // version. Seeing it hides the button again and puts the dashboard back in
+  // normal mode, waiting for a different version to show up.
+  let upstreamNew = $derived(
+    upstreamSources.filter((s) => s.hasNew && seenUpstream.get(s.id) !== s.latest)
+  )
   // Both unreachable is worth showing as a state, not as silence.
   let upstreamAllFailed = $derived(
     upstreamSources.length > 0 && upstreamNew.length === 0 && upstreamSources.every((s) => s.error),
@@ -81,9 +133,11 @@
 
   // The notes of every repository that has something new, each under its own
   // heading, so one press covers the case where both moved.
+  // Reads the snapshot taken when the alert was opened, not the live list: the
+  // press also marks that version as seen, which empties the live list.
   async function loadUpstreamNotes(): Promise<string> {
     const parts: string[] = []
-    for (const source of upstreamNew) {
+    for (const source of upstreamPending) {
       const notes = await api.getUpstreamChangelog(source.id, source.latest)
       const link = source.releaseUrl ? ` — [${source.repo}](${source.releaseUrl})` : ` — ${source.repo}`
       parts.push(`## ${source.name} · ${source.latest}${link}\n\n${notes}`)
@@ -378,7 +432,11 @@
     {#if upstreamNew.length > 0}
       <button
         type="button"
-        onclick={() => (isUpstreamOpen = true)}
+        onclick={() => {
+          upstreamPending = [...upstreamNew]
+          markSeen(upstreamNew)
+          isUpstreamOpen = true
+        }}
         class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-primary/40 bg-primary/10 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors cursor-pointer"
         title={upstreamNew
           .map((s) => `${s.name}: ${s.baseline || '?'} → ${s.latest}`)
@@ -555,11 +613,13 @@
 
 <!-- Same modal, different source: the notes of whichever tracked repository has
      moved past this build's baseline. No repoUrl, because there are two repos
-     and the assembled markdown names each one. -->
+     and the assembled markdown names each one. The key changes with the
+     versions on offer, so a newer release refetches its notes. -->
 <ChangelogModal
   isOpen={isUpstreamOpen}
   onClose={() => (isUpstreamOpen = false)}
   title="Upstream changes"
   repoUrl=""
   load={loadUpstreamNotes}
+  reloadKey={upstreamReloadKey}
 />
