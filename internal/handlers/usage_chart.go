@@ -248,6 +248,20 @@ func hourlyChartBuckets(repo *db.Repo, start time.Time, count int) []chartBucket
 	return buckets
 }
 
+// dailyBucketDays lists the calendar days a daily window covers, as UTC days
+// ending on the current UTC day. The rollup behind dailyChartBuckets keys
+// a day by its UTC date, so the window has to walk UTC days, not local days.
+func dailyBucketDays(now time.Time, count int) []time.Time {
+	days := make([]time.Time, count)
+	today := now.UTC()
+	for i := range days {
+		// Start from today UTC (midnight) and step backward
+		days[i] = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC).
+			AddDate(0, 0, -(count-1-i))
+	}
+	return days
+}
+
 // dailyChartBuckets builds one bucket per calendar day ending today. Totals
 // come from the usageDaily rollup; the per-family split comes from a range
 // scan of usageHistory over the same window (the rollup carries only totals).
@@ -274,9 +288,9 @@ func dailyChartBuckets(repo *db.Repo, now time.Time, count int) []chartBucket {
 
 	index := make(map[string]int, count)
 	buckets := make([]chartBucket, count)
-	for i := 0; i < count; i++ {
-		d := now.AddDate(0, 0, -(count - 1 - i))
-		key := dayKeyFor(d)
+	days := dailyBucketDays(now, count)
+	for i, d := range days {
+		key := d.Format("2006-01-02")
 		index[key] = i
 		buckets[i] = chartBucket{Label: d.Format("Jan 2"), ByModel: map[string]int64{}}
 	}
@@ -298,8 +312,8 @@ func dailyChartBuckets(repo *db.Repo, now time.Time, count int) []chartBucket {
 		buckets[i].Cost = dayData.Cost
 	}
 
-	rangeStart := now.AddDate(0, 0, -(count - 1))
-	rows, err := repo.GetUsageHistoryChartSince(rangeStart.UTC().Format(time.RFC3339Nano))
+	rangeStart := days[0]
+	rows, err := repo.GetUsageHistoryChartSince(rangeStart.Format(time.RFC3339Nano))
 	if err != nil {
 		return buckets
 	}
