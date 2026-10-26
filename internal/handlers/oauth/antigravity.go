@@ -32,7 +32,7 @@ var defaultAntigravityScopes = []string{
 
 func getAntigravityOAuthConfig() (clientID, clientSecret, tokenURL string) {
 	clientID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
-	clientSecret = "***REMOVED***"
+	clientSecret = ""
 	tokenURL = googleOAuthTokenURL
 
 	if cfg, ok := providers.KnownOAuthConfigs["antigravity"]; ok {
