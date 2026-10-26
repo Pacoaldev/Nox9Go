@@ -213,7 +213,7 @@
       if (editingCombo) {
         await api.updateCombo(editingCombo.id, { name, models, matchRules })
       } else {
-        await api.createCombo({ name, models, strategy: 'fallback', matchRules })
+        await api.createCombo({ name, models, strategy: 'fallback', kind: 'llm', matchRules })
       }
       closeModal()
       onRefresh()
