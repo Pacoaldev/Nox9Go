@@ -64,6 +64,7 @@ stitch-screenshots/
 /.cursor/
 /.codex/
 /.continue/
+/.codebuddy/
 /.aider*
 /.mcp.json
 /.clinerules
