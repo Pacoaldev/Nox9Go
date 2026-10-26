@@ -208,5 +208,6 @@ func RegisterRoutes(r chi.Router, h *DashboardHandler) {
 
 		// Top-bar and semaphore status snapshot (issue #2026-10-25)
 		r.Get("/dashboard/status", h.HandleStatus)
+		r.Get("/dashboard/alerts", h.HandleAlerts)
 	})
 }

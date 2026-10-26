@@ -1172,6 +1172,34 @@ export function normalizeConnection(c: ProviderConnection): ProviderConnection {
   } as ProviderConnection
 }
 
+export interface AlertDetail {
+  connectionId: string
+  connectionName: string
+  provider: string
+  alertType: 'lock' | 'error'
+  message: string
+  status?: number
+  model?: string
+  source?: string
+  timestamp: string
+  rateLimitedAt?: string
+  backoffLevel?: number
+  testStatus?: string
+  apiKeyMasked?: string
+  displayName?: string
+}
+
+export interface AlertsResponse {
+  alerts: AlertDetail[]
+  counts: {
+    total: number
+    locked: number
+    errored: number
+    modelLock: number
+  }
+  generatedAt: string
+}
+
 // Connections API
 export const api = {
   // Connections
@@ -2016,6 +2044,12 @@ export const api = {
       today?: { requests?: number; promptTokens?: number; completionTokens?: number }
       alerts?: { connections?: number; locked?: number }
     }>('/api/dashboard/status'),
+  getDashboardAlerts: () =>
+    request<AlertsResponse>('/api/dashboard/alerts').catch(() => ({
+      alerts: [],
+      counts: { total: 0, locked: 0, errored: 0, modelLock: 0 },
+      generatedAt: new Date().toISOString(),
+    })),
   getTunnelStatus: () =>
     request<TunnelStatusResponse>('/api/tunnel/status').catch(() => ({
       tunnel: { enabled: false, running: false, tunnelUrl: '', publicUrl: '' },
