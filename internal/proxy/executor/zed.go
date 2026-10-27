@@ -42,6 +42,7 @@ import (
 	json "encoding/json/v2"
 
 	"nox9go/proxy/internal/constants"
+	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/providers"
 	"nox9go/proxy/internal/proxy"
 	"nox9go/proxy/internal/translator"
@@ -862,6 +863,39 @@ func zedIsUnauthorized(err error) bool {
 	return upstreamErr.StatusCode == http.StatusUnauthorized
 }
 
+// zedHead returns at most n bytes of a body as a printable string, for a log
+// line that has to show the shape of a stream it could not parse. Control
+// characters are escaped so a binary or gzip body cannot wreck the log, and the
+// truncation is marked so a cut sample is not read as a complete one.
+func zedHead(body []byte, n int) string {
+	if len(body) == 0 {
+		return ""
+	}
+	cut := body
+	if len(cut) > n {
+		cut = cut[:n]
+	}
+	out := make([]byte, 0, len(cut)+4)
+	for _, b := range cut {
+		switch {
+		case b == '\n':
+			out = append(out, '\\', 'n')
+		case b == '\r':
+			out = append(out, '\\', 'r')
+		case b == '\t':
+			out = append(out, '\\', 't')
+		case b < 0x20 || b == 0x7f:
+			out = append(out, []byte(fmt.Sprintf("\\x%02x", b))...)
+		default:
+			out = append(out, b)
+		}
+	}
+	if len(body) > n {
+		out = append(out, []byte("...")...)
+	}
+	return string(out)
+}
+
 // zedBodyModel reads the model id out of the request body when the dispatch
 // layer did not extract one.
 func zedBodyModel(body []byte) string {
@@ -887,12 +921,19 @@ func zedAggregateClaudeSSE(raw []byte) ([]byte, error) {
 		errRaw                []byte
 	)
 
+	// discarded counts events that arrived but were not JSON objects. A
+	// stream full of them folds to nothing, and without this the failure is
+	// indistinguishable from an empty stream — see the !sawAny branch below.
+	var discarded int
 	_ = proxy.ScanStream(bytes.NewReader(raw), func(payload []byte) {
 		if errRaw != nil {
 			return
 		}
 		var event map[string]any
 		if err := json.Unmarshal(payload, &event); err != nil {
+			discarded++
+			log.Debug("zed", "stream event is not a JSON object, discarded",
+				"bytes", len(payload), "head", zedHead(payload, 200), "error", err)
 			return
 		}
 		sawAny = true
@@ -967,6 +1008,13 @@ func zedAggregateClaudeSSE(raw []byte) ([]byte, error) {
 		return nil, &proxy.UpstreamError{StatusCode: http.StatusBadGateway, Body: errRaw}
 	}
 	if !sawAny {
+		// Name what actually arrived. "No completion chunk" was true for an
+		// empty stream, a non-JSON stream and a JSON stream of event types
+		// this fold does not model, and the three want different fixes.
+		log.Warn("zed", "stream folded to no completion chunk",
+			"rawBytes", len(raw),
+			"discardedEvents", discarded,
+			"head", zedHead(raw, 500))
 		return nil, proxy.UpstreamFailure(http.StatusBadGateway, proxy.NoCompletionInStream)
 	}
 
