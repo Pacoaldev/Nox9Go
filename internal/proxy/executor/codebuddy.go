@@ -84,6 +84,9 @@ func ForwardCodebuddyCN(w http.ResponseWriter, req *Request) error {
 	}
 
 	ctx := req.Ctx
+	if err := defaultCodebuddyPacer.wait(ctx, req.APIKey); err != nil {
+		return fmt.Errorf("codebuddy pacing: %w", err)
+	}
 	cfg := req.Config
 	if cfg != nil {
 		merged := make(map[string]string, len(cfg.StaticHeaders)+25)

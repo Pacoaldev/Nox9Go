@@ -245,6 +245,7 @@ func (h *ChatHandler) handleAccountFallback(
 			// Classify error to get dynamic cooldown
 			classification := providers.ClassifyError(ue.StatusCode, errorText, currentBackoffLevel)
 			cooldownSec := retryableCooldownSec(ue.StatusCode, time.Duration(classification.CooldownMs)*time.Millisecond, ue)
+			cooldownSec = accountRestrictionCooldownSec(provider, ue, cooldownSec)
 			errMsg := errorText
 			if errMsg == "" {
 				errMsg = fmt.Sprintf("%d upstream error", ue.StatusCode)
