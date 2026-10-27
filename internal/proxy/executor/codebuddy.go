@@ -135,7 +135,10 @@ func ForwardCodebuddyCN(w http.ResponseWriter, req *Request) error {
 			}
 			if !proxy.LooksLikeSSE(data) {
 				if isCodebuddyRateLimit(data) {
-					return proxy.UpstreamFailure(http.StatusTooManyRequests, "CodeBuddy frequency limit (6004)")
+					// Conserva el cuerpo original: lleva el instante absoluto de
+					// restablecimiento ("... reset at ...") que el router usa para
+					// hacer el lockdown del modelo exactamente hasta ese momento.
+					return &proxy.UpstreamError{StatusCode: http.StatusTooManyRequests, Body: data, Header: resp.Header}
 				}
 				return jsonResponse(req.Ctx, w, bytes.NewReader(data), req.TranslateResp, req.ResponseBuf)
 			}
@@ -153,7 +156,8 @@ func ForwardCodebuddyCN(w http.ResponseWriter, req *Request) error {
 	if converted, ok := sseToOpenAIJSON(data); ok {
 		data = converted
 	} else if isCodebuddyRateLimit(data) {
-		return proxy.UpstreamFailure(http.StatusTooManyRequests, "CodeBuddy frequency limit (6004)")
+		// Conserva el cuerpo original con el instante absoluto de restablecimiento.
+		return &proxy.UpstreamError{StatusCode: http.StatusTooManyRequests, Body: data, Header: resp.Header}
 	}
 	return jsonResponse(req.Ctx, w, bytes.NewReader(data), req.TranslateResp, req.ResponseBuf)
 }

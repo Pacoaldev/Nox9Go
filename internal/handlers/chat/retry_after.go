@@ -56,7 +56,13 @@ func comboPassRetryWait(earliest time.Duration, rateLimited bool) time.Duration 
 // account again instead of waiting out a lock it set itself. Every other
 // status keeps the quota-reset reading it has always had. maxResetCooldown
 // stops a hostile or nonsensical duration from parking an account forever.
-func retryableCooldownSec(statusCode int, base time.Duration, ue *upstreamError) int {
+//
+// CodeBuddy is the exception: its 429 body names an absolute reset instant
+// ("... reset at 2026-10-28 11:29:25 UTC+8 ..."). That instant is honoured
+// exactly — no 2h clamp — because the account is genuinely unusable until
+// then. provider names the failing provider so the CodeBuddy branch can be
+// scoped without touching other providers.
+func retryableCooldownSec(provider string, statusCode int, base time.Duration, ue *upstreamError) int {
 	cooldown := base
 	if statusCode == http.StatusTooManyRequests {
 		if wait, ok := retryAfterWait(ue); ok {
@@ -64,6 +70,13 @@ func retryableCooldownSec(statusCode int, base time.Duration, ue *upstreamError)
 		}
 	} else if dur, ok := extractResetDuration(ue.Body); ok {
 		cooldown = dur
+	}
+	// CodeBuddy reports an absolute reset instant in the 429 message body.
+	// Honour it exactly: the account stays locked until then, not 2h.
+	if isCodebuddyProvider(provider) && statusCode == http.StatusTooManyRequests && ue != nil {
+		if resetAt, ok := codebuddyResetAt(ue.Body); ok && resetAt.After(time.Now()) {
+			return ceilSeconds(time.Until(resetAt))
+		}
 	}
 	return ceilSeconds(min(cooldown, maxResetCooldown))
 }

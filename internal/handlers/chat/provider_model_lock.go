@@ -103,7 +103,7 @@ func providerModelQuotaText(errorText string) bool {
 // Retry-After or a reset hint in the body overrides the baseline, and
 // retryableCooldownSec caps the result at maxResetCooldown, so a hostile
 // duration can never park a pair forever.
-func providerModelLockoutUntil(statusCode int, backoffLevel int, ue *upstreamError) time.Time {
+func providerModelLockoutUntil(provider string, statusCode int, backoffLevel int, ue *upstreamError) time.Time {
 	text := ""
 	if ue != nil {
 		text = extractErrorText(ue.Body)
@@ -115,7 +115,7 @@ func providerModelLockoutUntil(statusCode int, backoffLevel int, ue *upstreamErr
 	}
 	sec := 0
 	if ue != nil {
-		sec = retryableCooldownSec(statusCode, base, ue)
+		sec = retryableCooldownSec(provider, statusCode, base, ue)
 	}
 	if sec <= 0 {
 		sec = ceilSeconds(base)
@@ -139,7 +139,7 @@ func (h *ChatHandler) recordProviderModelLockout(ctx context.Context, provider, 
 		return
 	}
 	key := canonicalLockModel(provider, model)
-	until := providerModelLockoutUntil(ue.StatusCode, h.Repo.GetConnectionBackoffLevel(connID), ue)
+	until := providerModelLockoutUntil(provider, ue.StatusCode, h.Repo.GetConnectionBackoffLevel(connID), ue)
 	if err := h.Repo.LockProviderModel(provider, key, until, providerModelLockoutReason, ue.StatusCode); err != nil {
 		log.Warn("provider-model", "lock failed", "provider", provider, "model", key, "error", err)
 		return

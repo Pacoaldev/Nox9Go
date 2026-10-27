@@ -91,26 +91,27 @@ func TestRetryAfterWait_Extraction(t *testing.T) {
 func TestRetryableCooldownSec(t *testing.T) {
 	tests := []struct {
 		name   string
+		provider string
 		status int
 		base   time.Duration
 		header http.Header
 		body   string
 		want   int
 	}{
-		{"429 without a wait falls back to the classifier", http.StatusTooManyRequests, 2 * time.Second, nil, rateLimitedBody, 2},
-		{"429 retryinfo window wins", http.StatusTooManyRequests, 2 * time.Second, nil, retryInfoBody("120s"), 120},
-		{"429 header window wins", http.StatusTooManyRequests, 2 * time.Second, http.Header{"Retry-After": {"30"}}, rateLimitedBody, 30},
-		{"429 short window shortens the lock so the brief retry can run", http.StatusTooManyRequests, 2 * time.Second, nil, retryInfoBody("1s"), 1},
-		{"429 nonsense window is capped", http.StatusTooManyRequests, 2 * time.Second, nil, retryInfoBody("72h"), int(maxResetCooldown / time.Second)},
-		{"503 keeps its own backoff", http.StatusServiceUnavailable, 30 * time.Second, nil, rateLimitedBody, 30},
-		{"503 still reads the quota reset", http.StatusServiceUnavailable, 30 * time.Second, nil, `{"error":{"message":"Quota exceeded. Resets in 2m."}}`, 120},
+		{"429 without a wait falls back to the classifier", "", http.StatusTooManyRequests, 2 * time.Second, nil, rateLimitedBody, 2},
+		{"429 retryinfo window wins", "", http.StatusTooManyRequests, 2 * time.Second, nil, retryInfoBody("120s"), 120},
+		{"429 header window wins", "", http.StatusTooManyRequests, 2 * time.Second, http.Header{"Retry-After": {"30"}}, rateLimitedBody, 30},
+		{"429 short window shortens the lock so the brief retry can run", "", http.StatusTooManyRequests, 2 * time.Second, nil, retryInfoBody("1s"), 1},
+		{"429 nonsense window is capped", "", http.StatusTooManyRequests, 2 * time.Second, nil, retryInfoBody("72h"), int(maxResetCooldown / time.Second)},
+		{"503 keeps its own backoff", "", http.StatusServiceUnavailable, 30 * time.Second, nil, rateLimitedBody, 30},
+		{"503 still reads the quota reset", "", http.StatusServiceUnavailable, 30 * time.Second, nil, `{"error":{"message":"Quota exceeded. Resets in 2m."}}`, 120},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ue := &upstreamError{StatusCode: tt.status, Body: []byte(tt.body), Header: tt.header}
-			if got := retryableCooldownSec(tt.status, tt.base, ue); got != tt.want {
-				t.Errorf("retryableCooldownSec(%d, %v) = %ds, want %ds", tt.status, tt.base, got, tt.want)
+			if got := retryableCooldownSec(tt.provider, tt.status, tt.base, ue); got != tt.want {
+				t.Errorf("retryableCooldownSec(%q, %d, %v) = %ds, want %ds", tt.provider, tt.status, tt.base, got, tt.want)
 			}
 		})
 	}
@@ -315,5 +316,43 @@ func TestRateLimitCooldownParksAccountForTheNamedWindow(t *testing.T) {
 	}
 	if left := time.Until(until); left < 40*time.Second || left > 45*time.Second {
 		t.Errorf("account parked for %v, want the 45s window the upstream named (2s base backoff would read as ~%v)", left, left.Round(time.Second))
+	}
+}
+
+// CodeBuddy nombra un instante absoluto de restablecimiento en el cuerpo del
+// 429 ("... reset at ..."). El lockdown del modelo debe durar exactamente hasta
+// ese instante, sin el clamp de 2h que aplica a otros proveedores.
+func TestRetryableCooldownSec_CodeBuddyHonoursExactInstant(t *testing.T) {
+	reset := time.Now().UTC().Add(30 * time.Second)
+	resetStr := reset.Format("2006-01-02 15:04:05")
+	body := `{"code":6004,"msg":"usage exceeds frequency limit, your usage will reset at ` + resetStr + ` UTC+0"}`
+	ue := &upstreamError{StatusCode: http.StatusTooManyRequests, Body: []byte(body)}
+
+	got := retryableCooldownSec("codebuddy-intl", http.StatusTooManyRequests, 2*time.Second, ue)
+
+	// Debe ser ~30s (el instante exacto), nunca el clamp de 2h ni la base de 2s.
+	if got < 28 || got > 31 {
+		t.Errorf("retryableCooldownSec CodeBuddy = %ds, want ~30s (exact reset instant)", got)
+	}
+
+	// Caso captura real: ventana de 5 horas con zona UTC+8 supera el clamp clásico de 2h.
+	cst := time.FixedZone("CST", 8*3600)
+	cstReset := time.Now().In(cst).Add(5 * time.Hour)
+	cstBody := `{"code":6004,"msg":"usage exceeds frequency limit, but don't worry, your usage will reset at ` + cstReset.Format("2006-01-02 15:04:05") + ` UTC+8, alternatively, you can switch to the other models to continue using it."}`
+	cstUe := &upstreamError{StatusCode: http.StatusTooManyRequests, Body: []byte(cstBody)}
+	cstGot := retryableCooldownSec("codebuddy-intl", http.StatusTooManyRequests, 2*time.Second, cstUe)
+	wantSecs := 5 * 3600
+	if cstGot < wantSecs-5 || cstGot > wantSecs+5 {
+		t.Errorf("retryableCooldownSec 5h window = %ds, want ~%ds (must exceed the 2h clamp)", cstGot, wantSecs)
+	}
+
+	// Un proveedor no-CodeBuddy con una ventana larga sigue clampado a 2h.
+	other := retryableCooldownSec("deepseek", http.StatusTooManyRequests, 2*time.Second, &upstreamError{
+		StatusCode: http.StatusTooManyRequests,
+		Body:       []byte(retryInfoBody("72h")),
+	})
+	wantClamped := int(maxResetCooldown / time.Second)
+	if other != wantClamped {
+		t.Errorf("retryableCooldownSec deepseek = %ds, want clamped %ds", other, wantClamped)
 	}
 }

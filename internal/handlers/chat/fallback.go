@@ -244,7 +244,7 @@ func (h *ChatHandler) handleAccountFallback(
 			currentBackoffLevel := h.Repo.GetConnectionBackoffLevel(connObj.ID)
 			// Classify error to get dynamic cooldown
 			classification := providers.ClassifyError(ue.StatusCode, errorText, currentBackoffLevel)
-			cooldownSec := retryableCooldownSec(ue.StatusCode, time.Duration(classification.CooldownMs)*time.Millisecond, ue)
+			cooldownSec := retryableCooldownSec(provider, ue.StatusCode, time.Duration(classification.CooldownMs)*time.Millisecond, ue)
 			cooldownSec = accountRestrictionCooldownSec(provider, ue, cooldownSec)
 			errMsg := errorText
 			if errMsg == "" {
@@ -1386,27 +1386,10 @@ func extractResetDuration(body []byte) (time.Duration, bool) {
 	}
 
 	// 3. CodeBuddy date-time pattern (e.g. 2026-09-28 14:30:00 or with UTC offset)
-	if matches := codebuddyResetDateRegex.FindSubmatch(body); len(matches) > 2 {
-		dateStr := string(matches[1])
-		timeStr := string(matches[2])
-		tzOffset := "+08:00"
-		if len(matches) > 3 && len(matches[3]) > 0 {
-			tz := string(matches[3])
-			if !strings.Contains(tz, ":") {
-				if num, err := strconv.Atoi(tz); err == nil {
-					tzOffset = fmt.Sprintf("+%02d:00", num)
-				}
-			} else if !strings.HasPrefix(tz, "+") && !strings.HasPrefix(tz, "-") {
-				tzOffset = "+" + tz
-			} else {
-				tzOffset = tz
-			}
-		}
-		if tm, err := time.Parse(time.RFC3339, fmt.Sprintf("%sT%s%s", dateStr, timeStr, tzOffset)); err == nil {
-			dur := time.Until(tm)
-			if dur > 0 {
-				return clampResetDuration(dur), true
-			}
+	if tm, ok := codebuddyResetAt(body); ok {
+		dur := time.Until(tm)
+		if dur > 0 {
+			return clampResetDuration(dur), true
 		}
 	}
 
@@ -1421,6 +1404,50 @@ func clampResetDuration(dur time.Duration) time.Duration {
 		return maxResetCooldown
 	}
 	return dur
+}
+
+// isCodebuddyProvider reports whether provider is a CodeBuddy deployment
+// (cn or intl). CodeBuddy quotas are per OAuth account, so the lockdown is
+// applied per connection+model, never across the whole provider.
+func isCodebuddyProvider(provider string) bool {
+	switch strings.ToLower(provider) {
+	case "codebuddy", "codebuddy-cn", "codebuddy-intl":
+		return true
+	}
+	return false
+}
+
+// codebuddyResetAt parses the absolute reset instant CodeBuddy includes in its
+// frequency-limit message ("... reset at 2026-10-28 11:29:25 UTC+8 ...").
+// Returns the UTC time and true when a parseable future instant is present.
+func codebuddyResetAt(body []byte) (time.Time, bool) {
+	if len(body) == 0 {
+		return time.Time{}, false
+	}
+	matches := codebuddyResetDateRegex.FindSubmatch(body)
+	if len(matches) <= 2 {
+		return time.Time{}, false
+	}
+	dateStr := string(matches[1])
+	timeStr := string(matches[2])
+	tzOffset := "+08:00"
+	if len(matches) > 3 && len(matches[3]) > 0 {
+		tz := string(matches[3])
+		if !strings.Contains(tz, ":") {
+			if num, err := strconv.Atoi(tz); err == nil {
+				tzOffset = fmt.Sprintf("+%02d:00", num)
+			}
+		} else if !strings.HasPrefix(tz, "+") && !strings.HasPrefix(tz, "-") {
+			tzOffset = "+" + tz
+		} else {
+			tzOffset = tz
+		}
+	}
+	tm, err := time.Parse(time.RFC3339, fmt.Sprintf("%sT%s%s", dateStr, timeStr, tzOffset))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return tm, true
 }
 
 // extractRetryAfter extracts a retryAfter ISO timestamp from an upstream error JSON body.
