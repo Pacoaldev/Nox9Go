@@ -337,11 +337,19 @@ func (h *DashboardHandler) HandlePromoteToCatalog(w http.ResponseWriter, r *http
 		return
 	}
 	if conflict != nil {
+		code := "PROVIDER_ALREADY_IN_CATALOG"
+		if len(nonLLMKinds(conflict.Kinds)) > 0 {
+			// A media provider sharing the id is a different decision from a
+			// duplicate chat entry: the user may well want the id to serve
+			// images only, and the prompt to "pick another id" would hide that.
+			code = "PROVIDER_ALREADY_AS_MEDIA"
+		}
 		handlerutil.WriteJSON(w, http.StatusConflict, map[string]any{
 			"error":   conflict.Detail,
-			"code":    "PROVIDER_ALREADY_IN_CATALOG",
+			"code":    code,
 			"id":      conflict.ID,
 			"sources": conflict.Source,
+			"kinds":   conflict.Kinds,
 		})
 		return
 	}

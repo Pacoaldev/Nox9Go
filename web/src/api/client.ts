@@ -974,6 +974,15 @@ export function getAuthHeaders(): Record<string, string> {
   }
 }
 
+function parseJSONOrUndefined(text: string): unknown {
+  if (!text.trim()) return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
+
 export function formatApiError(value: unknown, fallback = 'Unknown error'): string {
   if (typeof value === 'string' && value.trim()) return value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
@@ -1086,11 +1095,21 @@ export function handleUnauthorized(path?: string) {
  */
 export class ApiError extends Error {
   readonly status: number
+  /**
+   * The parsed response body, when the server sent JSON.
+   *
+   * A 409 from the provider promotion carries more than prose: the id, the
+   * places it is registered, and the service kinds it already serves. Folding
+   * that into the message string would force the dialog to parse it back out,
+   * so the body rides along and each caller reads the fields it knows.
+   */
+  readonly payload: unknown
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, payload?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.payload = payload
   }
 }
 
@@ -1103,7 +1122,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (res.status === 401) {
     handleUnauthorized(path)
   }
-  if (!res.ok) throw new ApiError(await responseErrorMessage(res), res.status)
+  if (!res.ok) {
+    // Read the body once as text: the message formatter and the structured
+    // payload both come from it, and a Response stream cannot be consumed
+    // twice.
+    const body = await res.text().catch(() => '')
+    const payload = parseJSONOrUndefined(body)
+    const fallback = `Request failed with status ${res.status}`
+    const message = body.trim() ? formatApiError(payload ?? body, fallback) : fallback
+    throw new ApiError(message, res.status, payload)
+  }
   return res.json()
 }
 

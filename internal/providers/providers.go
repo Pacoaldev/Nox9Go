@@ -1318,10 +1318,17 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},
-	// Replicate is not OpenAI-shaped (POST /v1/predictions + polling). The entry
-	// exists so the catalog id resolves and the executor can map it later.
+	// Replicate is not OpenAI-shaped: it creates a prediction and polls it.
+	// BaseURL is the API root rather than a completions path, because there is
+	// no /chat/completions to point at — advertising one sent the key to a
+	// route that does not exist and Replicate answered "no API key found".
+	//
+	// There is deliberately no VideoURL or ImageURL: the prediction path
+	// embeds the model id (/v1/models/{owner}/{name}/predictions), which a
+	// single constant cannot express. internal/handlers/media/replicate.go
+	// builds the URL per request.
 	"replicate": {
-		BaseURL:    "https://api.replicate.com/v1/chat/completions",
+		BaseURL:    "https://api.replicate.com/v1",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},

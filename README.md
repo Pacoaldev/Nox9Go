@@ -25,11 +25,11 @@ Incluye compresión de contexto, failover automático, panel embebido, métricas
 
 ## Sobre este fork
 
-NOX9GO es un fork personal de [9Router](https://github.com/decolua/9router), reescrito en Go como binario autónomo.
+NOX9GO es un fork de [9Router](https://github.com/decolua/9router), reescrito en Go como binario autónomo.
 
 Mantiene compatibilidad con el formato de API y la base de datos SQLite del proyecto original, pero elimina la dependencia de Node.js en ejecución y añade un panel Svelte 5 embebido, observabilidad ampliada, más estrategias de enrutado y empaquetado multiplataforma.
 
-> Este repositorio es de uso personal. No publica instaladores ni releases públicos.
+> Repositorio público. Las releases se publican como tags en GitHub.
 
 ---
 

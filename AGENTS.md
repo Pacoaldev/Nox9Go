@@ -2,7 +2,7 @@
 
 Personal Go reimplementation of [**decolua/9router**](https://github.com/decolua/9router), shipped as a single static binary with an embedded Svelte 5 dashboard.
 
-This is a **private personal fork** (`github.com/Pacoaldev/Nox9Go`): no CI, no public releases, no public web, no upstream release history. Everything in this document describes how *this* repo is worked on, on *this* machine.
+This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): no CI pipeline, releases are tagged manually. Everything in this document describes how *this* repo is worked on, on *this* machine.
 
 ---
 
@@ -11,9 +11,9 @@ This is a **private personal fork** (`github.com/Pacoaldev/Nox9Go`): no CI, no p
 | Fact | Value |
 | :--- | :--- |
 | Repo path | `C:\Users\spano\Documents\PROYECTOS\NOX9GO` |
-| Remote | `https://github.com/Pacoaldev/Nox9Go.git` (private) |
+| Remote | `https://github.com/Pacoaldev/Nox9Go.git` (public) |
 | Branches | `main` only. No `dev`, no feature branches, no PR flow. |
-| Tags | Exactly one: `v1.0.0` |
+| Tags | `v1.0.0`, `v1.0.1` |
 | OS / shell | Windows + PowerShell 7 (`pwsh`). No bash on PATH by default. |
 | Toolchain | `go 1.27` (scoop shim), `bun` 1.x (`~\.bun\bin\bun.exe`), `git`, GNU Make **3.81** (GnuWin32) |
 | `rtk` | **NOT installed** (only `.rtk/filters.toml` exists). Run plain `git`, never `rtk git`. |
@@ -21,7 +21,7 @@ This is a **private personal fork** (`github.com/Pacoaldev/Nox9Go`): no CI, no p
 | Upstream clone | **None on this machine.** `decolua/9router` is not cloned here — fetch it from GitHub (§1). The `/Users/luqmannul.hakim/htdocs/9router` path in older docs belongs to a different machine. |
 | Data dir | Resolves to `%APPDATA%\9router` on this box (a legacy DB already lives there, and it wins over `~/.nox9go`). See `internal/config` → `ResolveDataDir`. |
 | Dashboard | <http://localhost:20130/dashboard> — initial password `123456` |
-| Version | `VERSION` = `1.0.0`, `version.json` `latestVersion` = `1.0.0` |
+| Version | `VERSION` = `1.0.1`, `version.json` `latestVersion` = `1.0.1` |
 | Engram project key | `9router-go` |
 | Skill registry | `.atl/skill-registry.md` (regenerate: `gentle-ai skill-registry refresh --force`) |
 | Local operator guide | `docs/proximo.md` — the Windows day-to-day guide; keep it in sync with reality |
@@ -510,13 +510,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1
 cd web; bun run build; cd ..
 
 # Gateway — version + tracked-upstream baselines are embedded through ldflags
-go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.0 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/
+go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.1 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/
 
 # Tray — -H=windowsgui is mandatory, otherwise a console window flashes
 go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
 ```
 
-The version string in the binary is `updater.CurrentVersion`. A plain `go build` leaves the source default; `VERSION` (currently `1.0.0`) is the value to embed. `make build` does the same thing but relies on `$(file <VERSION)`, which needs GNU Make ≥ 3.82 — this machine has 3.81, so use the explicit command above.
+The version string in the binary is `updater.CurrentVersion`. A plain `go build` leaves the source default; `VERSION` (currently `1.0.1`) is the value to embed. `make build` does the same thing but relies on `$(file <VERSION)`, which needs GNU Make ≥ 3.82 — this machine has 3.81, so use the explicit command above.
 
 The two `upstreamwatch.Baseline*` values are the versions of `decolua/9router` and `luqman-v1/9router-go` this build already knows about. The top-bar update alert compares each tracked repository against its own baseline and reports nothing newer than these; leaving them unset disables the alert silently rather than announcing every version ever published. Bump them by hand at each port, from the version the port was read against.
 
@@ -531,7 +531,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 ### 7.4 Changelog & version (personal fork)
 
-- This is a **private personal** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the current version heading (`## [1.0.0]`). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
+- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the current version heading (`## [1.0.1]`). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
 - Bump `VERSION` (and `version.json` `latestVersion`) by hand when cutting a new personal version, then rebuild with the ldflags above.
 - `GET /api/changelog` serves that file.
 
@@ -540,7 +540,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 - **Everything lands on `main`.** There is no `dev` branch, no PR flow, no release pipeline. The operator pulls, works, and pushes directly.
 - **Plain git only** — `rtk` is not installed here.
 - **Never commit unless asked.** `C&P` = commit + push, done autonomously: inspect `git status` / `git diff`, stage only the intended files, Conventional Commit message matching the repo's style, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
-- **Tags**: `v1.0.0` is the only one. The 80 upstream tags were purged on purpose.
+- **Tags**: `v1.0.0` and `v1.0.1`. The 80 upstream tags were purged on purpose.
 
 ### 7.6 Syncing a feature from upstream
 
@@ -621,7 +621,7 @@ if (-not (Test-Path web/dist/index.html)) { New-Item -ItemType Directory -Force 
 | Run the unit tests | `go test ./...` |
 | Run the integration suite | `go test -tags=integration ./internal/integration/...` |
 | Build the dashboard SPA | `cd web; bun run build` |
-| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.0 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/` |
+| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.1 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/` |
 | Build the tray | `go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/` |
 | Start everything | `powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1` |
 | Stop everything | `Stop-Process -Name "nox9go","nox9go-tray" -Force -ErrorAction SilentlyContinue` |

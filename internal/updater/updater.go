@@ -31,7 +31,7 @@ import (
 // CurrentVersion is the active nox9go application version.
 // Can be overridden at build time via -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.8.8"
 // Default fallback is read from version.json at init if not overridden.
-var CurrentVersion = "1.0.0"
+var CurrentVersion = "1.0.1"
 
 // DefaultUpdateURL is the primary remote version manifest URL.
 var DefaultUpdateURL = "https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json"

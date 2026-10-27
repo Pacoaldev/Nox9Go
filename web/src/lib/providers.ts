@@ -1380,7 +1380,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "color": "#111827",
     "icon": "memory",
     "website": "https://replicate.com",
-    "notice": {"text":"Image/video model hosting. Replicate's own API is /v1/predictions with polling, not the OpenAI chat shape, so routing needs backend support before connections work.", "apiKeyUrl":"https://replicate.com/account/api-tokens"},
+    "notice": {"text":"Image/video model hosting. Runs models through its own prediction API, so the model id must be owner/name (flux-1.1-pro style), deployments/owner/name for a private model, or owner/name:version. A bare provider id is not a model. Text-to-image and video generation are supported; there is no chat endpoint.", "apiKeyUrl":"https://replicate.com/account/api-tokens"},
     "authType": "apikey",
     "noAuth": false,
     "serviceKinds": [

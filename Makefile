@@ -17,7 +17,7 @@ ifeq ($(VERSION),)
 VERSION := $(strip $(shell git describe --tags --always 2>/dev/null))
 endif
 ifeq ($(VERSION),)
-VERSION := 1.0.0
+VERSION := 1.0.1
 endif
 # On Windows (cmd.exe), invoking `./$(BINARY_NAME)` fails with "'.' is not recognized".
 # On macOS/Linux, `.` is not on PATH, so a bare command fails with "command not found".
@@ -244,7 +244,7 @@ help:
 	@grep -E '^## ' Makefile | sed 's/## /  make /' | sed 's/ — /  /'
 	@echo ""
 	@echo "Options:"
-	@echo "  make run PORT=3000 VERSION=1.1.0"
+	@echo "  make run PORT=3000 VERSION=1.2.0"
 	@echo "  make run DATA_DIR=/path/to/data  # optional; default is per-platform"
 	@echo "  make run CAVEMAN=true PONYTAIL=true AUTO_UPDATE=true"
 	@echo "  make run RTK=false"

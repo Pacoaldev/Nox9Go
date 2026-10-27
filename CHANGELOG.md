@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.1] - 2026-10-27
+
+First public release.
+
+### Media providers
+
+- **Replicate integration.** Replicate was registered in the catalog with a `BaseURL` pointing at `/v1/chat/completions`, a route that does not exist; every media call 404'd and Replicate answered "no API key found", which read like a bad credential and sent the operator looking at their key when the route was the fault. A dedicated lane (`internal/handlers/media/replicate.go`) now runs Replicate through its real protocol: `POST /v1/models/{owner}/{name}/predictions` with `Prefer: wait=60`, polling `GET /v1/predictions/{id}` as fallback, and an OpenAI-shaped response for callers. Three model-id forms are resolved: `owner/name` (official), `owner/name:version` (pinned), and `deployments/owner/name` (private/fine-tuned). Text-to-image and video generation are supported; `/v1/videos/edits` and `/v1/videos/extensions` are deliberately **not** routed to Replicate because it has no such upstream endpoint and a prediction would be spent on a body the model ignores. `KnownProviders["replicate"].BaseURL` is now the API root (`https://api.replicate.com/v1`); there is no `VideoURL`/`ImageURL` constant because the prediction path embeds the model id. *Verified against the live API: every constructed path returns 401 with a bad key (route exists) instead of 404.*
+- **BaseURL coherence test.** `internal/providers/base_url_coherence_test.go` fails if a provider registered for a non-chat service declares a `BaseURL` ending in `/chat/completions` or `/messages`: the media handlers strip that suffix to build the endpoint, so a non-chat provider advertising it makes every media call 404. Replicate is the named case the test was written for, so a regression reintroducing the path is caught rather than silently passing.
+
+### Dashboard
+
+- **Promote-to-catalog dialog shows service kinds and explains media conflicts.** The dialog hardcoded `serviceKinds: ['llm']`, so a custom node that actually served TTS or embeddings was promoted as chat without a question. It now renders a nine-kind selector (LLM, Embedding, Image, Video, TTS, STT, System One, Web Search, Web Fetch) with LLM checked by default. When the id being promoted already exists in Media Providers, the 409 carries the existing entry's `serviceKinds` and the dialog says so: "ese ID ya existe y además sirve Text to Image, Video" — the previous advice ("pick another id") hid that the existing entry is a different kind of provider, not a duplicate. New error code `PROVIDER_ALREADY_AS_MEDIA` distinguishes a media collision from a plain duplicate. `ApiError` gained a `payload` field so the dialog reads structured fields without re-parsing the message.
+
 ## [1.0.0] - 2026-10-24
 
 Personal NOX9GO fork (`Pacoaldev/Nox9Go`). Nothing from upstream release history.

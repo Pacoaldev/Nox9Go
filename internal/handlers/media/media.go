@@ -794,6 +794,22 @@ func (h *MediaHandler) forwardMediaRequest(w http.ResponseWriter, r *http.Reques
 					continue
 				}
 			}
+			if isVideoEndpoint(endpoint) && isReplicateModel(subInfo.Provider) {
+				if err := h.handleReplicateVideo(w, r, body, subInfo); err == nil {
+					return
+				} else {
+					lastErr = err.Error()
+					continue
+				}
+			}
+			if isImageEndpoint(endpoint) && isReplicateModel(subInfo.Provider) {
+				if err := h.handleReplicateImage(w, r, body, subInfo); err == nil {
+					return
+				} else {
+					lastErr = err.Error()
+					continue
+				}
+			}
 			if (endpoint == "/v1/audio/transcriptions" || endpoint == "/audio/transcriptions") && (subInfo.Provider == "antigravity" || subInfo.Provider == "ag") {
 				if err := h.handleAntigravitySTT(w, r, body, subInfo); err == nil {
 					return
@@ -950,6 +966,24 @@ func (h *MediaHandler) forwardMediaRequest(w http.ResponseWriter, r *http.Reques
 	}
 	if (endpoint == "/v1/audio/transcriptions" || endpoint == "/audio/transcriptions") && (modelInfo.Provider == "antigravity" || modelInfo.Provider == "ag") {
 		if err := h.handleAntigravitySTT(w, r, body, modelInfo); err != nil {
+			handlerutil.WriteJSONError(w, http.StatusBadGateway, err.Error())
+		}
+		return
+	}
+
+	// Replicate runs models through its own prediction queue (POST
+	// /v1/models/{owner}/{name}/predictions, then poll). The model id is part
+	// of the path and "input" is each model's own schema, so the generic
+	// forwarder cannot express it: it would POST an OpenAI body to
+	// /v1/chat/completions, a route Replicate does not serve.
+	if isVideoEndpoint(endpoint) && isReplicateModel(modelInfo.Provider) {
+		if err := h.handleReplicateVideo(w, r, body, modelInfo); err != nil {
+			handlerutil.WriteJSONError(w, http.StatusBadGateway, err.Error())
+		}
+		return
+	}
+	if isImageEndpoint(endpoint) && isReplicateModel(modelInfo.Provider) {
+		if err := h.handleReplicateImage(w, r, body, modelInfo); err != nil {
 			handlerutil.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		}
 		return

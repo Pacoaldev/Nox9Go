@@ -50,6 +50,72 @@ func TestCatalogConflictAllowsFreshID(t *testing.T) {
 	}
 }
 
+// TestCatalogConflictReportsMediaKinds is the case the dialog could not
+// explain before: an id already registered only under Media Providers. The
+// refusal was correct but the advice ("pick another id") hid that the existing
+// entry is a different kind of provider, not a duplicate.
+func TestCatalogConflictReportsMediaKinds(t *testing.T) {
+	root := findRepoRoot(t)
+
+	cases := []struct {
+		id      string
+		wantNot string // must not be reported as a kind
+		wantHas string // at least one of these must be reported
+	}{
+		// replicate is the media provider that motivated the check: images
+		// and video, never chat.
+		{"replicate", "llm", "image"},
+	}
+	for _, tc := range cases {
+		conflict, err := catalogEntryExists(root, tc.id)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.id, err)
+		}
+		if conflict == nil {
+			t.Fatalf("%s: expected a conflict, got none", tc.id)
+		}
+		if len(conflict.Kinds) == 0 {
+			t.Fatalf("%s: no kinds reported", tc.id)
+		}
+		for _, k := range conflict.Kinds {
+			if k == tc.wantNot {
+				t.Errorf("%s: kinds %v unexpectedly include %s", tc.id, conflict.Kinds, k)
+			}
+		}
+		found := false
+		for _, k := range conflict.Kinds {
+			if k == tc.wantHas {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s: kinds %v do not include %s", tc.id, conflict.Kinds, tc.wantHas)
+		}
+		if !strings.Contains(conflict.Detail, tc.wantHas) {
+			t.Errorf("%s: detail %q does not name the existing kind %q", tc.id, conflict.Detail, tc.wantHas)
+		}
+	}
+}
+
+// TestCatalogConflictChatProviderHasNoMediaKinds keeps the plain duplicate
+// path distinct: openai serves chat, so the media wording must not appear.
+func TestCatalogConflictChatProviderHasNoMediaKinds(t *testing.T) {
+	root := findRepoRoot(t)
+	conflict, err := catalogEntryExists(root, "anthropic")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if conflict == nil {
+		t.Fatal("expected a conflict for anthropic")
+	}
+	if media := nonLLMKinds(conflict.Kinds); len(media) > 0 {
+		t.Errorf("anthropic reported media kinds %v", media)
+	}
+	if strings.Contains(conflict.Detail, "Media Providers") {
+		t.Errorf("chat provider got the media wording: %q", conflict.Detail)
+	}
+}
+
 // TestCatalogConflictEmptyID is not a conflict: an empty id is rejected by
 // validatePromotion, which runs first in the handler.
 func TestCatalogConflictEmptyID(t *testing.T) {

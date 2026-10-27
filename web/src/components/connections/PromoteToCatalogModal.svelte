@@ -35,6 +35,24 @@
   let formNotice = $state('')
   let formApiKeyUrl = $state('')
 
+  // Every kind the catalog knows, in the order the Media Providers sidebar
+  // shows them, with chat first because that is what a custom chat node is.
+  // Built from the same list getProvidersByKind filters on, so a kind added
+  // there cannot go missing from this form.
+  const KIND_OPTIONS: { id: string; label: string; hint: string }[] = [
+    { id: 'llm', label: 'LLM', hint: 'Chat and completions under Providers' },
+    { id: 'embedding', label: 'Embedding', hint: 'Vector embeddings' },
+    { id: 'image', label: 'Text to Image', hint: 'Image generation' },
+    { id: 'video', label: 'Video', hint: 'Video generation' },
+    { id: 'tts', label: 'Text To Speech', hint: 'Voice synthesis' },
+    { id: 'stt', label: 'Speech To Text', hint: 'Transcription' },
+    { id: 'systemone', label: 'System One', hint: 'Structured state evaluation' },
+    { id: 'webSearch', label: 'Web Search', hint: 'Live search endpoints' },
+    { id: 'webFetch', label: 'Web Fetch', hint: 'URL extraction and readers' },
+  ]
+
+  let formKinds = $state<string[]>(['llm'])
+
   let previewing = $state(false)
   let promoting = $state(false)
   let previewFiles = $state<string[] | null>(null)
@@ -42,7 +60,7 @@
   // A conflict is not a transient error: the id is taken, so retrying the same
   // form cannot succeed. It gets its own state so the dialog can disable the
   // submit and tell the user what to change instead of offering a retry.
-  let conflict = $state<{ message: string; sources: string[] } | null>(null)
+  let conflict = $state<{ message: string; sources: string[]; kinds: string[] } | null>(null)
   let result = $state<PromotionResult | null>(null)
 
   function slugOf(value: string): string {
@@ -72,6 +90,7 @@
     result = null
     error = null
     conflict = null
+    formKinds = ['llm']
     promoting = false
     previewing = false
   })
@@ -94,7 +113,7 @@
     website: formWebsite.trim(),
     noticeText: formNotice.trim(),
     apiKeyUrl: formApiKeyUrl.trim(),
-    serviceKinds: ['llm'],
+    serviceKinds: formKinds,
     chatUrl: formChatUrl.trim(),
     modelsUrl: formModelsUrl.trim(),
     models: [],
@@ -106,6 +125,7 @@
       node !== null &&
       payload.id !== '' &&
       payload.name !== '' &&
+      formKinds.length > 0 &&
       payload.chatUrl.startsWith('https://')
   )
 
@@ -118,13 +138,27 @@
    */
   function noteConflict(err: unknown) {
     if (err instanceof ApiError && err.status === 409) {
-      conflict = { message: err.message, sources: [] }
+      const body = (err.payload ?? {}) as { sources?: unknown; kinds?: unknown }
+      conflict = {
+        message: err.message,
+        sources: Array.isArray(body.sources) ? body.sources.map(String) : [],
+        kinds: Array.isArray(body.kinds) ? body.kinds.map(String) : [],
+      }
       error = null
       return
     }
     conflict = null
     error = err instanceof Error ? err.message : String(err)
   }
+
+  /** The labels to print for a kind list, falling back to the raw id. */
+  function kindLabels(kinds: string[]): string {
+    return kinds
+      .map((k) => KIND_OPTIONS.find((o) => o.id === k)?.label ?? k)
+      .join(', ')
+  }
+
+  let conflictMediaKinds = $derived((conflict?.kinds ?? []).filter((k) => k !== 'llm'))
 
   async function handlePreview() {
     previewing = true
@@ -188,6 +222,39 @@
         </div>
       </div>
 
+      <div class="flex flex-col gap-1.5">
+        <span class="text-sm font-medium text-text-main">Service kinds</span>
+        <span class="text-xs text-text-muted">
+          Decides which sections list this provider. A kind left unchecked here is not
+          created, so a media-only provider will not appear under Providers.
+        </span>
+        <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {#each KIND_OPTIONS as option (option.id)}
+            <label class="flex items-start gap-2 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5">
+              <input
+                type="checkbox"
+                class="mt-0.5"
+                value={option.id}
+                checked={formKinds.includes(option.id)}
+                onchange={(e) => {
+                  const on = (e.currentTarget as HTMLInputElement).checked
+                  formKinds = on
+                    ? [...formKinds, option.id]
+                    : formKinds.filter((k) => k !== option.id)
+                }}
+              />
+              <span class="flex flex-col">
+                <span class="text-xs font-medium text-text-main">{option.label}</span>
+                <span class="text-[11px] text-text-muted">{option.hint}</span>
+              </span>
+            </label>
+          {/each}
+        </div>
+        {#if formKinds.length === 0}
+          <span class="text-xs text-red-500">Pick at least one kind.</span>
+        {/if}
+      </div>
+
       <Input label="Chat URL" bind:value={formChatUrl} placeholder="https://api.moonshot.cn/v1/chat/completions" inputClass="font-mono" required hint="Goes to KnownProviders. Must be https and answer 401 to an invalid key." />
       <Input label="Models URL" bind:value={formModelsUrl} placeholder="https://api.moonshot.cn/v1/models" inputClass="font-mono" hint="Goes to modelsListURL and enables Import from /models. Leave empty when the provider has no OpenAI-shaped catalogue." />
 
@@ -223,7 +290,22 @@
 
       {#if conflict}
         <div class="flex flex-col gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
-          <span class="text-sm font-medium text-amber-600">Ese ID ya está en el catálogo</span>
+          {#if conflictMediaKinds.length > 0}
+            <span class="text-sm font-medium text-amber-600">
+              Ese ID ya existe y además sirve {kindLabels(conflictMediaKinds)}
+            </span>
+            <span class="text-xs text-text-muted">
+              Está dado de alta en Media Providers. Lo que intentas mover es un nodo de chat,
+              así que no es un duplicado: son dos usos distintos del mismo ID.
+            </span>
+            <span class="text-xs text-text-muted">
+              Si quieres las dos cosas, dale otro ID a este nodo y deja el existente como está.
+              Si no te interesa, cierra el diálogo sin tocar nada — lo que ya tienes sigue
+              funcionando.
+            </span>
+          {:else}
+            <span class="text-sm font-medium text-amber-600">Ese ID ya está en el catálogo</span>
+          {/if}
           <span class="text-xs text-text-muted">{conflict.message}</span>
           <span class="text-xs text-text-muted">
             Cambia el Provider ID para continuar. No se ha escrito ningún fichero ni se ha
