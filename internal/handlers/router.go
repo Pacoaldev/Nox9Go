@@ -236,6 +236,7 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	r.Put("/api/provider-nodes/{id}", dashH.HandleUpdateProviderNode)
 	r.Delete("/api/provider-nodes/{id}", dashH.HandleDeleteProviderNode)
 	r.Post("/api/provider-nodes/validate", dashH.HandleValidateProviderNode)
+	r.Post("/api/provider-nodes/promote", dashH.HandlePromoteToCatalog)
 	// Per-node capacity limits (docs/provider-limits-plan.md). These live here as
 	// well as in dashboard.RegisterRoutes because that table is mounted by tests
 	// only: a route added there alone is reachable in a unit test and 404s on the

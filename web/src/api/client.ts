@@ -1356,6 +1356,48 @@ export const api = {
       }
     ),
   /**
+   * Move a custom provider node into the built-in catalog.
+   *
+   * The backend writes the six source destinations that make a provider work
+   * as a catalog entry, rebuilds both binaries, and then repoints the node's
+   * connections and custom models at the new id. With `dryRun` it answers the
+   * files it would touch and writes nothing.
+   */
+  promoteProviderNode: (payload: {
+    id: string
+    nodeId: string
+    name: string
+    alias?: string
+    color?: string
+    icon?: string
+    category?: string
+    website?: string
+    noticeText?: string
+    apiKeyUrl?: string
+    serviceKinds?: string[]
+    chatUrl: string
+    modelsUrl?: string
+    models?: string[]
+    authHeader?: string
+    authScheme?: string
+    dryRun?: boolean
+    rebuild?: boolean
+  }) =>
+    request<{
+      dryRun?: boolean
+      repo?: string
+      files: string[]
+      build?: string
+      buildOk?: boolean
+      output?: string
+      moved?: number
+      modelsMoved?: number
+      warning?: string
+    }>('/api/provider-nodes/promote', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  /**
    * Update a node. Sending a different `urlSuffix` renames the provider id and
    * carries the node's connections, models and history with it, so the returned
    * node carries the new id and the caller must navigate to it.

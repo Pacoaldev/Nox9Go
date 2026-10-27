@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Play, Plus, Search, Server } from 'lucide-svelte'
+  import { ArrowUpRight, Play, Plus, Search, Server } from 'lucide-svelte'
   import type { ProviderConnection, ProviderNode } from '../../api/client'
   import Button from '../../lib/ui/Button.svelte'
   import { PROVIDER_CATALOG, isChatProvider } from '../../lib/providers'
@@ -13,6 +13,8 @@
     onToggleAll: (id: string, active: boolean) => void
     /** Opens the unified add-custom-provider dialog; the modal owns the type. */
     onAddCustom: () => void
+    /** Opens the "Mover a Catálogo" dialog for the chosen custom node. */
+    onPromote: (node: ProviderNode) => void
   }
 
   let {
@@ -21,11 +23,22 @@
     onSelectProvider,
     onToggleAll,
     onAddCustom,
+    onPromote,
   }: Props = $props()
 
   let searchQuery = $state('')
   let statusFilter = $state<'all' | 'connected' | 'error' | 'disabled' | 'not_connected'>('all')
   let showAllApikey = $state(false)
+  // The "Mover a Catálogo" dialog needs a concrete node; with more than one
+  // custom provider the header button has no obvious target, so it asks.
+  let promotePickerOpen = $state(false)
+  function startPromote() {
+    if (customNodes.length === 1) {
+      onPromote(customNodes[0])
+      return
+    }
+    promotePickerOpen = true
+  }
 
   const APIKEY_INITIAL_VISIBLE = 20
 
@@ -98,9 +111,24 @@
       <h2 class="text-lg sm:text-xl font-semibold leading-tight text-text-main">
         Custom Providers (OpenAI, Anthropic, Embedding)
       </h2>
-      <Button size="sm" onclick={onAddCustom} class="w-full sm:w-auto">
-        <Plus class="w-4 h-4 mr-1" /> Add Custom Provider
-      </Button>
+      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        <!-- Sits left of Add Custom Provider on purpose: promoting an existing
+             node is the step that turns it into a catalog entry, and it is only
+             meaningful while the Custom Providers section still has one. -->
+        <Button
+          size="sm"
+          variant="secondary"
+          onclick={startPromote}
+          disabled={customNodes.length === 0}
+          class="w-full sm:w-auto"
+          title="Convert a custom provider into a built-in catalog entry"
+        >
+          <ArrowUpRight class="w-4 h-4 mr-1" /> Mover a Catálogo
+        </Button>
+        <Button size="sm" onclick={onAddCustom} class="w-full sm:w-auto">
+          <Plus class="w-4 h-4 mr-1" /> Add Custom Provider
+        </Button>
+      </div>
     </div>
 
     {#if customNodes.length === 0}
@@ -203,3 +231,33 @@
     </div>
   {/if}
 </div>
+
+{#if promotePickerOpen}
+  <!-- A header-level picker rather than a per-card button: promotion is a rare
+       one-way operation, and putting it on every card would make it easy to
+       hit while aiming for the provider itself. -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation" onclick={() => (promotePickerOpen = false)} onkeydown={(e) => { if (e.key === 'Escape') promotePickerOpen = false }}>
+    <div class="flex w-full max-w-md flex-col gap-3 rounded-xl border border-border bg-surface p-4" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+      <h3 class="text-sm font-semibold text-text-main">Mover a Catálogo</h3>
+      <p class="text-xs text-text-muted">Choose the custom provider to convert into a catalog entry.</p>
+      <div class="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+        {#each customNodes as node (node.id)}
+          <button
+            type="button"
+            onclick={() => {
+              onPromote(node)
+              promotePickerOpen = false
+            }}
+            class="flex flex-col items-start gap-0.5 rounded-lg border border-border bg-surface-2 px-3 py-2 text-left transition-colors hover:border-brand-500/40 cursor-pointer"
+          >
+            <span class="text-sm font-medium text-text-main">{node.name}</span>
+            <span class="font-mono text-[11px] text-text-muted">{node.id}</span>
+          </button>
+        {/each}
+      </div>
+      <div class="flex justify-end">
+        <Button size="sm" variant="secondary" onclick={() => (promotePickerOpen = false)}>Cancel</Button>
+      </div>
+    </div>
+  </div>
+{/if}

@@ -98,6 +98,7 @@ func RegisterRoutes(r chi.Router, h *DashboardHandler) {
 		r.Post("/provider-nodes", h.HandleCreateProviderNode)
 		r.Put("/provider-nodes/{id}", h.HandleUpdateProviderNode)
 		r.Post("/provider-nodes/validate", h.HandleValidateProviderNode)
+	r.Post("/provider-nodes/promote", h.HandlePromoteToCatalog)
 		r.Delete("/provider-nodes/{id}", h.HandleDeleteProviderNode)
 		// Per-node capacity limits (docs/provider-limits-plan.md). The GET list
 		// above carries them too; these two write the policy and lift a spent

@@ -186,3 +186,74 @@ func (r *Repo) GetCustomModels() ([]*CustomModel, error) {
 	}
 	return out, nil
 }
+
+const (
+	kvDeleteSQL        = "DELETE FROM kv WHERE scope = ? AND key = ?"
+	kvUpsertSQL        = "INSERT INTO kv (scope, key, value) VALUES (?, ?, ?) ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value"
+	customModelKVScope = "customModels"
+)
+
+// ReassignCustomModelProvider rewrites every custom model saved under one
+// provider id to another, in one transaction.
+//
+// Custom models live in the kv scope customModels under a key whose first
+// segment is the provider id. Promoting a node therefore has to move that
+// segment, not copy it: a stale key keeps the model resolving against a
+// provider id that is about to disappear, while a copied key duplicates the
+// row. The value's own providerAlias field is rewritten too, because the model
+// pickers read the field rather than the key.
+func (r *Repo) ReassignCustomModelProvider(from, to string) (int, error) {
+	if from == to {
+		return 0, nil
+	}
+	kv, err := r.GetKVScope(customModelKVScope)
+	if err != nil {
+		return 0, fmt.Errorf("read custom models: %w", err)
+	}
+
+	type modelMove struct {
+		oldKey string
+		newKey string
+		value  string
+	}
+	var moves []modelMove
+	for key, value := range kv {
+		if !strings.HasPrefix(key, from+"|") {
+			continue
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(value), &parsed); err == nil {
+			parsed["providerAlias"] = to
+			if b, err := json.Marshal(parsed); err == nil {
+				value = string(b)
+			}
+		}
+		moves = append(moves, modelMove{
+			oldKey: key,
+			newKey: to + strings.TrimPrefix(key, from),
+			value:  value,
+		})
+	}
+	if len(moves) == 0 {
+		return 0, nil
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("move custom models: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, m := range moves {
+		if _, err := tx.Exec(kvDeleteSQL, customModelKVScope, m.oldKey); err != nil {
+			return 0, fmt.Errorf("drop custom model %s: %w", m.oldKey, err)
+		}
+		if _, err := tx.Exec(kvUpsertSQL, customModelKVScope, m.newKey, m.value); err != nil {
+			return 0, fmt.Errorf("write custom model %s: %w", m.newKey, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("move custom models: %w", err)
+	}
+	return len(moves), nil
+}

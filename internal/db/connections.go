@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	json "encoding/json/v2"
 	"fmt"
+	"time"
 
 	"nox9go/proxy/internal/models"
 )
@@ -278,4 +279,23 @@ func (r *Repo) listProviderConnections(query string, args []any) ([]*models.Prov
 		return nil, err
 	}
 	return connections, nil
+}
+
+// SetConnectionProvider repoints one connection at a different provider id.
+//
+// Promoted custom nodes move their connections onto the catalog id the
+// promotion just registered, and the connection's own id must survive: client
+// API keys, quotas and usage history are joined on it. Name uniqueness is
+// (provider, authType, name), so two nodes that promoted to the same catalog id
+// would collide — the caller is expected to have promoted distinct ids, and a
+// collision here surfaces as the usual unique-constraint error rather than a
+// silent merge.
+func (r *Repo) SetConnectionProvider(id, provider string) error {
+	if _, err := r.db.Exec(
+		"UPDATE providerConnections SET provider = ?, updatedAt = ? WHERE id = ?",
+		provider, time.Now().UTC().Format(time.RFC3339), id,
+	); err != nil {
+		return fmt.Errorf("set connection provider %s -> %s: %w", id, provider, err)
+	}
+	return nil
 }

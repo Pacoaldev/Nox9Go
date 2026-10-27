@@ -190,7 +190,18 @@ var modelsListURL = map[string]string{
 	// or `models`, and the dashboard falls back to the `model` field when `id`
 	// is absent, so the shape needs no special case here.
 	"ollama":     "https://ollama.com/api/tags",
-	"openrouter": "https://openrouter.ai/api/v1/models",
+	"openrouter": "https://openrouter.ai/api/v1/models", // The catalog entries added alongside moonshot/qwen/zhipu all publish a
+	// standard OpenAI /v1/models catalogue, so they belong here too: without an
+	// entry only "Sync Models" rendered for them, and sync has nothing to sync
+	// from when the provider ships no static rows and the user cannot import.
+	"moonshot":    "https://api.moonshot.cn/v1/models",
+	"zhipu":       "https://open.bigmodel.cn/api/paas/v4/models",
+	"qwen":        "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+	"modelscope":  "https://api-inference.modelscope.cn/v1/models",
+	"gonkabroker": "https://proxy.gonkabroker.com/v1/models",
+	"mixlayer":    "https://mixlayer.ai/v1/models",
+	"nararouter":  "https://router.bynara.id/v1/models",
+	"onomeo":      "https://onomeo.com/v1/models",
 }
 
 // modelsListHeaders carries the extra headers one live-catalogue endpoint
@@ -1251,6 +1262,68 @@ var KnownProviders = map[string]ProviderConfig{
 		StaticHeaders: map[string]string{
 			"content-type": "application/json",
 		},
+	},
+	// Providers shipped in the web catalog (PROVIDER_CATALOG) but missing from
+	// this registry: the dashboard's Check button resolves the provider here
+	// before probing, so an absent entry answers "validation not supported" and
+	// the modal saves the key unverified even when the endpoint is fine.
+	// Every BaseURL below was probed: an invalid bearer key must answer 401,
+	// not 404, or the probe is hitting the wrong path.
+	"moonshot": {
+		// platform.moonshot.cn keys are not accepted by the international host: a
+		// valid .cn token answers 401 "Invalid Authentication" on api.moonshot.ai,
+		// which reads as a bad key.
+		BaseURL:    "https://api.moonshot.cn/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	// zhipu is the open platform (bigmodel.cn), not the coding seat: /api/paas
+	// rather than /api/coding/paas, which is what glm-cn above configures.
+	"zhipu": {
+		BaseURL:    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	// DashScope's OpenAI-compatible lane on the China host. alicode/alims-intl
+	// reach the coding endpoints; this is the general-purpose one.
+	"qwen": {
+		BaseURL:    "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	// ModelScope serves /v1/models without auth, so a key check against it is
+	// worthless; chat is the only endpoint that reads the credential.
+	"modelscope": {
+		BaseURL:    "https://api-inference.modelscope.cn/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"gonkabroker": {
+		BaseURL:    "https://proxy.gonkabroker.com/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"mixlayer": {
+		BaseURL:    "https://mixlayer.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"nararouter": {
+		BaseURL:    "https://router.bynara.id/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"onomeo": {
+		BaseURL:    "https://onomeo.com/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	// Replicate is not OpenAI-shaped (POST /v1/predictions + polling). The entry
+	// exists so the catalog id resolves and the executor can map it later.
+	"replicate": {
+		BaseURL:    "https://api.replicate.com/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
 	},
 }
 

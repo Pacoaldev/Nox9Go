@@ -4,6 +4,7 @@
   import ProvidersOverviewGrid from './ProvidersOverviewGrid.svelte'
   import ProviderDetailView from './ProviderDetailView.svelte'
   import AddCompatibleNodeModal from './AddCompatibleNodeModal.svelte'
+  import PromoteToCatalogModal from './PromoteToCatalogModal.svelte'
 
   interface Props {
     connections?: ProviderConnection[]
@@ -24,6 +25,9 @@
   }: Props = $props()
 
   let showAddNodeModal = $state(false)
+  // The promotion dialog counts as "open" only while it has a target: the grid
+  // owns the picker, and onPromote hands the chosen node over.
+  let promoteTarget = $state<ProviderNode | null>(null)
 
   // The dialog owns the protocol choice now (#182), so opening it takes no
   // argument — passing one through onclick would hand this a MouseEvent.
@@ -101,6 +105,7 @@
     }}
     onToggleAll={handleToggleAll}
     onAddCustom={openAddNodeModal}
+    onPromote={(node) => (promoteTarget = node)}
   />
 {/if}
 
@@ -110,4 +115,11 @@
   allowedTypes={['openai-compatible', 'anthropic-compatible']}
   onClose={() => (showAddNodeModal = false)}
   onSubmit={handleCreateNode}
+/>
+
+<PromoteToCatalogModal
+  isOpen={promoteTarget !== null}
+  node={promoteTarget}
+  onClose={() => (promoteTarget = null)}
+  onPromoted={onRefresh}
 />

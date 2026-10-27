@@ -2554,7 +2554,7 @@
     return ''
   }
 
-  async function handleImportLiveCatalogModels() {
+  async function handleImportLiveCatalogModels(freeOnly = false) {
     if (isImportingLiveCatalogModels) return
     const active = providerConnections.find((c) => c.isActive !== 0)
     if (!active) {
@@ -2573,6 +2573,7 @@
       for (const m of models) {
         const modelId = typeof m === 'string' ? m : (m.id || m.name || m.model || '')
         if (!modelId) continue
+        if (freeOnly && !isFreeTierModelId(modelId)) continue
         const alreadyBuiltin = builtInModels.some((b) => b.id === modelId)
         const alreadyCustom = providerCustomModels.some((c) => c.id === modelId)
         if (alreadyBuiltin || alreadyCustom) continue
@@ -2612,6 +2613,7 @@
       const modelsData = await fetchProviderModelsData(providerId, storageAlias)
       customModels = modelsData.customModels
       if (outcome.imported > 0) notifyCustomModelsChanged()
+      else if (outcome.refused.length === 0 && freeOnly) alert('No free models found in /models.')
       reportImportRefusals(outcome)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to import models')
@@ -2681,6 +2683,18 @@
     'nvidia',
     'ollama',
     'openrouter',
+    // Catalog entries added with the moonshot/qwen/zhipu batch. Their registry
+    // rows ship few or no static models, so without these the panel offered
+    // only "Sync Models" — a button that syncs nothing when there is nothing
+    // to import from.
+    'moonshot',
+    'zhipu',
+    'qwen',
+    'modelscope',
+    'gonkabroker',
+    'mixlayer',
+    'nararouter',
+    'onomeo',
   ])
 
   // canListLiveModels mirrors the backend's list of providers with a live
@@ -4202,10 +4216,13 @@
         Add Model
       </button>
 
-      {#if (providerId === 'cline' || providerId === 'clinepass' || providerId === 'qoder' || providerId === 'qoder-cn' || providerId === 'commandcode' || providerId === 'vercel-ai-gateway' || providerId === 'chutes' || providerId === 'nvidia' || providerId === 'ollama' || providerId === 'openrouter') && providerConnections.some((c) => c.isActive !== 0)}
+      <!-- Gated on the same predicate as "Check Latest Models": a hard-coded
+           list here drifted from ModelsListURLs, so providers the backend can
+           enumerate got Sync Models and no way to import. -->
+      {#if canListLiveModels && providerConnections.some((c) => c.isActive !== 0)}
         <button
           type="button"
-          onclick={handleImportLiveCatalogModels}
+          onclick={() => handleImportLiveCatalogModels(false)}
           disabled={isImportingLiveCatalogModels}
           class="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-2 hover:bg-surface-3 px-3 py-2 text-xs text-text-main transition-colors sm:w-auto cursor-pointer disabled:opacity-50"
         >
@@ -4219,6 +4236,16 @@
               : 'Import from /models'}
         </button>
       {/if}
+        <button
+          type="button"
+          onclick={() => handleImportLiveCatalogModels(true)}
+          disabled={isImportingLiveCatalogModels}
+          title="Import only the free-tier models from this provider catalog"
+          class="flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-500 sm:w-auto cursor-pointer disabled:opacity-50"
+        >
+          <span class="material-symbols-outlined text-sm">savings</span>
+          Import free only
+        </button>
 
       {#if visibleModels.length > 0}
         <button
