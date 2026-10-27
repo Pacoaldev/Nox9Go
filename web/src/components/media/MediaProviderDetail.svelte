@@ -222,6 +222,10 @@
     return [...builtin, ...customKindModels.filter((m) => m.id && !seen.has(m.id))]
   })
   let selectedModelId = $state('')
+  // For providers with no static catalog (e.g. Replicate), the operator writes
+  // the full model id. The example and the Run button use this value when no
+  // mediaModels are registered.
+  let customModelId = $state('')
 
   // Custom media models — upstream SttExampleCard parity: (d.models || [])
   // filtered by kind + providerAlias (alias or id), reload on focus/changed.
@@ -260,7 +264,18 @@
     if (rawModelId.startsWith(`${provider.id}/`) || (provider.alias && rawModelId.startsWith(`${provider.alias}/`))) {
       return rawModelId
     }
+    // Replicate model ids are already owner/name or deployments/owner/name;
+    // prefixing with replicate/ would still resolve on the backend, but the
+    // value the user sees and copies should be the canonical gateway id.
     return `${p}/${rawModelId}`
+  }
+
+  /** The model id used by the example curl and the Run button. */
+  function effectiveModelId(): string {
+    if (mediaModels.length > 0) {
+      return selectedModelId || mediaModels[0]?.id || ''
+    }
+    return customModelId
   }
 
   function handleCopyModel(id: string) {
@@ -423,7 +438,7 @@
   let exampleCurl = $derived.by(() => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:20130'
     const key = activeApiKey || 'YOUR_KEY'
-    const defaultModel = selectedModelId || mediaModels[0]?.id || ''
+    const defaultModel = effectiveModelId()
     const qualifiedModel = resolveQualifiedModel(defaultModel)
 
     if (kind === 'video') {
@@ -492,7 +507,7 @@
     exampleResponse = null
     const start = performance.now()
     try {
-      const defaultModel = selectedModelId || mediaModels[0]?.id || ''
+      const defaultModel = effectiveModelId()
       const qualifiedModel = resolveQualifiedModel(defaultModel)
 
       const headers: Record<string, string> = {}
@@ -938,6 +953,18 @@
                 <option value={m.id}>{m.name || m.id}</option>
               {/each}
             </select>
+          </div>
+        </div>
+      {:else}
+        <div class="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+          <span class="w-full text-xs font-medium text-text-muted sm:w-20 sm:shrink-0">Model</span>
+          <div class="w-full min-w-0 flex-1">
+            <input
+              type="text"
+              bind:value={customModelId}
+              placeholder="owner/name (e.g. black-forest-labs/flux-1.1-pro)"
+              class="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary text-text-main font-mono"
+            />
           </div>
         </div>
       {/if}
