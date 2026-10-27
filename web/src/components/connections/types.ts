@@ -58,6 +58,291 @@ const ICON_ALIASES: Record<string, string> = {
   'zai-search': 'glm',
 }
 
+// Which extension each provider's artwork is filed under. Upstream ships PNG
+// only, but lobe-icons and the providers' own brand kits hand us SVG, so the
+// folder is mixed. getIconPath used to append ".png" unconditionally, which
+// turned every SVG-backed provider — Replicate, Moonshot, Zhipu, Alibaba,
+// ModelScope, NaraRouter — into a 404 and then into an initials badge, as if no
+// artwork had shipped at all. Listing the real filename keeps that a lookup
+// instead of a guess, so a missing entry still resolves to the generic glyph
+// rather than to a file that is not there.
+const ICON_FILES: Record<string, string> = {
+  '360ai': '360ai.svg',
+  'agentrouter': 'agentrouter.png',
+  'agnes': 'agnes.png',
+  'alibaba': 'alibaba.svg',
+  'alicode-intl': 'alicode-intl.png',
+  'alicode': 'alicode.png',
+  'alims-intl': 'alims-intl.png',
+  'alitp-intl': 'alitp-intl.png',
+  'amp': 'amp.png',
+  'anthropic-m': 'anthropic-m.png',
+  'anthropic': 'anthropic.png',
+  'antigravity': 'antigravity.png',
+  'api-airforce': 'api-airforce.png',
+  'arcee-ai': 'arcee-ai.svg',
+  'arcee': 'arcee.svg',
+  'assemblyai': 'assemblyai.png',
+  'atria': 'atria.png',
+  'auggie': 'auggie.svg',
+  'aws-polly': 'aws-polly.png',
+  'aws': 'aws.svg',
+  'azure': 'azure.png',
+  'azureai': 'azureai.svg',
+  'bai': 'bai.png',
+  'baichuan': 'baichuan.svg',
+  'baidu': 'baidu.png',
+  'bailian': 'bailian.svg',
+  'baseten': 'baseten.svg',
+  'bazaarlink': 'bazaarlink.png',
+  'bedrock-xai': 'bedrock-xai.png',
+  'bedrock': 'bedrock.png',
+  'black-forest-labs': 'black-forest-labs.png',
+  'blackbox': 'blackbox.png',
+  'bluesminds': 'bluesminds.png',
+  'brave-search': 'brave-search.png',
+  'byteplus': 'byteplus.png',
+  'bytez': 'bytez.svg',
+  'cartesia': 'cartesia.png',
+  'cerebras': 'cerebras.png',
+  'charm-hyper': 'charm-hyper.svg',
+  'chutes': 'chutes.png',
+  'claude-web': 'claude-web.svg',
+  'claude': 'claude.png',
+  'cli-generic': 'cli-generic.svg',
+  'cline': 'cline.png',
+  'clinepass': 'clinepass.png',
+  'cloudflare-ai': 'cloudflare-ai.png',
+  'cloudflare': 'cloudflare.svg',
+  'codebuddy-cn': 'codebuddy-cn.png',
+  'codebuddy-intl': 'codebuddy-intl.png',
+  'codewhale': 'codewhale.svg',
+  'codex': 'codex.png',
+  'cohere': 'cohere.png',
+  'comfyui': 'comfyui.png',
+  'commandcode': 'commandcode.png',
+  'continue': 'continue.png',
+  'copilot': 'copilot.png',
+  'coqui': 'coqui.png',
+  'coze': 'coze.svg',
+  'crof': 'crof.svg',
+  'crush': 'crush.png',
+  'cursor': 'cursor.png',
+  'dahl': 'dahl.png',
+  'deepgram': 'deepgram.png',
+  'deepinfra': 'deepinfra.svg',
+  'deepseek-tui': 'deepseek-tui.png',
+  'deepseek-web': 'deepseek-web.png',
+  'deepseek': 'deepseek.png',
+  'devin-cli': 'devin-cli.png',
+  'dgrid': 'dgrid.svg',
+  'dify': 'dify.svg',
+  'dit': 'dit.svg',
+  'doubao': 'doubao.svg',
+  'droid': 'droid.png',
+  'edge-tts': 'edge-tts.png',
+  'elevenlabs': 'elevenlabs.png',
+  'exa': 'exa.png',
+  'factory': 'factory.svg',
+  'fal-ai': 'fal-ai.png',
+  'fal': 'fal.svg',
+  'featherless': 'featherless.png',
+  'firecrawl': 'firecrawl.png',
+  'fireworks': 'fireworks.png',
+  'fish-audio': 'fish-audio.png',
+  'forge': 'forge.png',
+  'freeaiapikey': 'freeaiapikey.svg',
+  'freebuff': 'freebuff.png',
+  'freemodel-dev': 'freemodel-dev.svg',
+  'friendli': 'friendli.svg',
+  'galadriel': 'galadriel.svg',
+  'gemini-cli': 'gemini-cli.png',
+  'gemini-web': 'gemini-web.png',
+  'gemini': 'gemini.png',
+  'github': 'github.png',
+  'gitlab': 'gitlab.png',
+  'gitlawb-gmi': 'gitlawb-gmi.svg',
+  'gitlawb': 'gitlawb.svg',
+  'glm-cn': 'glm-cn.png',
+  'glm': 'glm.png',
+  'gonkabroker': 'gonkabroker.png',
+  'google-pse': 'google-pse.png',
+  'google-tts': 'google-tts.png',
+  'google': 'google.svg',
+  'grok-cli': 'grok-cli.png',
+  'grok-web': 'grok-web.png',
+  'grok': 'grok.svg',
+  'groq': 'groq.png',
+  'hcnsec': 'hcnsec.svg',
+  'hermes': 'hermes.png',
+  'heroku': 'heroku.svg',
+  'huggingchat': 'huggingchat.svg',
+  'huggingface': 'huggingface.png',
+  'hyperbolic': 'hyperbolic.png',
+  'ibm': 'ibm.svg',
+  'iflow': 'iflow.png',
+  'iflytek': 'iflytek.svg',
+  'inclusionai': 'inclusionai.svg',
+  'inference': 'inference.svg',
+  'inworld': 'inworld.png',
+  'jcode': 'jcode.png',
+  'jina-ai': 'jina-ai.png',
+  'jina-reader': 'jina-reader.png',
+  'kenari': 'kenari.svg',
+  'kilo-gateway': 'kilo-gateway.png',
+  'kilocode': 'kilocode.png',
+  'kimi-coding': 'kimi-coding.png',
+  'kimi-logomark-dark': 'kimi-logomark-dark.svg',
+  'kimi-logomark-light': 'kimi-logomark-light.svg',
+  'kimi': 'kimi.png',
+  'kiro': 'kiro.png',
+  'krutrim': 'krutrim.svg',
+  'lambda': 'lambda.svg',
+  'linkup': 'linkup.png',
+  'liquid': 'liquid.svg',
+  'llm7': 'llm7.png',
+  'local-device': 'local-device.png',
+  'longcat': 'longcat.png',
+  'meta': 'meta.svg',
+  'metaai': 'metaai.svg',
+  'mimo-free': 'mimo-free.png',
+  'minimax-cn': 'minimax-cn.png',
+  'minimax-code-global': 'minimax-code-global.png',
+  'minimax-code': 'minimax-code.png',
+  'minimax': 'minimax.png',
+  'mistral': 'mistral.png',
+  'mixlayer': 'mixlayer.png',
+  'mmf': 'mmf.png',
+  'modelscope': 'modelscope.svg',
+  'monsterapi': 'monsterapi.svg',
+  'moonshot': 'moonshot.svg',
+  'morph': 'morph.png',
+  'muse': 'muse.png',
+  'nanobanana': 'nanobanana.png',
+  'nararouter': 'nararouter.svg',
+  'nebius': 'nebius.png',
+  'nomic': 'nomic.svg',
+  'notrack-web': 'notrack-web.svg',
+  'nous': 'nous.png',
+  'novita': 'novita.png',
+  'nube': 'nube.svg',
+  'nvidia': 'nvidia.png',
+  'oai-cc': 'oai-cc.png',
+  'oai-r': 'oai-r.png',
+  'ollama-local': 'ollama-local.png',
+  'ollama-search': 'ollama-search.png',
+  'ollama': 'ollama.png',
+  'omp': 'omp.png',
+  'onomeo': 'onomeo.svg',
+  'openai': 'openai.png',
+  'openclaw': 'openclaw.png',
+  'opencode-go': 'opencode-go.png',
+  'opencode-zen': 'opencode-zen.png',
+  'opencode': 'opencode.png',
+  'opendesign': 'opendesign.png',
+  'openrouter': 'openrouter.png',
+  'opper': 'opper.svg',
+  'orcarouter': 'orcarouter.svg',
+  'ovhcloud': 'ovhcloud.svg',
+  'perplexity-agent': 'perplexity-agent.png',
+  'perplexity-web': 'perplexity-web.png',
+  'perplexity': 'perplexity.png',
+  'phind': 'phind.svg',
+  'picoclaw': 'picoclaw.svg',
+  'pioneer': 'pioneer.svg',
+  'playht': 'playht.png',
+  'poe': 'poe.svg',
+  'pollinations': 'pollinations.svg',
+  'poolside': 'poolside.png',
+  'publicai': 'publicai.svg',
+  'qoder-cn': 'qoder-cn.png',
+  'qoder': 'qoder.png',
+  'qwen': 'qwen.png',
+  'recraft': 'recraft.png',
+  'reka': 'reka.png',
+  'replicate': 'replicate.svg',
+  'requesty': 'requesty.svg',
+  'roo': 'roo.png',
+  'roocode': 'roocode.svg',
+  'runway': 'runway.svg',
+  'runwayml': 'runwayml.png',
+  'sambanova': 'sambanova.png',
+  'sdwebui': 'sdwebui.png',
+  'searchapi': 'searchapi.png',
+  'searxng': 'searxng.png',
+  'selfhosted-embedding': 'selfhosted-embedding.png',
+  'selfhosted-stt': 'selfhosted-stt.png',
+  'selfhosted-tts': 'selfhosted-tts.png',
+  'sensenova': 'sensenova.svg',
+  'serper': 'serper.png',
+  'siliconflow': 'siliconflow.png',
+  'smelt': 'smelt.svg',
+  'snowflake': 'snowflake.svg',
+  'sparkdesk': 'sparkdesk.svg',
+  'stability-ai': 'stability-ai.png',
+  'stepfun': 'stepfun.svg',
+  'sumopod': 'sumopod.png',
+  'suno': 'suno.svg',
+  't3-web': 't3-web.svg',
+  'tavily': 'tavily.png',
+  'tencent': 'tencent.png',
+  'tinyfish': 'tinyfish.png',
+  'together': 'together.png',
+  'tokenharbor': 'tokenharbor.png',
+  'tokenrouter': 'tokenrouter.png',
+  'topaz': 'topaz.png',
+  'topazlabs': 'topazlabs.svg',
+  'tortoise': 'tortoise.png',
+  'trae': 'trae.png',
+  'udio': 'udio.svg',
+  'uncloseai': 'uncloseai.svg',
+  'upstage': 'upstage.svg',
+  'v0': 'v0.svg',
+  'v1m': 'v1m.png',
+  'venice': 'venice.png',
+  'veoaifree-web': 'veoaifree-web.svg',
+  'vercel-ai-gateway': 'vercel-ai-gateway.png',
+  'vercel': 'vercel.png',
+  'vertex-partner': 'vertex-partner.png',
+  'vertex': 'vertex.png',
+  'vllm': 'vllm.svg',
+  'volcengine-ark': 'volcengine-ark.png',
+  'volcengine': 'volcengine.svg',
+  'voyage-ai': 'voyage-ai.png',
+  'voyage': 'voyage.svg',
+  'wafer': 'wafer.svg',
+  'windsurf': 'windsurf.png',
+  'workbuddy': 'workbuddy.png',
+  'x5lab': 'x5lab.svg',
+  'xai': 'xai.png',
+  'xiaomi-mimo': 'xiaomi-mimo.png',
+  'xiaomi-tokenplan': 'xiaomi-tokenplan.png',
+  'xinference': 'xinference.svg',
+  'xquik': 'xquik.png',
+  'yi': 'yi.svg',
+  'youcom': 'youcom.png',
+  'yuanbao-web': 'yuanbao-web.svg',
+  'zed-hosted': 'zed-hosted.svg',
+  'zed': 'zed.png',
+  'zenmux-free': 'zenmux-free.svg',
+  'zenmux': 'zenmux.svg',
+  'zhipu': 'zhipu.svg',
+}
+
+function genericGlyph(apiType?: string): string {
+  return apiType === 'responses' ? '/providers/oai-r.png' : '/providers/oai-cc.png'
+}
+
+// Resolves a catalog id or uiAlias to the id its artwork would be filed under.
+// Returns undefined when neither matches, which is the signal for the caller to
+// fall through to the generic OpenAI glyph.
+function resolveIconId(id?: string | null): string | undefined {
+  const clean = id?.trim()
+  if (!clean) return undefined
+  return ICON_ALIASES[clean]
+    ?? (PROVIDER_CATALOG_MAP.has(clean) ? clean : PROVIDER_CATALOG.find((p) => p.alias === clean)?.id)
+}
+
 export function getIconPath(id?: string | null, apiType?: string): string {
   if (!id) return '/providers/oai-cc.png'
   const clean = id.trim()
@@ -67,14 +352,94 @@ export function getIconPath(id?: string | null, apiType?: string): string {
   if (clean.startsWith('anthropic-compatible') || clean.includes('anthropic')) {
     return '/providers/anthropic-m.png'
   }
-  // A catalog id or a uiAlias both resolve to the id the artwork is filed
-  // under; neither matching is the signal to use the generic OpenAI glyph.
-  const fileId = ICON_ALIASES[clean]
-    ?? (PROVIDER_CATALOG_MAP.has(clean) ? clean : PROVIDER_CATALOG.find((p) => p.alias === clean)?.id)
-  if (fileId) {
-    return `/providers/${fileId}.png`
+  const fileId = resolveIconId(clean)
+  const file = fileId ? ICON_FILES[fileId] : undefined
+  if (file) {
+    return `/providers/${file}`
   }
-  return apiType === 'responses' ? '/providers/oai-r.png' : '/providers/oai-cc.png'
+  return genericGlyph(apiType)
+}
+
+/**
+ * Every URL worth trying for a provider's artwork, best first.
+ *
+ * **Colour beats monochrome, and that rule orders everything below.** A
+ * monochrome mark inherits the surrounding text colour, so in a dark theme it
+ * renders white and in a light theme black — legible, but no longer the brand.
+ * A colour mark is recognisable on either background, so it is always preferred
+ * even when the monochrome one lives on a higher-coverage source.
+ *
+ * The shipped file comes first because it is the only candidate that cannot
+ * fail at runtime: it is served from the app's own origin, so it costs no
+ * cross-origin request and no CDN dependency.
+ *
+ * Then, measured against the catalog in `web/src/lib/providers.ts` (150 ids)
+ * rather than taken from what each source advertises:
+ *
+ * 1. LobeHub colour (`{id}-color.svg`): the AI-native set. Not every brand has
+ *    a colour variant (`anthropic-color` 404s, `claude-color` exists), so the
+ *    plain file follows as its own step rather than being assumed present.
+ * 2. models.dev: 30 real matches, mapped by provider id, multicolour.
+ * 3. LobeHub monochrome (`{id}.svg`): `currentColor`.
+ * 4. Simple Icons: always single-colour, so it is the last resort even though
+ *    its CC0 licence is the most permissive.
+ *
+ * models.dev needs care. `models.dev/logos/{id}.svg` answers **200 with the
+ * same generic mark** for an id it does not know — a made-up provider and
+ * `gonkabroker` return byte-identical files (119 of 150 ids hit it). So a
+ * models.dev candidate is only offered for an id the scan found a real logo
+ * for; see `MODELS_DEV_IDS`. Without that list every unknown provider would
+ * paint a wrong logo with confidence, which is worse than the generic glyph.
+ *
+ * SVGL is not wired. Its files come from `svgl.app/library/{file}.svg`, but the
+ * filename does not follow the provider id (`openai.svg` exists,
+ * `anthropic.svg` and `mistral.svg` do not), so no URL can be derived without
+ * the API.
+ *
+ * Only catalog ids expand to CDN candidates. A custom-endpoint node has no
+ * brand to look up, and guessing would turn a deliberate generic glyph into
+ * some unrelated provider's mark.
+ */
+const LOBE_VERSION = '1.101.0'
+
+const MODELS_DEV_IDS: Record<string, true> = {
+  'agnes': true, 'anthropic': true, 'azure': true, 'cerebras': true, 'cohere': true,
+  'commandcode': true, 'daoxe': true, 'deepseek': true, 'gitlab': true, 'groq': true,
+  'huggingface': true, 'minimax': true, 'minimax-cn': true, 'mistral': true,
+  'mixlayer': true, 'nan': true, 'nebius': true, 'nvidia': true, 'openai': true,
+  'opencode': true, 'opencode-go': true, 'openrouter': true, 'perplexity': true,
+  'perplexity-agent': true, 'poolside': true, 'sambanova': true, 'siliconflow': true,
+  'tokenrouter': true, 'venice': true, 'xai': true,
+}
+
+/**
+ * The CDN steps, in order, for a provider with no shipped artwork.
+ *
+ * Split out so the colour-before-monochrome ordering is assertable: `mono`
+ * marks the point where every remaining step is single-colour, and a test
+ * checks that no colour source follows one. Building the list inline made the
+ * order only observable by inspecting strings, which a test can get wrong
+ * without noticing.
+ */
+export function getRemoteSources(fileId: string): { url: string; mono: boolean }[] {
+  const lobe = (file: string) => `https://unpkg.com/@lobehub/icons-static-svg@${LOBE_VERSION}/icons/${file}`
+  const sources = [
+    { url: lobe(`${fileId}-color.svg`), mono: false },
+    ...(MODELS_DEV_IDS[fileId] ? [{ url: `https://models.dev/logos/${fileId}.svg`, mono: false }] : []),
+    { url: lobe(`${fileId}.svg`), mono: true },
+    { url: `https://cdn.simpleicons.org/${fileId}`, mono: true },
+  ]
+  return sources
+}
+
+export function getIconCandidates(id?: string | null, apiType?: string): string[] {
+  const local = getIconPath(id, apiType)
+  // A shipped file ends the search: a CDN would only re-render the same brand,
+  // over the network, and could disagree with the shipped mark.
+  if (local !== genericGlyph(apiType)) return [local]
+  const fileId = resolveIconId(id)
+  if (!fileId) return [local]
+  return [local, ...getRemoteSources(fileId).map((s) => s.url)]
 }
 
 // Provider initials badge, used when a provider has no shipped PNG. The

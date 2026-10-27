@@ -1373,6 +1373,84 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     ]
   },
   {
+    "id": "replicate",
+    "name": "Replicate",
+    "category": "apikey",
+    "alias": "replicate",
+    "color": "#111827",
+    "icon": "memory",
+    "website": "https://replicate.com",
+    "notice": {"text":"Image/video model hosting. Replicate's own API is /v1/predictions with polling, not the OpenAI chat shape, so routing needs backend support before connections work.", "apiKeyUrl":"https://replicate.com/account/api-tokens"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "image",
+      "video"
+    ]
+  },
+  {
+    "id": "modelscope",
+    "name": "ModelScope",
+    "category": "apikey",
+    "alias": "modelscope",
+    "color": "#624AFF",
+    "icon": "hub",
+    "website": "https://modelscope.cn",
+    "notice": {"text":"OpenAI-compatible endpoint on api-inference.modelscope.cn. Alibaba's model hub; hosts DeepSeek, Qwen and other open models.", "apiKeyUrl":"https://modelscope.cn/my/myaccesstoken"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ]
+  },
+  {
+    "id": "qwen",
+    "name": "QWEN (Alibaba)",
+    "category": "apikey",
+    "alias": "qwen",
+    "color": "#615CED",
+    "icon": "auto_awesome",
+    "website": "https://dashscope.aliyuncs.com",
+    "notice": {"text":"Alibaba DashScope, OpenAI-compatible mode. International keys use dashscope-intl.aliyuncs.com.", "apiKeyUrl":"https://bailian.console.alibabacloud.com"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm",
+      "image",
+      "embedding"
+    ]
+  },
+  {
+    "id": "zhipu",
+    "name": "Zhipu AI",
+    "category": "apikey",
+    "alias": "zhipu",
+    "color": "#3859FF",
+    "icon": "psychology",
+    "website": "https://open.bigmodel.cn",
+    "notice": {"text":"Zhipu's open platform (bigmodel.cn), the account several GLM seats share. For the coding seat use GLM Coding.", "apiKeyUrl":"https://open.bigmodel.cn/usercenter/apikeys"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ]
+  },
+  {
+    "id": "moonshot",
+    "name": "Moonshot AI",
+    "category": "apikey",
+    "alias": "moonshot",
+    "color": "#0F172A",
+    "icon": "nightlight",
+    "website": "https://platform.moonshot.ai",
+    "notice": {"text":"Moonshot's open platform (Kimi models). The coding seat lives under Kimi.", "apiKeyUrl":"https://platform.moonshot.ai/console/api-keys"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ]
+  },
+  {
     "id": "glm-cn",
     "name": "GLM (China)",
     "category": "apikey",
@@ -1401,6 +1479,21 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "serviceKinds": [
       "llm",
       "webSearch"
+    ]
+  },
+  {
+    "id": "gonkabroker",
+    "name": "GonkaBroker",
+    "category": "apikey",
+    "alias": "gonkabroker",
+    "color": "#10B981",
+    "icon": "hub",
+    "website": "https://gonkabroker.com",
+    "notice": {"text":"OpenAI-compatible broker for Gonka network models. Served from proxy.gonkabroker.com — the bare domain has no /v1.","apiKeyUrl":"https://gonkabroker.com"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
     ]
   },
   {
@@ -1677,6 +1770,36 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     ]
   },
   {
+    "id": "mixlayer",
+    "name": "Mixlayer",
+    "category": "apikey",
+    "alias": "mixlayer",
+    "color": "#7C3AED",
+    "icon": "layers",
+    "website": "https://mixlayer.ai",
+    "notice": {"text":"OpenAI-compatible model router. Free tier, no card required.","apiKeyUrl":"https://mixlayer.ai"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ]
+  },
+  {
+    "id": "nararouter",
+    "name": "NaraRouter",
+    "category": "apikey",
+    "alias": "nara",
+    "color": "#F59E0B",
+    "icon": "route",
+    "website": "https://router.bynara.id",
+    "notice": {"text":"OpenAI-compatible router. Free tier, no card required.","apiKeyUrl":"https://router.bynara.id"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ]
+  },
+  {
     "id": "nanobanana",
     "name": "NanoBanana API",
     "category": "apikey",
@@ -1704,6 +1827,21 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "serviceKinds": [
       "llm",
       "embedding"
+    ]
+  },
+  {
+    "id": "onomeo",
+    "name": "Onomeo",
+    "category": "apikey",
+    "alias": "onomeo",
+    "color": "#FFF6D6",
+    "icon": "smart_toy",
+    "website": "https://onomeo.com",
+    "notice": {"text":"OpenAI-compatible endpoint. Free tier, no card required.","apiKeyUrl":"https://onomeo.com"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
     ]
   },
   {

@@ -14,7 +14,7 @@
   // changes cannot fire onerror for a src set later, which is why the previous
   // call sites hid the image instead.
 
-  import { getIconPath, getProviderGlyph } from '../connections/types'
+  import { getIconCandidates, getProviderGlyph } from '../connections/types'
   interface Props {
     /** Provider id or alias; falls back to the glyph when absent. */
     id?: string | null
@@ -29,17 +29,27 @@
 
   let { id, apiType, alt, class: klass = '', style }: Props = $props()
 
-  const src = $derived(getIconPath(id, apiType))
+  // The candidate list is the whole search: the shipped file first, then the
+  // CDN sources only when the catalog knows the provider and the artwork folder
+  // does not cover it. Walking it on `error` costs one request per miss, so an
+  // uncovered provider still degrades to the initials badge instead of a hole.
+  const candidates = $derived(getIconCandidates(id, apiType))
   const glyph = $derived(getProviderGlyph(id))
   const label = $derived(alt ?? glyph.name)
 
-  // Keyed on the source, so switching providers re-attempts the artwork instead
-  // of inheriting the previous provider's failure.
-  const failed = $state(new Map<string, boolean>())
-  const showImage = $derived(!failed.get(src))
+  // Keyed on the provider, not on the failed src: switching providers must
+  // restart the cascade from its first candidate rather than resume the
+  // previous provider's search, and a provider that appears after mount must
+  // not inherit a dead index.
+  let attempt = $state<{ key: string; index: number }>({ key: '', index: 0 })
+  const key = $derived(`${id ?? ''}|${apiType ?? ''}`)
+  const index = $derived(attempt.key === key ? attempt.index : 0)
+  const src = $derived(candidates[Math.min(index, candidates.length - 1)])
+  const showImage = $derived(src !== undefined)
 
   function handleError() {
-    failed.set(src, true)
+    if (attempt.key !== key) attempt = { key, index: 1 }
+    else attempt = { key, index: attempt.index + 1 }
   }
 </script>
 
