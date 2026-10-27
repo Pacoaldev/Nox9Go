@@ -233,7 +233,7 @@ func TestTestConnection_APIKeyProviderReusesKeyProbe(t *testing.T) {
 	validateProbeDo = func(context.Context, string, string, map[string]string, []byte) (int, []byte, error) {
 		return http.StatusUnauthorized, nil, nil
 	}
-	if _, body := postTestConnection(t, repo, "conn-openai"); body["valid"] != false || body["error"] != "Invalid API key" {
+	if _, body := postTestConnection(t, repo, "conn-openai"); body["valid"] != false || body["error"] != "Invalid API key or base URL (HTTP 401)" {
 		t.Fatalf("expected invalid key, got %v", body)
 	}
 

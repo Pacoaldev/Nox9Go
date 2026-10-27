@@ -174,8 +174,8 @@ func TestHandleValidateProvider_InvalidKeyIsAValidResponse(t *testing.T) {
 	if out["valid"] != false {
 		t.Errorf("expected valid=false, got %v", out["valid"])
 	}
-	if out["error"] != "Invalid API key" {
-		t.Errorf("expected 'Invalid API key', got %v", out["error"])
+	if out["error"] != "Invalid API key or base URL (HTTP 401)" {
+		t.Errorf("expected 'Invalid API key or base URL (HTTP 401)', got %v", out["error"])
 	}
 }
 

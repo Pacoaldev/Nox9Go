@@ -536,7 +536,7 @@ func (h *DashboardHandler) probeCompatibleConnection(ctx context.Context, conn *
 			"max_tokens": 1,
 			"messages":   []map[string]string{{"role": "user", "content": "test"}},
 		})
-		status, _, err := connectionProbeDo(ctx, client, http.MethodPost, anthropicProbeMessagesURL(base), map[string]string{
+		status, respBody, err := connectionProbeDo(ctx, client, http.MethodPost, anthropicProbeMessagesURL(base), map[string]string{
 			"x-api-key":         data.APIKey,
 			"anthropic-version": "2023-06-01",
 			"content-type":      "application/json",
@@ -546,17 +546,25 @@ func (h *DashboardHandler) probeCompatibleConnection(ctx context.Context, conn *
 			return probeOutcome{message: err.Error()}
 		}
 		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			if looksEdgeBlocked(respBody) {
+				return probeOutcome{message: validateBlockedMessage(conn.Provider, status)}
+			}
 			return probeOutcome{message: "Invalid API key or base URL"}
 		}
 		return probeOutcome{valid: true}
 	}
-	status, _, err := connectionProbeDo(ctx, client, http.MethodGet, base+"/models", map[string]string{
+	status, respBody, err := connectionProbeDo(ctx, client, http.MethodGet, base+"/models", map[string]string{
 		"Authorization": "Bearer " + data.APIKey,
 	}, nil)
 	if err != nil {
 		return probeOutcome{message: err.Error()}
 	}
 	if status < 200 || status >= 300 {
+		// A 403 whose body talks about the network is an edge block, not a
+		// credential verdict — see looksEdgeBlocked.
+		if looksEdgeBlocked(respBody) {
+			return probeOutcome{message: validateBlockedMessage(conn.Provider, status)}
+		}
 		return probeOutcome{message: "Invalid API key or base URL"}
 	}
 	return probeOutcome{valid: true}

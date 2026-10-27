@@ -21,6 +21,7 @@ import (
 
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlerutil"
+	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/models"
 	"nox9go/proxy/internal/providers"
 	"nox9go/proxy/internal/proxy"
@@ -515,16 +516,31 @@ func validateGeneric(ctx context.Context, provider string, cfg providers.Provide
 	headers := validateAuthHeaders(cfg, apiKey)
 	headers["Content-Type"] = "application/json"
 
-	status, _, err := validateProbeDo(ctx, http.MethodGet, validateModelsURL(cfg.BaseURL), headers, nil)
+	modelsURL := validateModelsURL(cfg.BaseURL)
+	status, respBody, err := validateProbeDo(ctx, http.MethodGet, modelsURL, headers, nil)
 	if err != nil {
+		log.Debug("probe", "provider key test network error",
+			"provider", provider, "endpoint", modelsURL, "error", err)
 		return validateOutcome{supported: true, message: err.Error()}
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		return validateOutcome{supported: true}
+		if looksEdgeBlocked(respBody) {
+			log.Warn("probe", "provider key test blocked by edge, key not evaluated",
+				"provider", provider, "endpoint", modelsURL, "status", status,
+				"body", validateTruncate(string(respBody), 200))
+			return validateOutcome{supported: true, message: validateBlockedMessage(provider, status)}
+		}
+		log.Info("probe", "provider key test rejected credential",
+			"provider", provider, "endpoint", modelsURL, "status", status)
+		return validateOutcome{supported: true, message: fmt.Sprintf("Invalid API key or base URL (HTTP %d)", status)}
 	}
 	if status >= 200 && status < 300 {
+		log.Debug("probe", "provider key test passed",
+			"provider", provider, "endpoint", modelsURL, "status", status)
 		return validateOutcome{valid: true, supported: true}
 	}
+	log.Debug("probe", "provider key test ambiguous on /models, falling back to chat",
+		"provider", provider, "endpoint", modelsURL, "status", status)
 
 	// Ambiguous /models answer (404, 405, 429…) — fall back to a chat probe.
 	payload, _ := json.Marshal(map[string]any{
@@ -532,14 +548,27 @@ func validateGeneric(ctx context.Context, provider string, cfg providers.Provide
 		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
 		"max_tokens": 1,
 	})
-	status, _, err = validateProbeDo(ctx, http.MethodPost, cfg.BaseURL, headers, payload)
+	status, respBody, err = validateProbeDo(ctx, http.MethodPost, cfg.BaseURL, headers, payload)
 	if err != nil {
+		log.Debug("probe", "provider key test chat fallback network error",
+			"provider", provider, "endpoint", cfg.BaseURL, "error", err)
 		return validateOutcome{supported: true, message: err.Error()}
 	}
-	return validateOutcome{
-		valid:     status != http.StatusUnauthorized && status != http.StatusForbidden,
-		supported: true,
+	valid := status != http.StatusUnauthorized && status != http.StatusForbidden
+	if !valid {
+		if looksEdgeBlocked(respBody) {
+			log.Warn("probe", "provider key test blocked by edge on chat fallback, key not evaluated",
+				"provider", provider, "endpoint", cfg.BaseURL, "status", status,
+				"body", validateTruncate(string(respBody), 200))
+			return validateOutcome{supported: true, message: validateBlockedMessage(provider, status)}
+		}
+		log.Info("probe", "provider key test rejected credential (chat fallback)",
+			"provider", provider, "endpoint", cfg.BaseURL, "status", status)
+		return validateOutcome{supported: true, message: fmt.Sprintf("Invalid API key or base URL (HTTP %d)", status)}
 	}
+	log.Debug("probe", "provider key test passed (chat fallback)",
+		"provider", provider, "endpoint", cfg.BaseURL, "status", status)
+	return validateOutcome{valid: valid, supported: true}
 }
 
 func validateNous(ctx context.Context, apiKey string) validateOutcome {
@@ -966,6 +995,76 @@ func validateModelsURL(baseURL string) string {
 		return strings.TrimSuffix(url, "/chatbot") + "/models"
 	}
 	return url
+}
+
+// edgeBlockedBodyMarkers are the bodies an edge/WAF (Cloudflare in front of the
+// provider) returns when it refuses the caller before the API ever inspects the
+// credential. They share one trait: the text talks about the network or the
+// request, never about the key. Reporting one of these as "Invalid API key"
+// sends the operator hunting for a credential problem that does not exist.
+var edgeBlockedBodyMarkers = []string{
+	"check your network settings",
+	"access denied",
+	"error 1020",
+	"error 1010",
+	"attention required",
+	"just a moment",
+	"cf-mitigated",
+}
+
+// looksEdgeBlocked reports whether a rejected probe looks like a network/region
+// block imposed ahead of the provider's API rather than a credential decision.
+//
+// The discrimination matters because the same 403 status code carries both
+// meanings. An API that dislikes the key answers with an auth-specific phrase
+// ("invalid api key", "unauthorized", "missing api key"); an edge block answers
+// with an infrastructure phrase. Anything that is clearly about the key wins,
+// so a genuine key rejection is never relabelled as a network block.
+func looksEdgeBlocked(body []byte) bool {
+	text := strings.ToLower(strings.TrimSpace(string(body)))
+	if text == "" {
+		return false
+	}
+	if edgeBlockedLooksLikeKeyRejection(text) {
+		return false
+	}
+	for _, marker := range edgeBlockedBodyMarkers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// edgeBlockedLooksLikeKeyRejection reports whether the error body names the
+// credential, which means the request reached the API and the key was judged.
+func edgeBlockedLooksLikeKeyRejection(text string) bool {
+	for _, marker := range []string{
+		"invalid api key",
+		"invalid_api_key",
+		"incorrect api key",
+		"missing api key",
+		"api key not valid",
+		"api key is invalid",
+		"no api key",
+		"unauthorized",
+		"authentication",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateBlockedMessage is what a probe reports when the edge refused the
+// call. It names the likely cause and, crucially, tells the operator the key
+// was never evaluated — the difference between fixing a credential and moving
+// the egress.
+func validateBlockedMessage(provider string, status int) string {
+	return fmt.Sprintf(
+		"Network/region block from %s (HTTP %d): the provider's edge refused the request before checking the key. The API key was not evaluated — try a different egress (proxy/VPN) or run the test from another network.",
+		provider, status)
 }
 
 // validateDefaultModel is upstream's getDefaultModel: the provider's first
