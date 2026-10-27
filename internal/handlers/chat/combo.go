@@ -761,6 +761,25 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 							lastErr = ue
 							break
 						}
+						// A request that the model rejects for its shape (unsupported
+						// modality, an out-of-range parameter, a bad tool-call payload)
+						// fails the same way on every other connection to the same
+						// body, so walking the rest of the combo only burns a
+						// connection per member for an identical rejection. Stop the
+						// turn and surface the error: the caller needs to fix the
+						// request, not try another provider. Sibling of
+						// IsModelFitError — fit-error covers "too big" (a bigger
+						// member might still work), request-invalid covers "wrong
+						// shape" (no member will). The account is not at fault, so
+						// comboLockRetryable is skipped, same as fit-error.
+						if providers.IsRequestInvalidError(ue.StatusCode, ue.Body) {
+							log.Info("combo", "request rejected as invalid, stopping turn",
+								"provider", modelInfo.Provider, "model", modelInfo.Model,
+								"status", ue.StatusCode)
+							retry.note(ue)
+							lastErr = ue
+							break
+						}
 						// A spent quota is a fact about the pair, not about the
 						// credential: every other key of this provider answers
 						// the same way, so the pool must not be walked. Park the
@@ -1044,6 +1063,25 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 						if providers.IsModelFitError(ue.StatusCode, ue.Body) {
 							log.Info("combo", "model too small for request, next member",
 								"provider", modelInfo.Provider, "model", modelInfo.Model)
+							retry.note(ue)
+							lastErr = ue
+							break
+						}
+						// A request that the model rejects for its shape (unsupported
+						// modality, an out-of-range parameter, a bad tool-call payload)
+						// fails the same way on every other connection to the same
+						// body, so walking the rest of the combo only burns a
+						// connection per member for an identical rejection. Stop the
+						// turn and surface the error: the caller needs to fix the
+						// request, not try another provider. Sibling of
+						// IsModelFitError — fit-error covers "too big" (a bigger
+						// member might still work), request-invalid covers "wrong
+						// shape" (no member will). The account is not at fault, so
+						// comboLockRetryable is skipped, same as fit-error.
+						if providers.IsRequestInvalidError(ue.StatusCode, ue.Body) {
+							log.Info("combo", "request rejected as invalid, stopping turn",
+								"provider", modelInfo.Provider, "model", modelInfo.Model,
+								"status", ue.StatusCode)
 							retry.note(ue)
 							lastErr = ue
 							break

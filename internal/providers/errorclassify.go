@@ -107,6 +107,66 @@ func IsModelFitError(statusCode int, body []byte) bool {
 	return false
 }
 
+// RequestInvalidPatterns are the upstream messages that mean "this request is
+// malformed or unsupported", as opposed to "this account cannot serve it".
+// Matched case-insensitively against the error body.
+//
+// The distinction matters inside a combo: an account fault is worth another
+// connection, but a request that the model rejects for its shape (unsupported
+// modality, an out-of-range parameter, a bad tool-call payload) gets the same
+// answer from every other connection to the same body, so the only useful move
+// is to stop the turn rather than walk every combo member and burn a connection
+// on each. This is the sibling of IsModelFitError: fit-error covers "too big",
+// request-invalid covers "wrong shape".
+var RequestInvalidPatterns = []string{
+	"invalid_request_error",
+	"invalid tool use format",
+	"does not support multimodal",
+	"does not support image",
+	"does not support vision",
+	"must be less than or equal to",
+	"maximum value for",
+	"`max_tokens` must be",
+	"bad request",
+	"request_body_invalid",
+	"request body invalid",
+	"unsupported parameter",
+	"unsupported value",
+	"unrecognized request argument",
+	"unrecognized arguments",
+	"invalid schema",
+	"invalid_request",
+}
+
+// RequestInvalidStatusCodes are the statuses an upstream uses to reject a
+// malformed request. 400 is the overwhelming majority; 422 is the other common
+// spelling. 404/409 are excluded on purpose: a missing model or a conflict is
+// not a request-shape problem and is handled by the deprecation / lockout paths.
+var RequestInvalidStatusCodes = map[int]bool{
+	http.StatusBadRequest:          true, // 400
+	http.StatusUnprocessableEntity: true, // 422
+}
+
+// IsRequestInvalidError reports whether an upstream failure means the request
+// itself is malformed or unsupported by the model, rather than the connection
+// being at fault. It deliberately does NOT overlap with IsModelFitError: a
+// prompt-too-long rejection is a fit error (the right move is a bigger model),
+// while a bad-tool-call or unsupported-modality rejection is a request error
+// (the right move is to stop, because no model in the combo will accept this
+// body as-is). IsModelFitError must be checked first at the call site.
+func IsRequestInvalidError(statusCode int, body []byte) bool {
+	if !RequestInvalidStatusCodes[statusCode] || len(body) == 0 {
+		return false
+	}
+	text := strings.ToLower(string(body))
+	for _, pattern := range RequestInvalidPatterns {
+		if strings.Contains(text, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
 // GetQuotaCooldown calculates exponential backoff cooldown for rate limits.
 // Level 0 → 2s, Level 1 → 2s, Level 2 → 4s, Level 3 → 8s, ... capped at MaxMs.
 func GetQuotaCooldown(backoffLevel int) int {
