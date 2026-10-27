@@ -372,3 +372,27 @@ func TestHandleGetModelCaps_ConsecutiveCallsStaticPrecedence(t *testing.T) {
 		}
 	}
 }
+
+// A provider the registry knows but that has no static catalogue — Zed serves
+// its models from a live catalogue — answers with an empty map, not a 404.
+// The dashboard polls this endpoint on every load, so a 404 here was a log line
+// about a provider that exists, which reads like a routing bug and is not one.
+func TestHandleGetModelCaps_KnownProviderWithoutStaticModels(t *testing.T) {
+	code, caps := fetchCaps(t, "zed")
+	if code != http.StatusOK {
+		t.Fatalf("zed: status = %d, want 200", code)
+	}
+	if len(caps) != 0 {
+		t.Errorf("zed: want an empty caps map, got %d entries", len(caps))
+	}
+}
+
+// An id the registry does not know and no node backs is still a 404: the status
+// keeps its meaning, so a typo or a missing provider is still visible.
+func TestHandleGetModelCaps_UnknownProviderIs404(t *testing.T) {
+	code, _ := fetchCaps(t, "totally-unknown-provider")
+	if code != http.StatusNotFound {
+		t.Fatalf("unknown provider: status = %d, want 404", code)
+	}
+}
+

@@ -92,6 +92,12 @@ func (h *DashboardHandler) HandleGetModelCaps(w http.ResponseWriter, r *http.Req
 	}
 
 	if len(caps) == 0 {
+		// An empty capability map is a real answer for a provider that simply
+		// has no static catalogue — a live-catalogue provider such as Zed, a
+		// compatible node, or a provider node carrying only custom rows. It is
+		// not a missing resource, so it must not be a 404: the dashboard polls
+		// this endpoint on every load and was logging a 404 for a provider it
+		// had just asked about and knows exists.
 		if strings.HasPrefix(provider, "openai-compatible") || strings.HasPrefix(provider, "anthropic-compatible") {
 			handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 				"provider": provider,
@@ -99,16 +105,25 @@ func (h *DashboardHandler) HandleGetModelCaps(w http.ResponseWriter, r *http.Req
 			})
 			return
 		}
-		if h.Repo != nil {
+		known := false
+		if _, ok := providers.KnownProviders[resolved]; ok {
+			known = true
+		}
+		if !known && h.Repo != nil {
 			if node, _, err := h.Repo.GetProviderNodeByID(provider); err == nil && node != nil {
-				handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
-					"provider": provider,
-					"caps":     map[string]any{},
-				})
-				return
+				known = true
 			}
 		}
-		handlerutil.WriteJSONError(w, http.StatusNotFound, "unknown provider or no static models")
+		if known {
+			handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+				"provider": resolved,
+				"caps":     map[string]any{},
+			})
+			return
+		}
+		// Nothing in the registry and no node behind the id: the caller asked
+		// for a provider that does not exist, and saying so is still worth a 404.
+		handlerutil.WriteJSONError(w, http.StatusNotFound, "unknown provider")
 		return
 	}
 
