@@ -3,7 +3,7 @@ import { maskEmail, formatEmailLabel, submittedConnectionName } from './privacy'
 
 describe('privacy email masking', () => {
   it('masks standard email addresses', () => {
-    expect(maskEmail('luqman.hakim@gmail.com')).toBe('l***m@gmail.com')
+    expect(maskEmail('pacoaldev@gmail.com')).toBe('p***v@gmail.com')
     expect(maskEmail('john.doe@sub.example.co.uk')).toBe('j***e@sub.example.co.uk')
   })
 
@@ -34,8 +34,8 @@ describe('privacy email masking', () => {
   })
 
   it('is idempotent, so a stored masked name is not masked twice', () => {
-    expect(maskEmail(maskEmail('luqman.hakim@gmail.com'))).toBe('l***m@gmail.com')
-    expect(maskEmail('l***m@gmail.com')).toBe('l***m@gmail.com')
+    expect(maskEmail(maskEmail('pacoaldev@gmail.com'))).toBe('p***v@gmail.com')
+    expect(maskEmail('p***v@gmail.com')).toBe('p***v@gmail.com')
   })
 
   it('formatEmailLabel respects isMasked flag', () => {
@@ -47,9 +47,9 @@ describe('privacy email masking', () => {
 
 // A masked label shown in an edit form must never be written back as the
 // connection's real name. These are the exact inputs that reach the save
-// handler; each one previously had a path to persist "l***m@gmail.com".
+// handler; each one previously had a path to persist "p***v@gmail.com".
 describe('submittedConnectionName', () => {
-  const original = 'luqman.hakim@gmail.com'
+  const original = 'pacoaldev@gmail.com'
   const seeded = formatEmailLabel(original, true)
 
   it('submits nothing when a masked field is untouched', () => {
@@ -79,7 +79,7 @@ describe('submittedConnectionName', () => {
   })
 
   it('leaves an already-masked stored name alone', () => {
-    expect(submittedConnectionName('l***m@gmail.com', 'l***m@gmail.com', 'l***m@gmail.com'))
+    expect(submittedConnectionName('p***v@gmail.com', 'p***v@gmail.com', 'p***v@gmail.com'))
       .toBeUndefined()
   })
 

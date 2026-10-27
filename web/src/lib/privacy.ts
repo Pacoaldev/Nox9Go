@@ -4,20 +4,20 @@ const STORAGE_KEY = 'nox9go_mask_email'
 
 /**
  * Mask an email address for privacy / screen sharing.
- * E.g. "luqman.hakim@gmail.com" -> "l***m@gmail.com"
+ * E.g. "pacoaldev@gmail.com" -> "p***v@gmail.com"
  * E.g. "ab@domain.com" -> "a***@domain.com"
  * Preserves non-email text, or masks emails embedded inside a string.
  *
  * Idempotent: a name that is already masked (the `***` run was written by an
  * earlier call) is left alone. Without that, masking a stored masked name
- * twice turns "l***m@gmail.com" into "l***m***@gmail.com".
+ * twice turns "p***v@gmail.com" into "p***v***@gmail.com".
  */
 export function maskEmail(text: string | null | undefined): string {
   if (!text) return ''
   return text.replace(
     // The local part may begin with an existing mask run. Without it the
     // pattern cannot see the '*' characters that sit in front of the last
-    // character it would match ("l***m@gmail.com" matches only "m"), and a
+    // character it would match ("p***v@gmail.com" matches only "v"), and a
     // second pass would mask the already-masked name a second time.
     /(\*{0,3}[a-zA-Z0-9_.+-]+)@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)/g,
     (match, user: string, domain: string) => {

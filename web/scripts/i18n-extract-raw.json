@@ -3459,7 +3459,7 @@
   "Lucid Origin",
   "lucif",
   "lucif.ai",
-  "luqman.hakim@gmail.com",
+  "pacoaldev@gmail.com",
   "lv",
   "m.id === selectedModel)) let allowedParams = $derived(Array.isArray(selectedModelObj?.params) ? selectedModelObj.params : ['response_format']) let audioFile = $state",
   "M1 6 H37",
