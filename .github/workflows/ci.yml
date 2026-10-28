@@ -188,6 +188,12 @@ jobs:
         working-directory: web
         run: bun install --frozen-lockfile
 
+      # The harness spawns the real gateway at <repo>/nox9go and fails every
+      # test with "gateway binary not found" when it is missing. The artifact
+      # above is only the SPA; the binary has to be built here.
+      - name: Build gateway binary
+        run: CGO_ENABLED=0 go build -o nox9go ./cmd/nox9go/
+
       - name: Install Playwright browsers
         working-directory: web
         run: bunx playwright install --with-deps chromium
