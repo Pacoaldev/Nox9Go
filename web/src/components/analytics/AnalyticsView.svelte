@@ -129,8 +129,13 @@
   let detailsTotal = $state(0)
   let detailsPage = $state(1)
   let detailsLoading = $state(false)
-  async function loadStats(targetPeriod: Period) {
-    isFetching = true
+  // `silent` is the background poll: it refreshes the numbers without toggling
+  // the busy flag, because that flag drives the pulsing dot next to the period
+  // picker. Marking a 5s poll busy made the dot blink every tick, which read as
+  // the dropdown itself flashing. The indicator belongs to an action the
+  // operator started (picking a window, pressing Retry), not to a timer.
+  async function loadStats(targetPeriod: Period, silent = false) {
+    if (!silent) isFetching = true
     try {
       const res = await api.getUsageStats(targetPeriod)
       if (res) {
@@ -158,7 +163,7 @@
       statsError = normalizeLastError(err) || 'Usage could not be loaded.'
       console.error('Failed to load usage stats:', err)
     } finally {
-      isFetching = false
+      if (!silent) isFetching = false
     }
   }
 
@@ -289,10 +294,11 @@
 
     connectStream()
 
-    // Auto-poll stats every 5s so KPI counters smoothly increment in real time
+    // Auto-poll stats every 5s so KPI counters smoothly increment in real time.
+    // Silent: the poll must not flash the period picker's busy dot.
     const pollTimer = setInterval(() => {
       if (section === 'overview' && (typeof document === 'undefined' || !document.hidden)) {
-        loadStats(period)
+        loadStats(period, true)
       }
     }, 5000)
 
