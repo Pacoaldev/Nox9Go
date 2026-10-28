@@ -93,7 +93,11 @@ func ProvideDatabase(lc fx.Lifecycle, cfg *config.Config) (*sql.DB, error) {
 // the gateway's job is to serve, and an install with no dashboard password is
 // still reachable by the local CLI token.
 func EnsureDashboardPassword(repo *db.Repo, cfg *config.Config) {
-	password, err := dashboard.EnsureInitialPassword(repo)
+	initialPassword := ""
+	if cfg != nil {
+		initialPassword = cfg.InitialPassword
+	}
+	password, err := dashboard.EnsureInitialPassword(repo, initialPassword)
 	if err != nil {
 		log.Warn("dashboard", "could not prepare the initial dashboard password", "error", err)
 		return

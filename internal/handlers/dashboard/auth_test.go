@@ -232,7 +232,7 @@ func TestHandleAuthLogin_RemoteDefaultPasswordMustChange(t *testing.T) {
 	// Startup generates the first password; the login with it has to be
 	// replaced before a session exists. This used to fire only on a remote
 	// caller with no INITIAL_PASSWORD set.
-	generated, err := EnsureInitialPassword(repo)
+	generated, err := EnsureInitialPassword(repo, "")
 	if err != nil {
 		t.Fatalf("prepare initial password: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestHandleAuthLogin_RemoteDefaultPasswordRotation(t *testing.T) {
 	h := NewDashboardHandler(repo)
 
 	// Supplying a new password alongside the generated one rotates it and succeeds.
-	generated, err := EnsureInitialPassword(repo)
+	generated, err := EnsureInitialPassword(repo, "")
 	if err != nil {
 		t.Fatalf("prepare initial password: %v", err)
 	}
@@ -379,5 +379,47 @@ func TestHandleAuthStatus_SSOFlagsAndIdentity(t *testing.T) {
 	}
 	if status["oidcConfigured"] != true || status["samlConfigured"] != true {
 		t.Errorf("expected both SSO flags true, got %v", status)
+	}
+}
+
+// An operator who sets INITIAL_PASSWORD gets exactly that password, and is not
+// forced to replace it. config parsed the variable into Config.InitialPassword
+// and nothing read the field, so the value was silently ignored and the notice
+// told the operator to set a variable that had no effect. The e2e suite caught
+// it: it boots the gateway with INITIAL_PASSWORD and then logs in.
+func TestEnsureInitialPassword_UsesConfiguredPassword(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chosen := "chosen-by-the-operator-1234"
+	printed, err := EnsureInitialPassword(repo, chosen)
+	if err != nil {
+		t.Fatalf("EnsureInitialPassword: %v", err)
+	}
+	if printed != "" {
+		t.Errorf("nothing should be printed when the operator chose the password, got %q", printed)
+	}
+
+	h := NewDashboardHandler(repo)
+	if !h.verifyDashboardPassword(chosen) {
+		t.Error("the configured password must be the one that was stored")
+	}
+	if mustChangePassword(chosen, settingsOrEmpty(h)) {
+		t.Error("a password the operator chose must not force a change at the first login")
+	}
+}
+
+// A generated password is still generated when INITIAL_PASSWORD is unset, and
+// blank is treated as unset rather than as an empty password.
+func TestEnsureInitialPassword_GeneratesWhenUnset(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	printed, err := EnsureInitialPassword(repo, "   ")
+	if err != nil {
+		t.Fatalf("EnsureInitialPassword: %v", err)
+	}
+	if len(printed) != 24 {
+		t.Fatalf("expected a 24-character generated password, got %q", printed)
 	}
 }

@@ -69,7 +69,7 @@ func TestHandleUpdateSettings_PasswordChange(t *testing.T) {
 	// Startup writes the first password; rotating it needs the current one.
 	// There is no "set with an empty current password" path any more, because
 	// that path is what made a known default password acceptable.
-	initial, err := EnsureInitialPassword(repo)
+	initial, err := EnsureInitialPassword(repo, "")
 	if err != nil {
 		t.Fatalf("prepare initial password: %v", err)
 	}
