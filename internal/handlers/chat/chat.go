@@ -17,6 +17,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -399,9 +401,13 @@ func (h *ChatHandler) HandleVersionStatus(w http.ResponseWriter, r *http.Request
 // but not yet released is still visible. See internal/changelogfrag for why
 // entries live in fragments rather than at the top of CHANGELOG.md.
 //
-// Each candidate directory is tried in turn because the binary runs from the
-// repository root in a dev checkout but from its own directory once installed;
-// the remote copy stays the last resort for a packaged build that ships neither.
+// The served file is this project's own. It used to fall back to
+// decolua/9router's CHANGELOG.md on GitHub when no local file was found, so a
+// build that shipped without one showed the upstream project's release notes
+// under this project's name — and the fetch that got there was a third-party
+// origin the dashboard must not depend on. There is no remote copy to fall
+// back to: this repository's GitHub raw copy is not readable by an anonymous
+// client, so a missing file is a missing file.
 func (h *ChatHandler) HandleChangelog(w http.ResponseWriter, r *http.Request) {
 	for _, dir := range changelogDirs() {
 		result := changelogfrag.Assemble(dir)
@@ -413,31 +419,6 @@ func (h *ChatHandler) HandleChangelog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	urls := []string{
-		"https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/CHANGELOG.md",
-		"https://raw.githubusercontent.com/decolua/9router/refs/heads/master/CHANGELOG.md",
-	}
-	client := &http.Client{Timeout: 5 * time.Second}
-	for _, u := range urls {
-		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
-		if err != nil {
-			continue
-		}
-		resp, err := client.Do(req)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			data, readErr := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if readErr == nil && len(data) > 0 {
-				w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(data)
-				return
-			}
-		} else if resp != nil {
-			_ = resp.Body.Close()
-		}
-	}
-
 	handlerutil.WriteJSONError(w, http.StatusNotFound, "changelog not found")
 }
 
@@ -445,8 +426,16 @@ func (h *ChatHandler) HandleChangelog(w http.ResponseWriter, r *http.Request) {
 // nearest first. It stays relative to the working directory rather than
 // resolving from the executable path, which is what lets a dev run started
 // from a subdirectory find the repository root.
+//
+// The executable's own directory is searched too: the binary is built into the
+// repository root, so the changelog sits next to it, and a daemon started
+// from another working directory still finds it there.
 func changelogDirs() []string {
-	return []string{".", "..", "../.."}
+	dirs := []string{".", "..", "../.."}
+	if exe, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Dir(exe))
+	}
+	return dirs
 }
 
 // HandleToggleAutoUpdate enables or disables automatic updates in settings and runtime.

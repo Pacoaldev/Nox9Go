@@ -2003,23 +2003,20 @@ export const api = {
       body: JSON.stringify({}),
     }),
   getChangelog: async (): Promise<string> => {
-    try {
-      const res = await fetch('/api/changelog', { headers: getAuthHeaders() })
-      if (res.ok) {
-        const text = await res.text()
-        if (text && text.trim().length > 0) return text
-      }
-    } catch {}
-    try {
-      const res = await fetch('https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/CHANGELOG.md')
-      if (res.ok) {
-        const text = await res.text()
-        if (text && text.trim().length > 0) return text
-      }
-    } catch {}
-    const res = await fetch('https://raw.githubusercontent.com/decolua/9router/refs/heads/master/CHANGELOG.md')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.text()
+    // This project's own notes, served by the gateway from the repository's
+    // CHANGELOG.md. The old fallback chain reached GitHub for a copy and
+    // ended on decolua/9router's changelog, so the modal showed another
+    // project's release history — and a browser fetch to a third-party origin
+    // is a dependency the dashboard must not have.
+    const res = await fetch('/api/changelog', { headers: getAuthHeaders() })
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+    const text = await res.text()
+    if (!text.trim()) {
+      throw new Error('The change log is empty')
+    }
+    return text
   },
 
   // Upstream & fork update alerts. Both calls go through the gateway and never

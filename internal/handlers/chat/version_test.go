@@ -194,6 +194,33 @@ func TestHandleTriggerUpdate_UpToDate(t *testing.T) {
 // (P0 Step 4 requires the suite to be safe with outbound blocked — this was the
 // one test that was not). Chdir into a fixture root makes the local path the
 // one under test and removes the network dependency entirely.
+// TestHandleChangelogNeverServesAnotherProject pins that the change log is
+// this project's own notes and nobody else's.
+//
+// The handler used to fall back to decolua/9router's CHANGELOG.md on GitHub
+// when it found no local file, so a build without one showed the upstream
+// project's release notes under this project's name — and the fetch on the way
+// there was a third-party origin the dashboard must not depend on.
+func TestHandleChangelogNeverServesAnotherProject(t *testing.T) {
+	// A directory with no changelog above it: the local path cannot answer,
+	// so only a remote fallback could.
+	t.Chdir(t.TempDir())
+
+	handler := NewChatHandler(nil, nil)
+	req := httptest.NewRequest("GET", "/api/changelog", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleChangelog(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/changelog with no local changelog = %d, want 404 (body: %s)",
+			rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); strings.Contains(body, "9router") {
+		t.Errorf("the change log served another project's notes:\n%s", body)
+	}
+}
+
 func TestHandleChangelog(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte("# Changelog\n\n## 1.0.0\n"), 0o644); err != nil {

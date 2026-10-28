@@ -175,9 +175,10 @@ func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 // they read as the newest work, leaving every released section untouched.
 //
 // A changelog with no `[Unreleased]` section — everything already folded into a
-// release — gets the fragments prepended instead. Dropping them would silently
-// hide shipped work, which is the one failure mode this split was meant to
-// avoid.
+// release — gets the fragments spliced in under the title instead. Dropping
+// them would silently hide shipped work, which is the one failure mode this
+// split was meant to avoid, and putting them above the title would leave the
+// document without its own H1.
 func splice(changelog string, frags []string) string {
 	if len(frags) == 0 {
 		return changelog
@@ -191,6 +192,10 @@ func splice(changelog string, frags []string) string {
 
 	at := strings.Index(changelog, unreleasedHeading)
 	if at < 0 {
+		if end, ok := titleEnd(changelog); ok {
+			rest := changelog[end:]
+			return changelog[:end] + "\n" + block + "\n" + strings.TrimLeft(rest, "\n")
+		}
 		return block + "\n" + strings.TrimLeft(changelog, "\n")
 	}
 

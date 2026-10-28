@@ -57,7 +57,6 @@ func SetupRoutes(r interface {
 	// Chat & Models Domain (no version here: the four version GETs are
 	// public in SetupServerRouter, upstream PUBLIC_API_PATHS parity).
 	r.Get("/changelog", chatH.HandleChangelog)
-	r.Get("/api/changelog", chatH.HandleChangelog)
 	r.Get("/models", chatH.HandleModels)
 	r.Get("/models/info", chatH.HandleModelsInfo)
 	r.Get("/models/{kind}", chatH.HandleModelsByKind)
@@ -612,6 +611,14 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 	// before any traffic, so the cache on that instance never fills.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireDashboardAuth(repo))
+		// The change log is a dashboard read: the SPA calls it with the
+		// session cookie, never an engine API key. It was registered inside
+		// SetupRoutes, which is mounted under RequireApiKey, so every
+		// dashboard call 401'd and the modal fell back to a GitHub copy of
+		// the upstream project's changelog. Reachable with a session, an
+		// API key, or the local CLI token — same policy as the rest of the
+		// dashboard group.
+		r.Get("/api/changelog", engineChatH.HandleChangelog)
 		SetupDashboardRoutes(r, repo, engineChatH)
 	})
 
