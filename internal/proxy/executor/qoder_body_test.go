@@ -301,6 +301,10 @@ func TestForwardQoder_SendsEncodeFlagAndRequiredHeaders(t *testing.T) {
 // A model the account's catalogue does not publish must fail with a message
 // naming the model, not reach Qoder as a payload the router cannot match.
 func TestForwardQoder_UnknownModelNamesTheModel(t *testing.T) {
+	// The catalogue is seeded by the fixture, so this must not touch the
+	// network: a key that is absent from a fresh catalogue is simply absent.
+	// It used to force a refresh anyway and reached api3.qoder.sh — green on a
+	// machine with internet, "context deadline exceeded" on the CI runner.
 	creds := qoderFixture(t)
 	srv, _ := qoderCaptureServer(t, qoderSSE("[DONE]"))
 

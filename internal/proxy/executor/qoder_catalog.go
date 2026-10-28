@@ -102,6 +102,13 @@ func qoderModelConfig(ctx context.Context, do QoderDoer, creds QoderCosyCreds, r
 		if config := qoderDefensiveCopy(catalog.rawConfigs[modelKey], modelKey); config != nil {
 			return config, nil
 		}
+		// The catalogue is fresh and this key is not in it. Asking upstream
+		// again cannot make a model exist, so a force refresh here is pure
+		// latency: it spent a network round trip (and, on an offline machine,
+		// the whole request timeout) to learn nothing. The refresh below is for
+		// the case that can actually change — no catalogue at all, or a stale
+		// one that might have missed a newly published model.
+		return nil, fmt.Errorf("qoder: model %q is not in this account's catalogue", modelKey)
 	}
 
 	refreshed, refreshErr := qoderFetchCatalog(ctx, do, creds, region, true)
@@ -160,9 +167,20 @@ func qoderCachedModelConfigAny(creds QoderCosyCreds, region QoderRegion) *qoderC
 	return entry
 }
 
+// qoderModelListURL is the one place the live catalogue host is chosen, so a
+// test can point it at its own server. Without this the URL was built straight
+// from the hard-coded hosts above and any test that needed the catalogue
+// reached the real api3.qoder.sh: TestForwardQoder_UnknownModelNamesTheModel
+// passed on a machine with internet access and failed on the CI runner with
+// "context deadline exceeded", which is a network condition reported as a
+// product bug. Tests replace it; production never does.
+var qoderModelListURL = func(region QoderRegion, token string) string {
+	return QoderEndpointsFor(string(region)).ModelListURLForToken(token)
+}
+
 // qoderFetchCatalogOnce performs the COSY-signed GET of /algo/api/v2/model/list.
 func qoderFetchCatalogOnce(ctx context.Context, do QoderDoer, creds QoderCosyCreds, region QoderRegion) (*qoderCatalog, error) {
-	modelListURL := QoderEndpointsFor(string(region)).ModelListURLForToken(creds.AuthToken)
+	modelListURL := qoderModelListURL(region, creds.AuthToken)
 
 	headers, err := buildQoderCosyHeaders(nil, modelListURL, creds)
 	if err != nil {
