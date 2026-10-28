@@ -172,7 +172,7 @@ jobs:
   # push, its result is visible, and it stops gating merges until the suite is
   # repaired. Flip continue-on-error to false when the six are fixed.
   e2e:
-    name: End-to-end (not gating: pre-existing failures)
+    name: End-to-end (not gating on pre-existing failures)
     needs: [web, backend]
     runs-on: ubuntu-latest
     continue-on-error: true
