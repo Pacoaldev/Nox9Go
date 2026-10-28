@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"net/http"
-	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"nox9go/proxy/internal/db"
@@ -10,7 +9,6 @@ import (
 	"nox9go/proxy/internal/middleware"
 	"nox9go/proxy/internal/observ"
 	"nox9go/proxy/internal/semanticcache"
-	"nox9go/proxy/internal/upstreamwatch"
 )
 
 // Default probe URLs for proxy pool health checks.
@@ -31,20 +29,6 @@ type DashboardHandler struct {
 	// is optional: a handler built outside a boot (tests, tooling) has none, and
 	// the live usage fields then read zero rather than being invented.
 	Limiter *middleware.RateLimiter
-	// upstreamWatch reads the repositories this fork tracks. Built on first use
-	// so a handler that never serves the top bar pays nothing for it.
-	upstreamWatch *upstreamwatch.Checker
-	upstreamOnce  sync.Once
-}
-
-// watch returns the upstream checker, building it on first call. It is shared by
-// every request from every open tab, which is what lets one cached snapshot
-// serve them all.
-func (h *DashboardHandler) watch() *upstreamwatch.Checker {
-	h.upstreamOnce.Do(func() {
-		h.upstreamWatch = upstreamwatch.NewChecker(nil)
-	})
-	return h.upstreamWatch
 }
 
 // NewDashboardHandler initializes a DashboardHandler with the provided Repo.

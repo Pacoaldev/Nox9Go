@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api } from '../api/client'
+  import { api, type SystemVersionInfo } from '../api/client'
   import ProviderIcon from './connections/ProviderIcon.svelte'
   import ChangelogModal from './ChangelogModal.svelte'
   import Menu from '../lib/ui/Menu.svelte'
@@ -21,6 +21,10 @@
     onMenuClick,
     onAlertsClick,
     onLogout,
+    // App update alert: the live /api/version/check result and the action that
+    // opens the UpdateModal. Both live in App.svelte, which owns the modal.
+    updateInfo = null,
+    onUpdateClick,
   }: {
     activeTab?: ActiveTab
     pageTitle?: string
@@ -30,120 +34,13 @@
     onMenuClick?: () => void
     onAlertsClick?: () => void
     onLogout?: () => void
+    updateInfo?: SystemVersionInfo | null
+    onUpdateClick?: () => void
   } = $props()
 
   const status = $derived(dashboardStatus())
 
   let uiLocale = $state<Locale>('en')
-
-  // ─── Upstream update alert ────────────────────────────────────────────────
-  // The two repositories this fork tracks. They are versioned independently, so
-  // the button says which one moved and how far past the baseline this build was
-  // ported from (that baseline is baked in with -ldflags, not stored here).
-  type UpstreamSource = {
-    id: string
-    name: string
-    repo: string
-    baseline: string
-    latest: string
-    hasNew: boolean
-    publishedAt?: string
-    releaseUrl?: string
-    error?: string
-  }
-
-  let upstreamSources = $state<UpstreamSource[]>([])
-  let isUpstreamOpen = $state(false)
-  // Sources the user has already opened and seen: { id -> latest version seen }.
-  // Persisted so a reload does not resurface the same update notice; the button
-  // stays hidden until a different, newer version is detected.
-  let seenUpstream = $state<Map<string, string>>(loadSeen())
-  // Snapshot of the sources whose notes the open modal is showing.
-  let upstreamPending = $state<UpstreamSource[]>([])
-  // Identity of those notes: the modal refetches when it changes, so a newer
-  // release does not show the previous one's notes.
-  let upstreamReloadKey = $derived(
-    upstreamPending.map((s) => `${s.id}@${s.latest}`).join(',')
-  )
-
-  function loadSeen(): Map<string, string> {
-    const map = new Map<string, string>()
-    if (typeof window === 'undefined') return map
-    try {
-      const raw = localStorage.getItem('nox9go-upstream-seen')
-      if (raw) {
-        const parsed = JSON.parse(raw) as { id: string; latest: string }[]
-        for (const entry of parsed) map.set(entry.id, entry.latest)
-      }
-    } catch {
-      // ignore corrupt storage
-    }
-    return map
-  }
-
-  function saveSeen(): void {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem(
-        'nox9go-upstream-seen',
-        JSON.stringify([...seenUpstream.entries()].map(([id, latest]) => ({ id, latest })))
-      )
-    } catch {
-      // ignore
-    }
-  }
-
-  function markSeen(sources: UpstreamSource[]): void {
-    // The map is re-created on every change so Svelte 5 sees it: mutating it
-    // in place is not tracked.
-    const next = new Map(seenUpstream)
-    for (const s of sources) next.set(s.id, s.latest)
-    seenUpstream = next
-    saveSeen()
-  }
-  // One read per ten minutes at most: the gateway caches the answer for half an
-  // hour, and a window focus must not become a poll. GitHub's unauthenticated
-  // budget is 60 requests an hour, shared with everything else on this IP.
-  let lastUpstreamCheck = 0
-  const UPSTREAM_CHECK_INTERVAL_MS = 10 * 60 * 1000
-
-  // A source counts as new until the user has actually seen that exact
-  // version. Seeing it hides the button again and puts the dashboard back in
-  // normal mode, waiting for a different version to show up.
-  let upstreamNew = $derived(
-    upstreamSources.filter((s) => s.hasNew && seenUpstream.get(s.id) !== s.latest)
-  )
-  // Both unreachable is worth showing as a state, not as silence.
-  let upstreamAllFailed = $derived(
-    upstreamSources.length > 0 && upstreamNew.length === 0 && upstreamSources.every((s) => s.error),
-  )
-
-  async function checkUpstream(force = false): Promise<void> {
-    const now = Date.now()
-    if (!force && now - lastUpstreamCheck < UPSTREAM_CHECK_INTERVAL_MS) return
-    lastUpstreamCheck = now
-    try {
-      const res = await api.getUpstreamVersions()
-      upstreamSources = res?.sources ?? []
-    } catch {
-      // A failure here is not worth a toast: the button simply does not appear,
-      // and the next focus retries. The page itself is unaffected.
-    }
-  }
-
-  // The notes of every repository that has something new, each under its own
-  // heading, so one press covers the case where both moved.
-  // Reads the snapshot taken when the alert was opened, not the live list: the
-  // press also marks that version as seen, which empties the live list.
-  async function loadUpstreamNotes(): Promise<string> {
-    const parts: string[] = []
-    for (const source of upstreamPending) {
-      const notes = await api.getUpstreamChangelog(source.id, source.latest)
-      const link = source.releaseUrl ? ` — [${source.repo}](${source.releaseUrl})` : ` — ${source.repo}`
-      parts.push(`## ${source.name} · ${source.latest}${link}\n\n${notes}`)
-    }
-    return parts.join('\n\n---\n\n')
-  }
 
   // Theme state
   let isDark = $state(true)
@@ -171,18 +68,9 @@
     }
   })
 
-  // The alert is read once when the dashboard mounts and again when the operator
-  // comes back to the tab — the moment they would act on it. No timer: the
-  // gateway caches the answer for half an hour and a poll would buy nothing.
-  $effect(() => {
-    void checkUpstream()
-    if (typeof document === 'undefined') return
-    const onVisible = () => {
-      if (!document.hidden) void checkUpstream()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  })
+  // The update check itself lives in App.svelte (the Sidebar already runs it on
+  // mount); this component only renders the result it is handed. Keeping one
+  // owner of the call means the chip and the sidebar banner cannot disagree.
 
   async function chooseLocale(next: Locale) {
     if (next === uiLocale) return
@@ -422,35 +310,20 @@
       </div>
     {/if}
 
-    <!-- Upstream / fork update alert: between the latency meter and "Uso de hoy",
-         so it reads as one more live signal about this install. -->
-    {#if upstreamNew.length > 0}
+    <!-- App update alert: between the latency meter and "Uso de hoy", so it reads
+         as one more live signal about this install. Opens the UpdateModal, which
+         asks for confirmation before installing anything. -->
+    {#if updateInfo?.hasUpdate && updateInfo.latestVersion}
       <button
         type="button"
-        onclick={() => {
-          upstreamPending = [...upstreamNew]
-          markSeen(upstreamNew)
-          isUpstreamOpen = true
-        }}
+        onclick={() => onUpdateClick?.()}
         class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-primary/40 bg-primary/10 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors cursor-pointer"
-        title={upstreamNew
-          .map((s) => `${s.name}: ${s.baseline || '?'} → ${s.latest}`)
-          .join('\n')}
+        title={`Nueva versión disponible: v${updateInfo.latestVersion} (actual v${updateInfo.currentVersion})`}
       >
         <span class="material-symbols-outlined text-[14px]">new_releases</span>
-        <span class="hidden sm:inline">{upstreamNew.length === 1
-          ? upstreamNew[0].name
-          : `${upstreamNew.length} updates`}</span>
-        <span class="font-mono">{upstreamNew.length === 1 ? upstreamNew[0].latest : ''}</span>
+        <span class="hidden sm:inline">Nox9Go</span>
+        <span class="font-mono">v{updateInfo.latestVersion}</span>
       </button>
-    {:else if upstreamAllFailed}
-      <div
-        class="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border-subtle bg-surface-2 text-[11px] text-text-subtle"
-        title={upstreamSources.map((s) => `${s.name}: ${s.error}`).join('\n')}
-      >
-        <span class="material-symbols-outlined text-[14px]">cloud_off</span>
-        <span>upstream unreachable</span>
-      </div>
     {/if}
 
     <!-- Token savings / usage today (Idea 6) -->
@@ -602,16 +475,3 @@
 
 <!-- Change Log Modal -->
 <ChangelogModal isOpen={isChangelogOpen} onClose={() => (isChangelogOpen = false)} />
-
-<!-- Same modal, different source: the notes of whichever tracked repository has
-     moved past this build's baseline. No repoUrl, because there are two repos
-     and the assembled markdown names each one. The key changes with the
-     versions on offer, so a newer release refetches its notes. -->
-<ChangelogModal
-  isOpen={isUpstreamOpen}
-  onClose={() => (isUpstreamOpen = false)}
-  title="Upstream changes"
-  repoUrl=""
-  load={loadUpstreamNotes}
-  reloadKey={upstreamReloadKey}
-/>

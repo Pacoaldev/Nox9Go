@@ -646,26 +646,6 @@ export interface ConnectionUsageResponse {
   quotaStatus?: 'available' | 'exhausted' | 'unknown'
 }
 
-// One tracked repository's answer from /api/upstream-versions. `baseline` is the
-// version this build was ported from, baked in with -ldflags; an empty baseline
-// means the build recorded none and `hasNew` is always false.
-export interface UpstreamSourceStatus {
-  id: string
-  name: string
-  repo: string
-  baseline: string
-  latest: string
-  hasNew: boolean
-  publishedAt?: string
-  releaseUrl?: string
-  error?: string
-}
-
-export interface UpstreamVersionsResponse {
-  sources: UpstreamSourceStatus[]
-  checkedAt: string
-}
-
 // Usage dashboard (Details section): heatmap cells, lifetime cards, node health.
 export interface UsageDailyPoint {
   date: string
@@ -2017,26 +1997,6 @@ export const api = {
       throw new Error('The change log is empty')
     }
     return text
-  },
-
-  // Upstream & fork update alerts. Both calls go through the gateway and never
-  // to GitHub from the browser: a third-party origin in the dashboard costs a
-  // DNS lookup, a TLS handshake and a round trip, and reports the operator's IP
-  // on every page load (AGENTS.md §6.G.1).
-  getUpstreamVersions: () => request<UpstreamVersionsResponse>('/api/upstream-versions'),
-
-  getUpstreamChangelog: async (source: string, version: string): Promise<string> => {
-    const res = await fetch(
-      `/api/upstream-changelog?source=${encodeURIComponent(source)}&version=${encodeURIComponent(version)}`,
-      { headers: getAuthHeaders() },
-    )
-    if (!res.ok) {
-      // The gateway answers with the reason it could not read the notes, so the
-      // modal shows why instead of an empty document.
-      const detail = await res.text().catch(() => '')
-      throw new Error(detail.trim() || `HTTP ${res.status}`)
-    }
-    return await res.text()
   },
 
   // Usage & Telemetry

@@ -392,6 +392,8 @@
           isAuthenticatedState = false
           navigate('login')
         }}
+        updateInfo={systemUpdateInfo}
+        onUpdateClick={() => (isUpdateModalOpen = true)}
       />
 
       <main class="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-10">
