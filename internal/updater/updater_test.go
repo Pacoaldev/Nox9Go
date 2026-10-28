@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"debug/elf"
+	"debug/pe"
 	"encoding/binary"
 	json "encoding/json/v2"
 	"fmt"
@@ -310,21 +311,35 @@ func TestAutoUpdate_StatusAndToggle(t *testing.T) {
 // one before the bytes that follow it.
 func hostExecutableBytes() []byte {
 	if runtime.GOOS == "windows" {
-		// debug/pe walks the DOS stub, the file header and the whole optional
-		// header, so the stub is padded past all of them.
-		img := make([]byte, 0x200)
-		copy(img, []byte("MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00\xb8\x00\x00\x00\x00\x00\x00\x00\x40\x00\x00\x00\x00\x00\x00\x00"))
-		const peOff = 0x80
-		copy(img[0x3c:], []byte{0x80, 0, 0, 0})
-		// Offsets are relative to the file header (peOff), not to the signature.
-		copy(img[peOff:], []byte{0x50, 0x45, 0, 0})          // "PE\0\0"
-		copy(img[peOff+4:], []byte{0x64, 0x86, 0x00, 0x00})  // IMAGE_FILE_MACHINE_AMD64
-		copy(img[peOff+20:], []byte{0xf0, 0x00})             // SizeOfOptionalHeader
-		copy(img[peOff+24:], []byte{0x0b, 0x02})             // PE32+ magic
-		copy(img[peOff+24+108:], []byte{0x10, 0x00, 0x00, 0x00}) // 16 data directories
-		return img
+		return peImage(runtime.GOARCH)
 	}
 	return elfImage(runtime.GOARCH)
+}
+
+// peImage builds the smallest PE image debug/pe will parse, for the given
+// architecture. It is separate from hostExecutableBytes so a test can ask for a
+// Windows image on any host: the guard under test has to refuse or accept a PE
+// identically wherever the suite runs, and the host-only helper returned an ELF
+// on Linux, which made the cross-platform test fail for the wrong reason.
+func peImage(goarch string) []byte {
+	machine := map[string]uint16{
+		"amd64": pe.IMAGE_FILE_MACHINE_AMD64,
+		"arm64": pe.IMAGE_FILE_MACHINE_ARM64,
+		"386":   pe.IMAGE_FILE_MACHINE_I386,
+	}[goarch]
+	// debug/pe walks the DOS stub, the file header and the whole optional
+	// header, so the stub is padded past all of them.
+	img := make([]byte, 0x200)
+	copy(img, []byte("MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00\xb8\x00\x00\x00\x00\x00\x00\x00\x40\x00\x00\x00\x00\x00\x00\x00"))
+	const peOff = 0x80
+	copy(img[0x3c:], []byte{0x80, 0, 0, 0})
+	// Offsets are relative to the file header (peOff), not to the signature.
+	copy(img[peOff:], []byte{0x50, 0x45, 0, 0})       // the PE signature
+	binary.LittleEndian.PutUint16(img[peOff+4:], machine)
+	copy(img[peOff+20:], []byte{0xf0, 0x00})          // SizeOfOptionalHeader
+	copy(img[peOff+24:], []byte{0x0b, 0x02})          // PE32+ magic
+	copy(img[peOff+24+108:], []byte{0x10, 0, 0, 0})   // 16 data directories
+	return img
 }
 
 // elfImage builds the smallest 64-bit ELF header debug/elf will parse, for the

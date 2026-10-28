@@ -13,7 +13,7 @@ func hostGOARCH() string { return runtime.GOARCH }
 // digest proves the bytes are the published ones, not that they run here.
 func TestValidateExecutableRejectsForeignHost(t *testing.T) {
 	elf := elfImage("amd64")
-	mz := append(make([]byte, 0, 0x200), hostExecutableBytes()...)
+	mz := peImage("amd64")
 
 	if err := validateExecutable(elf, "windows", "amd64"); err == nil {
 		t.Error("an ELF image must be refused on windows")
@@ -46,8 +46,11 @@ func TestValidateExecutableAcceptsEveryTargetPlatform(t *testing.T) {
 			t.Errorf("%s/%s: valid image refused: %v", goos, goarch, err)
 		}
 	}
-	if err := validateExecutable(hostExecutableBytes(), "windows", "amd64"); err != nil {
+	if err := validateExecutable(peImage("amd64"), "windows", "amd64"); err != nil {
 		t.Errorf("windows/amd64: valid image refused: %v", err)
+	}
+	if err := validateExecutable(peImage("arm64"), "windows", "amd64"); err == nil {
+		t.Error("an arm64 PE must be refused for windows/amd64")
 	}
 	// A header naming another architecture must not pass for this one.
 	if err := validateExecutable(elfImage("arm64"), "linux", "amd64"); err == nil {
