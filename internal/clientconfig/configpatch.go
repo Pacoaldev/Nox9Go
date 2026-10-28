@@ -46,7 +46,27 @@ func (f Format) String() string {
 type Edit struct {
 	KeyPath         []string
 	Value           string
+	// ValueJSON is a replacement spliced verbatim rather than quoted: it holds a
+	// compound value (an object or array) that the scalar Value field cannot
+	// express. When non-empty it takes precedence over Value. The caller owns
+	// the literal's validity — Patch re-parses its own output, so a malformed
+	// one fails there instead of corrupting the file.
+	ValueJSON       string
+	// Delete removes the key instead of setting it. A key that is absent is
+	// not an error for a delete: the wanted end state already holds.
+	Delete          bool
 	CreateIfMissing bool
+}
+
+// rawOrQuoted renders the replacement text for splicing: ValueJSON verbatim
+// when the caller supplied a compound value, otherwise Value as a JSON string
+// literal. Kept on Edit so the four format writers cannot each invent their own
+// precedence rule.
+func (e Edit) rawOrQuoted() string {
+	if e.ValueJSON != "" {
+		return e.ValueJSON
+	}
+	return jsoncQuote(e.Value)
 }
 
 // LargeFileWarningBytes is the size above which a caller should warn the user

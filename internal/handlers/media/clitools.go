@@ -16,7 +16,12 @@ import (
 // cliStatus is the per-tool installed/version shape the dashboard expects
 // (port of each Next <tool>-settings GET, trimmed to just install + version).
 type cliStatus struct {
-	Installed bool    `json:"installed"`
+	Installed bool `json:"installed"`
+	// HasNox9Go reports that the client is installed AND its config actually
+	// routes to this gateway. It is a separate field from Installed because the
+	// two answer different questions and a card shows a different badge for
+	// each: installed-but-unconfigured is the state the user is asked to fix.
+	HasNox9Go bool    `json:"hasNox9Go"`
 	Version   *string `json:"version"`
 }
 
@@ -38,12 +43,16 @@ type toolDef struct {
 	hasVer   bool
 	dirCheck func() bool
 	alwaysOn bool
+	// hasNox9Go reads the client's own config and reports whether any provider
+	// it declares points at this gateway. Nil for clients with no config file
+	// to read yet, which report HasNox9Go=false rather than a guess.
+	hasNox9Go func() bool
 }
 
 var cliTools = []toolDef{
 	{id: "claude", bin: "claude"},
 	{id: "codex", bin: "codex"},
-	{id: "opencode", bin: "opencode"},
+	{id: "opencode", bin: "opencode", hasNox9Go: opencodeHasNox9Go},
 	{id: "droid", bin: "droid"},
 	{id: "openclaw", bin: "openclaw"},
 	{id: "hermes", bin: "hermes"},
@@ -103,11 +112,18 @@ func (t toolDef) detector() toolDetector {
 		}
 	default:
 		return func(ctx context.Context) (*cliStatus, error) {
-			if _, err := exec.LookPath(t.bin); err != nil {
-				// Not installed is a value, not an error (tool ≠ null).
+			has := false
+			if t.hasNox9Go != nil {
+				has = t.hasNox9Go()
+			}
+			if _, err := exec.LookPath(t.bin); err != nil && !has {
+				// Not installed is a value, not an error (tool ≠ null). A client
+				// whose config routes here counts as present even when the
+				// binary is not on this process's PATH — which is the normal
+				// case for a server started from a desktop launcher.
 				return &cliStatus{Installed: false}, nil
 			}
-			s := &cliStatus{Installed: true}
+			s := &cliStatus{Installed: true, HasNox9Go: has}
 			if t.hasVer {
 				if v, err := binVersion(ctx, t.bin); err == nil && v != "" {
 					s.Version = &v

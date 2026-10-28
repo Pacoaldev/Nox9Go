@@ -208,27 +208,64 @@ func patchJSONC(src []byte, e Edit) ([]byte, error) {
 			return nil, fmt.Errorf("%w: %q is not inside an object", ErrKeyNotFound, part)
 		}
 		m := findJSONMember(cur, part)
-		if m == nil {
-			if !e.CreateIfMissing {
+		last := idx == len(e.KeyPath)-1
+
+		if e.Delete {
+			// An absent key already holds the wanted end state. Returning
+			// ErrKeyNotFound and letting applyOnePlan skip it keeps Reset's
+			// fixed edit list from failing on a key the file never had.
+			if m == nil {
 				return nil, fmt.Errorf("%w: %q", ErrKeyNotFound, part)
 			}
-			if idx != len(e.KeyPath)-1 {
-				return nil, fmt.Errorf("%w: intermediate object %q is absent", ErrKeyNotFound, part)
+			if last {
+				return verifyJSONC(deleteJSONMember(src, p.toks, cur, m))
 			}
-			out := insertJSONMember(src, p.toks, cur, part, e.Value)
-			return verifyJSONC(out)
+			// Not the leaf: keep walking down. Nothing is deleted on the way,
+			// because the key path names a child, not the parent.
+			cur = m.val
+			continue
 		}
-		if idx == len(e.KeyPath)-1 {
+
+		switch {
+		case m == nil && !e.CreateIfMissing:
+			return nil, fmt.Errorf("%w: %q", ErrKeyNotFound, part)
+		case m == nil && last:
+			// A top-level literal: insertion, not replacement.
+			return verifyJSONC(insertJSONMember(src, p.toks, cur, part, e.rawOrQuoted()))
+		case m == nil:
+			// The subtree below this key does not exist, so it is built whole
+			// and inserted here rather than created one level at a time.
+			return verifyJSONC(insertJSONMember(src, p.toks, cur, part, jsonNest(e.KeyPath[idx+1:], e.rawOrQuoted())))
+		case last:
+			// A compound replacement overwrites the whole value; a scalar one
+			// keeps the stricter rule that the target must itself be a scalar,
+			// so a "replace the string" edit cannot silently swallow an object.
+			start := p.toks[m.val.tok].off
+			end := p.toks[m.val.tok].end()
 			if m.val.isContainer() {
-				return nil, fmt.Errorf("%w: value of %q is not a scalar", ErrUnsupportedStructure, part)
+				if e.ValueJSON == "" {
+					return nil, fmt.Errorf("%w: value of %q is not a scalar", ErrUnsupportedStructure, part)
+				}
+				// The whole container is replaced: from its opening brace to its
+				// closing one, so no stray brace survives the splice.
+				end = p.toks[m.val.closeTok].end()
 			}
-			t := p.toks[m.val.tok]
-			out := splice(src, t.off, t.end(), []byte(jsoncQuote(e.Value)))
-			return verifyJSONC(out)
+			return verifyJSONC(splice(src, start, end, []byte(e.rawOrQuoted())))
 		}
 		cur = m.val
 	}
 	return nil, fmt.Errorf("%w: empty key path", ErrKeyNotFound)
+}
+
+// jsonNest renders {"k1": {"k2": ... <leaf>}} for the keys below the one being
+// inserted, so a create-if-missing edit costs one splice instead of one per
+// level.
+func jsonNest(keys []string, leaf string) string {
+	out := leaf
+	for i := len(keys) - 1; i >= 0; i-- {
+		out = "{" + jsoncQuote(keys[i]) + ": " + out + "}"
+	}
+	return out
 }
 
 func findJSONMember(n *jsonNode, key string) *jsonMember {
@@ -244,11 +281,72 @@ func findJSONMember(n *jsonNode, key string) *jsonMember {
 // insertion before the closing brace. The new member lands on the closing
 // brace's line: inventing a newline would mean inventing an indent policy, and
 // the result is valid JSONC either way.
-func insertJSONMember(src []byte, toks []jsonTok, obj *jsonNode, key, val string) []byte {
-	entry := jsoncQuote(key) + ": " + jsoncQuote(val)
+// deleteJSONMember removes one member from an object, taking the bytes from the
+// end of the previous member (or the opening brace) to the end of the value.
+// That range carries the separating comma with it, so the object that is left
+// is still valid JSONC whatever position the member held.
+//
+// Only the member's own bytes are touched; comments inside the value go with
+// it, comments outside it do not.
+func deleteJSONMember(src []byte, toks []jsonTok, obj *jsonNode, m *jsonMember) []byte {
+	idx := indexOfMemberByKey(obj, m.key)
+	start := skipJSONSpace(src, toks[obj.tok].end())
+	if idx > 0 {
+		prev := obj.members[idx-1].val
+		start = toks[prev.tok].end()
+		if prev.isContainer() {
+			start = toks[prev.closeTok].end()
+		}
+	}
+	end := toks[m.val.tok].end()
+	if m.val.isContainer() {
+		end = toks[m.val.closeTok].end()
+	}
+	end = skipJSONSpace(src, end)
+	if end < len(src) && src[end] == ',' {
+		end++
+	}
+	return splice(src, start, end, nil)
+}
+
+// skipJSONSpace advances past the whitespace JSONC allows between tokens.
+// The byte values are written numerically so this file holds no literal
+// control characters.
+func skipJSONSpace(src []byte, i int) int {
+	for i < len(src) {
+		switch src[i] {
+		case 32, 9, 10, 13: // space, tab, LF, CR
+			i++
+		default:
+			return i
+		}
+	}
+	return i
+}
+
+// indexOfMemberByKey returns the member's position, or -1 when obj has no such
+// key. Keys are unique within an object (the parser rejects duplicates), so the
+// key identifies the member exactly.
+func indexOfMemberByKey(obj *jsonNode, key string) int {
+	for i := range obj.members {
+		if obj.members[i].key == key {
+			return i
+		}
+	}
+	return -1
+}
+
+// lit is the already-rendered value (quoted scalar or verbatim JSON), not a raw
+// string to be quoted here: the caller decided which of the two it is.
+func insertJSONMember(src []byte, toks []jsonTok, obj *jsonNode, key, lit string) []byte {
+	entry := jsoncQuote(key) + ": " + lit
 	switch {
 	case len(obj.members) == 0:
-		// {} -> {"k": "v"}
+		// The braces are already in src; only the member text goes between
+		// them. Without obj.trailing there is no comma to keep, so the entry
+		// is inserted bare right after the opening brace.
+		at := toks[obj.tok].end()
+		return splice(src, at, at, []byte(entry))
 	case obj.trailing:
 		entry = " " + entry // the existing comma now separates it
 	default:
