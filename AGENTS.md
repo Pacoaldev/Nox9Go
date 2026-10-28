@@ -535,13 +535,32 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 - This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the current version   heading (`## [1.0.2]`). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
 - Bump `VERSION` (and `version.json` `latestVersion`) by hand when cutting a new personal version, then rebuild with the ldflags above.
 - `GET /api/changelog` serves that file.
+- **Publish the release so the dashboard's update button can install it.** The gateway reads the manifest at `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` and, when that manifest carries no `sha256`, falls back to the GitHub Releases API. Both channels are anonymous, so the repository has to be public. The installer refuses to replace the running binary without a digest (`internal/updater/updater.go`), so a release needs the binary **and** a `SHA256SUMS.txt` listing it, and `version.json` has to carry the asset's `downloadUrl` and `sha256` for the manifest channel to answer on its own:
+
+  ```powershell
+  # 1. release build — the asset name must carry OS and arch, the updater selects by name
+  go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.3 ..." -o nox9go-windows-amd64.exe ./cmd/nox9go/
+  go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
+
+  # 2. digest, in sha256sum format
+  Get-ChildItem nox9go*.exe | Get-FileHash -Algorithm SHA256 |
+    ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+    Set-Content SHA256SUMS.txt -Encoding ascii
+
+  # 3. the release (reuses the tag if it already exists)
+  gh release create v1.0.3 nox9go-windows-amd64.exe nox9go-tray.exe SHA256SUMS.txt --title "v1.0.3 — ..." --notes-file notes.md
+
+  # 4. the manifest: downloadUrl + sha256 of the asset, committed to main
+  ```
+
+  The tray is never picked as the gateway: `matchReleaseAsset` selects the asset whose name carries the OS and the arch, and `nox9go-tray.exe` carries neither. `raw.githubusercontent.com` caches for five minutes (`Cache-Control: max-age=300`), so a manifest change is not visible to the gateway immediately.
 
 ### 7.5 Git policy
 
 - **Everything lands on `main`.** There is no `dev` branch, no PR flow, no release pipeline. The operator pulls, works, and pushes directly.
 - **Plain git only** — `rtk` is not installed here.
 - **Never commit unless asked.** `C&P` = commit + push, done autonomously: inspect `git status` / `git diff`, stage only the intended files, Conventional Commit message matching the repo's style, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
-- **Tags**: `v1.0.0` and `v1.0.1`. The 80 upstream tags were purged on purpose.
+- **Tags**: `v1.0.0`, `v1.0.1` and `v1.0.2`. The 80 upstream tags were purged on purpose.
 
 ### 7.6 Syncing a feature from upstream
 
