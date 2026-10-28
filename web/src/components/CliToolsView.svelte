@@ -23,6 +23,7 @@
   import { copyToClipboard } from '../lib/clipboard'
   import { api, type APIKey } from '../api/client'
   import HermesToolCard from './cli-tools/HermesToolCard.svelte'
+  import OpenCodeToolCard from './cli-tools/OpenCodeToolCard.svelte'
 
   interface Props {
     apiKeys?: APIKey[]
@@ -290,10 +291,14 @@
       image: '/providers/opencode.png',
       description: 'Open source AI code engine with native completions',
       color: '#22C55E',
-      configType: 'env',
+      // OpenCode reads a JSON config, not environment variables. The card below
+      // writes that file; these lines only describe it for a manual setup.
+      configType: 'settings',
       instructions: [
-        `export OPENCODE_BASE_URL="${localOrigin}/v1"`,
-        `export OPENCODE_API_KEY="<your-api-key>"`,
+        `Open ~/.config/opencode/opencode.json (or opencode.jsonc if that is the one you already have).`,
+        `Under "provider", add a "NOX9GO" entry with "npm": "@ai-sdk/openai-compatible".`,
+        `Set its options.baseURL to ${localOrigin}/v1 and options.apiKey to your NOX9GO key.`,
+        'Set the top-level "model" to "NOX9GO/<model-id>" to make it the default.',
       ],
     },
     {
@@ -707,9 +712,17 @@
         </button>
       </div>
 
-      <!-- Hermes has per-profile settings the generic env snippet cannot express. -->
+      <!-- Hermes and OpenCode have file-based settings the generic env snippet
+           cannot express, so they get their own card. -->
       {#if selectedTool.id === 'hermes'}
         <HermesToolCard installed={!!statuses.hermes?.installed} {apiKeys} />
+      {:else if selectedTool.id === 'opencode'}
+        <OpenCodeToolCard
+          installed={!!statuses.opencode?.installed}
+          configured={!!statuses.opencode?.hasNox9Go}
+          {apiKeys}
+          onChanged={loadStatuses}
+        />
       {:else}
         <!-- Quick Copy Snippet (if env variables available) -->
         {#if selectedTool.envVars}

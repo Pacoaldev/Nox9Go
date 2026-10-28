@@ -364,6 +364,22 @@ export interface HermesProfilesResponse {
   profiles: HermesProfile[]
 }
 
+/** Files an apply would write for one CLI client. */
+export interface CliToolSettingsResponse {
+  tool: string
+  files: Array<{ path: string; format: string; purpose: string }>
+  hasNox9Go: boolean
+}
+
+/** Outcome of an apply or reset: which files moved, and the backups taken. */
+export interface CliToolApplyResult {
+  success: boolean
+  tool: string
+  changed: boolean
+  backups: string[] | null
+  message: string
+}
+
 /** The top-level `model:` block of `~/.hermes/config.yaml`. */
 export interface HermesModelBlock {
   default: string
@@ -2226,6 +2242,18 @@ export const api = {
     request<Record<string, { installed?: boolean; version?: string | null; hasNox9Go?: boolean } | null>>(
       '/api/cli-tools/all-statuses'
     ).catch(() => ({})),
+
+  // Per-client config apply/reset. The route writes to the operator's home
+  // directory, so it sits behind the dashboard session like the Hermes one.
+  getCliToolSettings: (tool: string) =>
+    request<CliToolSettingsResponse>(`/api/cli-tools/${tool}-settings`),
+  applyCliToolSettings: (tool: string, body: { baseUrl: string; apiKey?: string; model?: string }) =>
+    request<CliToolApplyResult>(`/api/cli-tools/${tool}-settings`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  resetCliToolSettings: (tool: string) =>
+    request<CliToolApplyResult>(`/api/cli-tools/${tool}-settings`, { method: 'DELETE' }),
 
   // Hermes per-profile configuration.
   // Hermes is usually absent, so the profile list degrades to an empty list
