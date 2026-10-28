@@ -145,11 +145,6 @@
     return parts.join('\n\n---\n\n')
   }
 
-  // The group invite rotates. Everything user-facing points at the redirect
-  // page instead, so a revoked link is repaired by editing site/tg.html alone
-  // and every already-installed dashboard follows the new one.
-  const TELEGRAM_GROUP_URL = 'https://Pacoaldev.github.io/Nox9Go/tg'
-
   // Theme state
   let isDark = $state(true)
   let isDonateOpen = $state(false)
@@ -574,23 +569,20 @@
           </div>
         </a>
 
-        <!-- Points at the redirect page, not the invite, so a rotated or revoked
-             group link is fixed in site/tg.html without shipping a new binary to
-             everyone already running one. -->
         <a
-          href={TELEGRAM_GROUP_URL}
+          href="https://ko-fi.com/H3A029MD9M"
           target="_blank"
           rel="noopener noreferrer"
-          class="flex items-center gap-3 p-3.5 rounded-xl border border-border-subtle bg-surface-2 hover:border-sky-600/50 dark:hover:border-sky-400/50 transition-colors group"
+          class="flex items-center gap-3 p-3.5 rounded-xl border border-border-subtle bg-surface-2 hover:border-[#ff5e5b]/50 transition-colors group"
         >
-          <div class="size-10 rounded-full flex items-center justify-center bg-sky-500/10 text-sky-600 dark:text-sky-400">
-            <span class="material-symbols-outlined text-[22px]">send</span>
+          <div class="size-10 rounded-full flex items-center justify-center bg-[#ff5e5b]/10 text-[#ff5e5b]">
+            <span class="material-symbols-outlined text-[22px]">coffee</span>
           </div>
           <div class="min-w-0">
-            <div class="text-sm font-semibold text-text-main group-hover:text-sky-700 dark:group-hover:text-sky-400 transition-colors">
-              Telegram Group
+            <div class="text-sm font-semibold text-text-main group-hover:text-[#ff5e5b] transition-colors">
+              Buy me a coffee
             </div>
-            <div class="text-xs text-text-muted">Release notes, questions, provider issues</div>
+            <div class="text-xs text-text-muted">Support NOX9GO on Ko-fi</div>
           </div>
         </a>
       </div>
