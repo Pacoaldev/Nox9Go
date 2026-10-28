@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"debug/elf"
+	"encoding/binary"
 	json "encoding/json/v2"
 	"fmt"
 	"net/http"
@@ -322,7 +324,35 @@ func hostExecutableBytes() []byte {
 		copy(img[peOff+24+108:], []byte{0x10, 0x00, 0x00, 0x00}) // 16 data directories
 		return img
 	}
-	return []byte("\x7fELF\x02\x01\x01\x00")
+	return elfImage(runtime.GOARCH)
+}
+
+// elfImage builds the smallest 64-bit ELF header debug/elf will parse, for the
+// host architecture. An eight-byte "\x7fELF" magic used to stand in here and
+// passed on Windows only because the Windows branch of validateExecutable never
+// parsed it that far: on the Linux runner the real parser reported "cannot read
+// ELF identifier: EOF" and every test that needed a believable binary failed.
+// e_ident and e_machine are the only fields it validates before returning.
+func elfImage(goarch string) []byte {
+	machine := map[string]elf.Machine{
+		"amd64": elf.EM_X86_64,
+		"arm64": elf.EM_AARCH64,
+		"386":   elf.EM_386,
+		"arm":   elf.EM_ARM,
+	}[goarch]
+	img := make([]byte, 64)
+	copy(img, []byte{
+		0x7f, 'E', 'L', 'F',
+		2,    // ELFCLASS64
+		1,    // ELFDATA2LSB
+		1,    // EV_CURRENT
+		0,    // ELFOSABI_SYSV
+	})
+	// e_type = ET_EXEC (2), e_machine, e_version = EV_CURRENT (1).
+	binary.LittleEndian.PutUint16(img[16:], 2)
+	binary.LittleEndian.PutUint16(img[18:], uint16(machine))
+	binary.LittleEndian.PutUint32(img[20:], 1)
+	return img
 }
 
 // updatePayload is the binary content a release server in these tests serves.

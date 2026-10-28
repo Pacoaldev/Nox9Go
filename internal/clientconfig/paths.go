@@ -60,10 +60,23 @@ func homeDir() (string, error) {
 // to %APPDATA%, because the clients themselves do that. Following the client is
 // the only way the file the user edits is the file this patches.
 func xdgConfigHome(home string) string {
+	// An explicit home wins over $XDG_CONFIG_HOME. Options.Home exists to pin
+	// every path under one directory, and a caller that set it — the tests, and
+	// any caller sandboxing the write — must not be redirected to the real
+	// ~/.config by an inherited variable. That is exactly what happened on the
+	// CI runner: XDG_CONFIG_HOME was set, the .jsonc fixture in the temp home
+	// was ignored, and the patch landed on the runner's own opencode.json.
+	if home != "" {
+		return filepath.Join(home, ".config")
+	}
 	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
 		return v
 	}
-	return filepath.Join(home, ".config")
+	h, err := homeDir()
+	if err != nil {
+		return ".config"
+	}
+	return filepath.Join(h, ".config")
 }
 
 // opencodePaths is ~/.config/opencode/opencode.jsonc when the user already has

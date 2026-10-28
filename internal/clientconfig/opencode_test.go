@@ -68,6 +68,32 @@ func TestOpenCodeApply_IsIdempotent(t *testing.T) {
 	}
 }
 
+// An inherited XDG_CONFIG_HOME must not redirect a caller that pinned Home.
+//
+// This is the CI failure verbatim: the Linux runner exports XDG_CONFIG_HOME,
+// xdgConfigHome returned it before looking at Options.Home, so the fixture in
+// the temp home was ignored and the patch was written to the runner's own
+// ~/.config/opencode/opencode.json — a config the test never created. Both the
+// path assertion and the parse failure above it came from that one lookup.
+func TestOpenCodePaths_PinnedHomeBeatsXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "elsewhere"))
+
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jsonc := filepath.Join(dir, "opencode.jsonc")
+	if err := os.WriteFile(jsonc, []byte("{}"+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	file, _ := applyToFixture(t, home, "MinionsPRO")
+	if file.Path != jsonc {
+		t.Fatalf("patched %s, want %s — the pinned home must win over XDG_CONFIG_HOME", file.Path, jsonc)
+	}
+}
+
 // The user's own file uses .jsonc and names the provider after this product.
 // Both must round-trip: the .jsonc is the one patched, and the existing
 // provider entry is updated rather than a second one invented.
