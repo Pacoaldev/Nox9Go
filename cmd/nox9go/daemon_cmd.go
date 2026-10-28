@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -97,8 +98,25 @@ func restartDetached(cCtx *cli.Context) error {
 }
 
 // statusDetached reports whether a background daemon is live.
-func statusDetached(_ *cli.Context) error {
+//
+// With --json it prints a machine-readable line instead of prose, so a script
+// can decide on the process state and read the effective address rather than
+// grepping human output or hard-coding a port that PORT, .env or a profile
+// flag may have changed.
+func statusDetached(cCtx *cli.Context) error {
 	pid := daemon.RunningPID()
+	if cCtx.Bool("json") {
+		out, err := json.Marshal(map[string]any{
+			"running":   pid != 0,
+			"pid":       pid,
+			"dashboard": daemonURL() + "/dashboard",
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(out))
+		return nil
+	}
 	if pid == 0 {
 		fmt.Println("nox9go is not running in background.")
 		return nil

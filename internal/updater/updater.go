@@ -279,17 +279,18 @@ func checkManifest(ctx context.Context, url string) (*UpdateInfo, error) {
 	current := strings.TrimPrefix(CurrentVersion, "v")
 	hasUpdate := CompareVersions(latestVersion, current) > 0
 
-	platformKey := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
-	downloadURL := ""
-	if remote.DownloadURLs != nil {
-		downloadURL = remote.DownloadURLs[platformKey]
-		if downloadURL == "" {
-			downloadURL = remote.DownloadURLs["default"]
+		// The manifest names one asset per platform. There is no fall back to a
+		// bare downloadUrl: that field described a Windows executable, and using
+		// it on Linux or macOS downloaded and installed a binary this host cannot
+		// run. A platform the manifest does not cover is simply not updatable.
+		platformKey := platformKey(runtime.GOOS, runtime.GOARCH)
+		downloadURL := ""
+		if remote.DownloadURLs != nil {
+			downloadURL = remote.DownloadURLs[platformKey]
 		}
-	}
-	if downloadURL == "" {
-		downloadURL = remote.DownloadURL
-	}
+		if downloadURL == "" && hasUpdate {
+			log.Warn("updater", "manifest has no asset for this platform; offering the release notes only", "platform", platformKey)
+		}
 
 	return &UpdateInfo{
 		CurrentVersion: CurrentVersion,
@@ -381,13 +382,22 @@ func archAliases(archKey string) []string {
 	}
 }
 
-// matchReleaseAsset finds the best matching asset URL for target OS and Architecture.
+// matchReleaseAsset finds the asset URL built for target OS and Architecture.
+//
+// It returns "" when the release carries nothing for this platform. It used to
+// fall back to "the first asset that does not look like a checksum", which on a
+// multi-platform release could hand a Linux host the Windows executable — and
+// the checksum would happily match it, because a checksum only proves the file
+// is the one that was published, not that it runs here.
 func matchReleaseAsset(assets []releaseAsset, targetOS, targetArch string) string {
 	osKey := strings.ToLower(targetOS)
 	archNames := archAliases(targetArch)
 
 	for _, asset := range assets {
 		name := strings.ToLower(asset.Name)
+		if isChecksumAsset(name) {
+			continue
+		}
 		// Check OS match
 		if !strings.Contains(name, osKey) {
 			continue
@@ -399,15 +409,22 @@ func matchReleaseAsset(assets []releaseAsset, targetOS, targetArch string) strin
 			}
 		}
 	}
-
-	// Fallback to first non-checksum asset
-	for _, asset := range assets {
-		name := strings.ToLower(asset.Name)
-		if !strings.HasSuffix(name, ".sha256") && !strings.HasSuffix(name, ".md5") && !strings.HasSuffix(name, ".txt") {
-			return asset.BrowserDownloadURL
-		}
-	}
 	return ""
+}
+
+// isChecksumAsset reports whether an asset name is a checksum manifest rather
+// than a binary.
+func isChecksumAsset(name string) bool {
+	return strings.HasSuffix(name, ".sha256") ||
+		strings.HasSuffix(name, ".md5") ||
+		strings.HasSuffix(name, ".txt") ||
+		strings.Contains(name, "checksum")
+}
+
+// platformKey is the manifest key for an OS/architecture pair, spelled the way
+// version.json publishes it: "windows_amd64", "darwin_arm64", …
+func platformKey(goos, goarch string) string {
+	return strings.ToLower(goos) + "_" + strings.ToLower(goarch)
 }
 
 // selfExecutable resolves the binary this process runs, so the tests can point
@@ -479,6 +496,14 @@ func PerformSelfUpdate(downloadURL, expectedSHA256 string) error {
 		return fmt.Errorf("SHA256 mismatch: expected %s, got %s", expectedSHA256, actualSHA)
 	}
 	log.Info("updater", "SHA256 checksum verified", "sha256", actualSHA)
+
+	// The digest proves the file is the published one; it says nothing about
+	// whether it is an executable for this machine. A release can be published
+	// with the wrong asset under a correct checksum, and the swap below is not
+	// reversible once the process exits.
+	if err := validateExecutable(binaryBytes, runtime.GOOS, runtime.GOARCH); err != nil {
+		return fmt.Errorf("refusing to install %s: %w", downloadURL, err)
+	}
 
 	// Create temporary binary file in the target directory
 	dir := filepath.Dir(execPath)

@@ -10,10 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	json "encoding/json/v2"
 
 	"nox9go/proxy/internal/app"
+	"nox9go/proxy/internal/auth"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlers"
 )
@@ -45,6 +47,11 @@ type Env struct {
 	BaseURL string
 	Repo    *db.Repo
 	APIKey  string
+
+	// sessionCookie is the dashboard operator credential AsSession sends.
+	// Administration no longer accepts a client API key, so a test that drives
+	// an /api/* admin route has to present what the SPA presents.
+	sessionCookie string
 
 	client *http.Client
 }
@@ -105,10 +112,11 @@ func newEnvWithTokenSaver(t *testing.T, build func(*db.Repo) *handlers.TokenSave
 	t.Cleanup(srv.Close)
 
 	return &Env{
-		BaseURL: srv.URL,
-		Repo:    repo,
-		APIKey:  testAPIKey,
-		client:  srv.Client(),
+		BaseURL:       srv.URL,
+		Repo:          repo,
+		APIKey:        testAPIKey,
+		sessionCookie: auth.CookieName + "=" + marshalSessionCookie(t),
+		client:        srv.Client(),
 	}
 }
 
@@ -170,6 +178,29 @@ func WithAPIKey(key string) RequestOpt {
 			return
 		}
 		r.Header.Set("Authorization", "Bearer "+key)
+	}
+}
+
+// marshalSessionCookie mints the dashboard session AsSession carries.
+func marshalSessionCookie(t *testing.T) string {
+	t.Helper()
+	token, err := auth.Sign(auth.Secret(), time.Now())
+	if err != nil {
+		t.Fatalf("sign session token: %v", err)
+	}
+	return token
+}
+
+// AsSession authenticates as the dashboard operator: a signed session cookie
+// and no API key.
+//
+// Dashboard administration no longer accepts a client API key, so every test
+// that drives an /api/* admin route has to carry the credential the SPA
+// carries instead of the engine key the harness seeds by default.
+func (e *Env) AsSession() RequestOpt {
+	return func(r *http.Request) {
+		r.Header.Set("Cookie", e.sessionCookie)
+		r.Header.Del("Authorization")
 	}
 }
 

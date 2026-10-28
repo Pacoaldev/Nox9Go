@@ -10,6 +10,13 @@
     isEntry?: boolean
   }
 
+  // These instructions are NOT maintained here. They live in the upstream
+  // project this fork was ported from, and they describe 9Router's own endpoints
+  // and defaults. They are fetched at runtime from that repository, so they are
+  // third-party content this project neither reviews nor guarantees: an endpoint
+  // listed below may not exist here, and the upstream may change them at any
+  // time. The banner in the template says so before anyone pastes one into a
+  // model — leaving that out is what made the page look like first-party docs.
   const repo = 'decolua/9router'
   const branch = 'master'
   const baseFolder = 'skills'
@@ -20,7 +27,7 @@
   const skills: Skill[] = [
     {
       id: '9router',
-      name: 'NOX9GO (Entry)',
+      name: '9Router (Entry)',
       description:
         'Setup + index of all capabilities. Start here — covers base URL, auth, model discovery, and links to every capability skill.',
       endpoint: null,
@@ -107,6 +114,13 @@
   <!-- Top instruction banner -->
   <div class="p-5 rounded-[14px] bg-surface border border-border-subtle shadow-[var(--shadow-soft)]">
     <div class="text-xs font-medium text-text-muted mb-2">Paste this to your AI:</div>
+    <p class="text-[11px] leading-relaxed text-text-muted mb-2">
+      These instructions come from the upstream project
+      <a href={githubRepoUrl} target="_blank" rel="noopener noreferrer" class="underline hover:text-text-main">9Router</a>
+      and are fetched from it at runtime. They are not maintained here and are not
+      checked against this build: an endpoint they mention may differ from what this
+      gateway serves. Prefer the CLI and the rest of this dashboard where they disagree.
+    </p>
     <div
       class="px-3.5 py-2.5 rounded-lg bg-surface-2 border border-border-subtle font-mono text-[12px] text-text-main flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap"
     >

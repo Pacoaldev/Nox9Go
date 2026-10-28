@@ -44,7 +44,7 @@ var mediaEndpoints = []mediaEndpoint{
 func restrictTestKey(t *testing.T, env *Env, patterns ...string) {
 	t.Helper()
 	body := map[string]any{"models": patterns}
-	res := env.Put(t, "/api/keys/integration-key/models", body)
+	res := env.Put(t, "/api/keys/integration-key/models", body, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("PUT allowlist = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}

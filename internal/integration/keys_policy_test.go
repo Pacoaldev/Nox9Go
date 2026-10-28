@@ -28,7 +28,7 @@ type allowlist struct {
 
 func getAllowlist(t *testing.T, env *Env, id string) allowlist {
 	t.Helper()
-	res := env.Get(t, "/api/keys/"+id+"/models")
+	res := env.Get(t, "/api/keys/"+id+"/models", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET allowlist = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -39,7 +39,7 @@ func getAllowlist(t *testing.T, env *Env, id string) allowlist {
 
 func policyOf(t *testing.T, env *Env, id string) policyRow {
 	t.Helper()
-	res := env.Get(t, "/api/keys")
+	res := env.Get(t, "/api/keys", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/keys = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -62,7 +62,7 @@ func policyOf(t *testing.T, env *Env, id string) policyRow {
 func TestKeyPolicyRoundTrip(t *testing.T) {
 	env := newEnv(t)
 
-	create := env.Post(t, "/api/keys", map[string]any{"name": "policy-roundtrip", "key": "sk-policy-216"})
+	create := env.Post(t, "/api/keys", map[string]any{"name": "policy-roundtrip", "key": "sk-policy-216"}, env.AsSession())
 	if create.Status != http.StatusOK {
 		t.Fatalf("create key = %d, want 200 (body: %s)", create.Status, truncate(create.Body))
 	}
@@ -78,7 +78,7 @@ func TestKeyPolicyRoundTrip(t *testing.T) {
 		"rateLimitConcurrency": 4,
 		"expiresAt":            "2030-01-02T03:04:05Z",
 		"metadata":             metadata,
-	})
+	}, env.AsSession())
 	if put.Status != http.StatusOK {
 		t.Fatalf("PUT policy = %d, want 200 (body: %s)", put.Status, truncate(put.Body))
 	}
@@ -108,7 +108,7 @@ func TestKeyPolicyRoundTrip(t *testing.T) {
 func TestKeyModelAllowlistRoundTrip(t *testing.T) {
 	env := newEnv(t)
 
-	create := env.Post(t, "/api/keys", map[string]any{"name": "allowlist", "key": "sk-allowlist-216"})
+	create := env.Post(t, "/api/keys", map[string]any{"name": "allowlist", "key": "sk-allowlist-216"}, env.AsSession())
 	var made struct {
 		ID string `json:"id"`
 	}
@@ -116,7 +116,7 @@ func TestKeyModelAllowlistRoundTrip(t *testing.T) {
 
 	set := env.Put(t, "/api/keys/"+made.ID+"/models", map[string]any{
 		"models": []string{"e2e/allowed-*", "gpt-4o"},
-	})
+	}, env.AsSession())
 	if set.Status != http.StatusOK {
 		t.Fatalf("PUT allowlist = %d, want 200 (body: %s)", set.Status, truncate(set.Body))
 	}
@@ -141,13 +141,13 @@ func TestKeyModelAllowlistRoundTrip(t *testing.T) {
 func TestKeyPolicySavePreservesAllowlist(t *testing.T) {
 	env := newEnv(t)
 
-	create := env.Post(t, "/api/keys", map[string]any{"name": "preserve", "key": "sk-preserve-216"})
+	create := env.Post(t, "/api/keys", map[string]any{"name": "preserve", "key": "sk-preserve-216"}, env.AsSession())
 	var made struct {
 		ID string `json:"id"`
 	}
 	create.Decode(t, &made)
 
-	seed := env.Put(t, "/api/keys/"+made.ID+"/models", map[string]any{"models": []string{"claude/*"}})
+	seed := env.Put(t, "/api/keys/"+made.ID+"/models", map[string]any{"models": []string{"claude/*"}}, env.AsSession())
 	if seed.Status != http.StatusOK {
 		t.Fatalf("seed allowlist = %d, want 200 (body: %s)", seed.Status, truncate(seed.Body))
 	}
@@ -156,7 +156,7 @@ func TestKeyPolicySavePreservesAllowlist(t *testing.T) {
 	if put := env.Put(t, "/api/keys/"+made.ID, map[string]any{
 		"rateLimitRpm": 60,
 		"metadata":     `{"customerId":"acme"}`,
-	}); put.Status != http.StatusOK {
+	}, env.AsSession()); put.Status != http.StatusOK {
 		t.Fatalf("PUT policy = %d, want 200 (body: %s)", put.Status, truncate(put.Body))
 	}
 

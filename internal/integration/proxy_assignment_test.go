@@ -50,7 +50,7 @@ func assignPool(t *testing.T, env *Env, connID, poolID string) {
 	res := env.Put(t, "/api/connections/"+connID, map[string]any{
 		"proxyPoolId":          poolID,
 		"providerSpecificData": map[string]any{"proxyPoolId": poolID},
-	})
+	}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("assign pool status = %d: %s", res.Status, truncate(res.Body))
 	}

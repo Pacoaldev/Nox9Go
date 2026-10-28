@@ -93,9 +93,10 @@ func TestRelayDeployRoutesAcceptDashboardSession(t *testing.T) {
 }
 
 // TestRelayDeployRoutesRejectEngineKeyOnEmptyToken is the other half of the
-// dashboard guard: RequireDashboardAuth still admits a client API key for CLI
-// compatibility, so moving the routes must not have left them open to any
-// bearer key. Both credential carriers land on the same 400.
+// dashboard guard: a client API key is not an admin credential, so it has to be
+// refused rather than reach the handler. Admitting it used to land on the
+// handler's own validation (400 "Organization domain is required"), which still
+// meant a leaked client key could drive a deploy.
 func TestRelayDeployRoutesRejectEngineKeyOnEmptyToken(t *testing.T) {
 	env := newEnv(t)
 	if err := env.Repo.UpdateSettingsRaw(map[string]any{"requireLogin": true}); err != nil {
@@ -103,11 +104,8 @@ func TestRelayDeployRoutesRejectEngineKeyOnEmptyToken(t *testing.T) {
 	}
 
 	res := env.Post(t, "/api/proxy-pools/deno-deploy", map[string]any{})
-	if res.Status != http.StatusBadRequest {
-		t.Fatalf("POST /api/proxy-pools/deno-deploy with the client api key = %d, want 400 (body: %s)",
+	if res.Status != http.StatusUnauthorized {
+		t.Fatalf("POST /api/proxy-pools/deno-deploy with the client api key = %d, want 401 (body: %s)",
 			res.Status, truncate(res.Body))
-	}
-	if got := res.ErrorMessage(t); got != "Organization domain is required" {
-		t.Fatalf("message = %q, want the handler's own validation", got)
 	}
 }

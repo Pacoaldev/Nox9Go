@@ -18,7 +18,7 @@ func TestOpenCodeZenIsListedForQuotaTracking(t *testing.T) {
 	up := env.NewUpstream(t, chatCompletionResponder())
 	addZenConnection(t, env, up)
 
-	res := env.Get(t, "/api/providers/client", WithAPIKey(testAPIKey))
+	res := env.Get(t, "/api/providers/client", WithAPIKey(testAPIKey), env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -59,7 +59,7 @@ func TestOpenCodeZenQuotaParsesProviderShape(t *testing.T) {
 	env := newEnv(t)
 	addZenConnectionWithData(t, env, usage.URL+"/zen/v1/chat/completions")
 
-	res := env.Get(t, "/api/usage/conn-ocz", WithAPIKey(testAPIKey))
+	res := env.Get(t, "/api/usage/conn-ocz", WithAPIKey(testAPIKey), env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}

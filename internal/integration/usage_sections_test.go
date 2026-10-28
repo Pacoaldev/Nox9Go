@@ -59,7 +59,7 @@ func TestUsageSectionsServeTheirOwnAnalytics(t *testing.T) {
 	seedCompressionRun(t, env, "deepseek", "rtk", 400, 1000)
 
 	t.Run("cache section loads the stats the view renders", func(t *testing.T) {
-		res := env.Get(t, "/api/cache?trendHours=24")
+		res := env.Get(t, "/api/cache?trendHours=24", env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("GET /api/cache = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 		}
@@ -82,7 +82,7 @@ func TestUsageSectionsServeTheirOwnAnalytics(t *testing.T) {
 		// The Cache section offers 12h/24h/48h/72h; each must be served rather
 		// than clamped to the default.
 		for _, hours := range []string{"12", "24", "48", "72"} {
-			res := env.Get(t, "/api/cache?trendHours="+hours)
+			res := env.Get(t, "/api/cache?trendHours="+hours, env.AsSession())
 			if res.Status != http.StatusOK {
 				t.Errorf("GET /api/cache?trendHours=%s = %d, want 200 (body: %s)", hours, res.Status, truncate(res.Body))
 			}
@@ -90,7 +90,7 @@ func TestUsageSectionsServeTheirOwnAnalytics(t *testing.T) {
 	})
 
 	t.Run("cache entries endpoint paginates", func(t *testing.T) {
-		res := env.Get(t, "/api/cache/entries?page=1&limit=10&sortBy=created_at&sortOrder=desc")
+		res := env.Get(t, "/api/cache/entries?page=1&limit=10&sortBy=created_at&sortOrder=desc", env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("GET /api/cache/entries = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 		}
@@ -111,7 +111,7 @@ func TestUsageSectionsServeTheirOwnAnalytics(t *testing.T) {
 	})
 
 	t.Run("compression section reports the seeded run", func(t *testing.T) {
-		res := env.Get(t, "/api/analytics/compression?since=24h")
+		res := env.Get(t, "/api/analytics/compression?since=24h", env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("GET /api/analytics/compression = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 		}
@@ -136,7 +136,7 @@ func TestUsageSectionsServeTheirOwnAnalytics(t *testing.T) {
 		// seeded run back — a section showing "no data" for 30d is broken even
 		// though the call succeeded.
 		for _, since := range []string{"24h", "7d", "30d", "all"} {
-			res := env.Get(t, "/api/analytics/compression?since="+since)
+			res := env.Get(t, "/api/analytics/compression?since="+since, env.AsSession())
 			if res.Status != http.StatusOK {
 				t.Errorf("GET /api/analytics/compression?since=%s = %d, want 200 (body: %s)", since, res.Status, truncate(res.Body))
 				continue
@@ -188,7 +188,7 @@ func TestUsageSectionsServeTheirOwnAnalytics(t *testing.T) {
 		// The Overview keeps its own window selector; the custom windows it offers
 		// must resolve to that window and not fall back to the 7-day default.
 		for _, period := range []string{"today", "24h", "7d", "all", "14d", "12h"} {
-			res := env.Get(t, "/api/usage/stats?period="+period)
+			res := env.Get(t, "/api/usage/stats?period="+period, env.AsSession())
 			if res.Status != http.StatusOK {
 				t.Errorf("GET /api/usage/stats?period=%s = %d, want 200 (body: %s)", period, res.Status, truncate(res.Body))
 			}
@@ -198,7 +198,7 @@ func TestUsageSectionsServeTheirOwnAnalytics(t *testing.T) {
 		// with its 7-day fallback, so the payload shape is the only signal. The
 		// assertion here is that the response is the stats document at all.
 		var stats map[string]jsontext.Value
-		res := env.Get(t, "/api/usage/stats?period=all")
+		res := env.Get(t, "/api/usage/stats?period=all", env.AsSession())
 		res.Decode(t, &stats)
 		if _, ok := stats["byProvider"]; !ok {
 			t.Errorf("usage stats payload has no byProvider bucket (keys: %v)", stats)

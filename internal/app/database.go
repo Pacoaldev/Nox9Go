@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 
 	"go.uber.org/fx"
 
 	"nox9go/proxy/internal/config"
+	"nox9go/proxy/internal/handlers/dashboard"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/translator"
@@ -24,6 +26,10 @@ var DatabaseModule = fx.Module("database",
 	// startup side effect. As a Provide it would be rejected for returning
 	// only an error.
 	fx.Invoke(MigrateVault),
+	// An Invoke for the same reason: it writes the settings row rather than
+	// producing a value. Runs on every start and is a no-op once a real
+	// password exists.
+	fx.Invoke(EnsureDashboardPassword),
 )
 
 // ProvideDatabase initializes the global SQLite database and registers an OnStop lifecycle hook to close it cleanly.
@@ -78,6 +84,32 @@ func ProvideDatabase(lc fx.Lifecycle, cfg *config.Config) (*sql.DB, error) {
 }
 
 // ProvideRepo provides *db.Repo using the database connection.
+// EnsureDashboardPassword gives a fresh install a generated dashboard password
+// and prints it exactly once.
+//
+// The password used to be "123456" until someone changed it, which is a public
+// password on every install that never got around to it. It is a best-effort
+// startup step on purpose: a failure here must not stop the gateway, because
+// the gateway's job is to serve, and an install with no dashboard password is
+// still reachable by the local CLI token.
+func EnsureDashboardPassword(repo *db.Repo, cfg *config.Config) {
+	password, err := dashboard.EnsureInitialPassword(repo)
+	if err != nil {
+		log.Warn("dashboard", "could not prepare the initial dashboard password", "error", err)
+		return
+	}
+	if password == "" {
+		return
+	}
+	// The port comes from the resolved config, not a literal: the advice used
+	// to point at 20130 on an install started with PORT set to anything else.
+	port := "20130"
+	if cfg != nil && cfg.Port > 0 {
+		port = strconv.Itoa(cfg.Port)
+	}
+	fmt.Print(dashboard.InitialPasswordNotice(password, port))
+}
+
 func ProvideRepo(conn *sql.DB) *db.Repo {
 	repo := db.NewRepo(conn)
 	repo.SetVault(vault.NewFromEnv())

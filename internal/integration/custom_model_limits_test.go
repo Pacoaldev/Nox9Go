@@ -87,7 +87,7 @@ func TestCustomModelDeclaredLimitsReachEveryDiscoverySurface(t *testing.T) {
 			infoBody.ContextLength, infoBody.MaxOutputTokens)
 	}
 
-	caps := env.Get(t, "/api/models/caps?provider=nara", WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+	caps := env.Get(t, "/api/models/caps?provider=nara", WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 	if caps.Status != http.StatusOK {
 		t.Fatalf("/api/models/caps status = %d: %s", caps.Status, truncate(caps.Body))
 	}

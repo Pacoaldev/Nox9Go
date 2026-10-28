@@ -104,7 +104,7 @@ func TestUsageStatsAggregatesCompletedRequests(t *testing.T) {
 		}
 	}
 
-	res := env.Get(t, "/api/usage/stats?period=all")
+	res := env.Get(t, "/api/usage/stats?period=all", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/usage/stats = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}

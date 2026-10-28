@@ -36,7 +36,7 @@ func newKeyForAccess(t *testing.T, env *Env, name string) string {
 
 func accessOfKey(t *testing.T, env *Env, id string) accessObject {
 	t.Helper()
-	res := env.Get(t, "/api/keys")
+	res := env.Get(t, "/api/keys", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/keys = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -51,7 +51,7 @@ func accessOfKey(t *testing.T, env *Env, id string) accessObject {
 
 func modelsOfKey(t *testing.T, env *Env, id string) allowlistWithAccess {
 	t.Helper()
-	res := env.Get(t, "/api/keys/"+id+"/models")
+	res := env.Get(t, "/api/keys/"+id+"/models", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/keys/%s/models = %d, want 200 (body: %s)", id, res.Status, truncate(res.Body))
 	}
@@ -62,7 +62,7 @@ func modelsOfKey(t *testing.T, env *Env, id string) allowlistWithAccess {
 
 func putAccess(t *testing.T, env *Env, id string, access map[string]any) {
 	t.Helper()
-	res := env.Put(t, "/api/keys/"+id, map[string]any{"access": access})
+	res := env.Put(t, "/api/keys/"+id, map[string]any{"access": access}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("PUT access = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -72,7 +72,7 @@ func putAccess(t *testing.T, env *Env, id string, access map[string]any) {
 // the status so the caller can pin the refusal instead of failing the test.
 func putAccessExpect(t *testing.T, env *Env, id string, access map[string]any) int {
 	t.Helper()
-	return env.Put(t, "/api/keys/"+id, map[string]any{"access": access}).Status
+	return env.Put(t, "/api/keys/"+id, map[string]any{"access": access}, env.AsSession()).Status
 }
 
 func samePatterns(got, want []string) bool {
@@ -124,7 +124,7 @@ func TestKeyModelsShapeIsTheSamePolicyAsAccess(t *testing.T) {
 
 	// Exact identities first: these round-trip through both shapes.
 	exact := []string{"claude/claude-opus-5", "openai/gpt-4o"}
-	res := env.Put(t, "/api/keys/"+id+"/models", map[string]any{"models": exact})
+	res := env.Put(t, "/api/keys/"+id+"/models", map[string]any{"models": exact}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("PUT /models = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -140,7 +140,7 @@ func TestKeyModelsShapeIsTheSamePolicyAsAccess(t *testing.T) {
 	// Patterns stay in the flat endpoint's own vocabulary and are reported as a
 	// restriction with no Node-expressible entries — never as open.
 	patterns := []string{"claude/*", "oc/*"}
-	res = env.Put(t, "/api/keys/"+id+"/models", map[string]any{"models": patterns})
+	res = env.Put(t, "/api/keys/"+id+"/models", map[string]any{"models": patterns}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("PUT /models (patterns) = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -250,7 +250,7 @@ func TestKeyAccessReportsThePlanUnion(t *testing.T) {
 	res := env.Post(t, "/api/plans", map[string]any{
 		"name":          "access-union-plan",
 		"allowedModels": []string{"cc/claude-opus-5"},
-	})
+	}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("POST /api/plans = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -262,7 +262,7 @@ func TestKeyAccessReportsThePlanUnion(t *testing.T) {
 		t.Fatal("plan create returned no id")
 	}
 
-	res = env.Put(t, "/api/keys/"+id, map[string]any{"planId": plan.ID})
+	res = env.Put(t, "/api/keys/"+id, map[string]any{"planId": plan.ID}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("assign plan = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -304,7 +304,7 @@ func TestKeyAccessCorruptPayloadKeepsRestriction(t *testing.T) {
 		{"restricted is not a boolean", map[string]any{"restricted": "yes", "allow": []any{"gpt-4o"}}},
 	}
 	for _, tc := range corrupt {
-		res := env.Put(t, "/api/keys/"+id, map[string]any{"access": tc.body})
+		res := env.Put(t, "/api/keys/"+id, map[string]any{"access": tc.body}, env.AsSession())
 		if res.Status != http.StatusBadRequest {
 			t.Errorf("%s: PUT access = %d, want 400 (body: %s)", tc.name, res.Status, truncate(res.Body))
 		}

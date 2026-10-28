@@ -24,7 +24,7 @@ func TestLedgerPrunePreservesKeyQuotaEnforcement(t *testing.T) {
 	id, plaintext := limitKey(t, env, "ledger-prune")
 
 	// Set a 100-token budget.
-	if put := env.Put(t, "/api/keys/"+id, map[string]any{"tokenQuota": 100}); put.Status != http.StatusOK {
+	if put := env.Put(t, "/api/keys/"+id, map[string]any{"tokenQuota": 100}, env.AsSession()); put.Status != http.StatusOK {
 		t.Fatalf("set token quota: status %d: %s", put.Status, truncate(put.Body))
 	}
 
@@ -58,7 +58,7 @@ func TestLedgerPrunePreservesKeyQuotaEnforcement(t *testing.T) {
 	// behind, and this test is where a route accidentally left off that list
 	// would show up.
 	prune := env.Post(t, "/api/settings/database/prune-usage", map[string]any{"days": 30},
-		WithoutAPIKey(), WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+		WithoutAPIKey(), WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 	if prune.Status != http.StatusOK {
 		t.Fatalf("prune-usage = %d: %s", prune.Status, truncate(prune.Body))
 	}

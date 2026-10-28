@@ -41,7 +41,7 @@ func TestStorageMaintenanceWorksWithoutAdminCredential(t *testing.T) {
 
 	// The dry run the button issues first.
 	dry := env.Post(t, "/api/settings/database/prune-usage?dryRun=1&days=30",
-		map[string]any{"days": 30}, WithoutAPIKey())
+		map[string]any{"days": 30}, WithoutAPIKey(), env.AsSession())
 	if dry.Status != http.StatusOK {
 		t.Fatalf("prune-usage dry run without an admin credential = %d: %s", dry.Status, truncate(dry.Body))
 	}
@@ -59,7 +59,7 @@ func TestStorageMaintenanceWorksWithoutAdminCredential(t *testing.T) {
 
 	// The action itself.
 	prune := env.Post(t, "/api/settings/database/prune-usage",
-		map[string]any{"days": 30}, WithoutAPIKey())
+		map[string]any{"days": 30}, WithoutAPIKey(), env.AsSession())
 	if prune.Status != http.StatusOK {
 		t.Fatalf("prune-usage without an admin credential = %d: %s", prune.Status, truncate(prune.Body))
 	}
@@ -105,7 +105,7 @@ func TestAnonymousPruneStillCarriesKeyQuota(t *testing.T) {
 	}
 
 	id, plaintext := limitKey(t, env, "anon-prune")
-	if put := env.Put(t, "/api/keys/"+id, map[string]any{"tokenQuota": 100}); put.Status != http.StatusOK {
+	if put := env.Put(t, "/api/keys/"+id, map[string]any{"tokenQuota": 100}, env.AsSession()); put.Status != http.StatusOK {
 		t.Fatalf("set token quota: status %d: %s", put.Status, truncate(put.Body))
 	}
 
@@ -126,7 +126,7 @@ func TestAnonymousPruneStillCarriesKeyQuota(t *testing.T) {
 
 	// The prune the dashboard issues, with no credential.
 	prune := env.Post(t, "/api/settings/database/prune-usage",
-		map[string]any{"days": 30}, WithoutAPIKey())
+		map[string]any{"days": 30}, WithoutAPIKey(), env.AsSession())
 	if prune.Status != http.StatusOK {
 		t.Fatalf("prune-usage = %d: %s", prune.Status, truncate(prune.Body))
 	}

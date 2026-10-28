@@ -11,11 +11,36 @@ import (
 	"testing"
 )
 
-// TestDoRequestRetriesWithInsecureTLS is the upstream b58bd804 fallback: a
-// corporate middlebox that re-signs TLS presents a certificate no public root
-// vouches for. The request must still get through, exactly once more.
+// TestDoRequestRefusesCertificateFailureByDefault pins the safe default: a
+// certificate that does not verify fails the request. It used to be replayed
+// with verification disabled unless STRICT_SSL was set, which shipped a
+// silent MITM window to every install that never read the docs.
+func TestDoRequestRefusesCertificateFailureByDefault(t *testing.T) {
+	t.Setenv("ALLOW_INSECURE_TLS", "")
+	var hits atomic.Int64
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	_, err := DoRequest(context.Background(), &http.Client{}, http.MethodPost, upstream.URL, nil, []byte("`{}/*LB*/"))
+	if err == nil {
+		t.Fatal("a self-signed upstream must fail verification by default")
+	}
+	if !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "x509") {
+		t.Errorf("error = %v, want the certificate verification failure", err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("upstream hits = %d, want no retry without verification", hits.Load())
+	}
+}
+
+// TestDoRequestRetriesWithInsecureTLS runs the corporate middlebox case — a
+// proxy that re-signs TLS with a root no public store vouches for — but only
+// once the operator has opted in by name.
 func TestDoRequestRetriesWithInsecureTLS(t *testing.T) {
-	t.Setenv("STRICT_SSL", "")
+	t.Setenv("ALLOW_INSECURE_TLS", "true")
 	t.Setenv("ALLOW_PRIVATE_NETWORKING", "true")
 
 	var hits atomic.Int64
@@ -35,11 +60,11 @@ func TestDoRequestRetriesWithInsecureTLS(t *testing.T) {
 	}
 }
 
-// TestDoRequestStrictSSLRefusesInsecureRetry pins the operator's escape hatch:
-// with STRICT_SSL set the retry must not happen, and the certificate error has
-// to surface rather than being swallowed by a different failure.
-func TestDoRequestStrictSSLRefusesInsecureRetry(t *testing.T) {
-	t.Setenv("STRICT_SSL", "true")
+// TestDoRequestInsecureOptInOffRefusesRetry pins that anything but an explicit
+// true/1 leaves the safe default on: the certificate error has to surface
+// rather than being swallowed by a different failure.
+func TestDoRequestInsecureOptInOffRefusesRetry(t *testing.T) {
+	t.Setenv("ALLOW_INSECURE_TLS", "false")
 
 	var hits atomic.Int64
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -50,7 +75,7 @@ func TestDoRequestStrictSSLRefusesInsecureRetry(t *testing.T) {
 
 	_, err := DoRequest(context.Background(), &http.Client{}, http.MethodPost, upstream.URL, nil, []byte(`{}`))
 	if err == nil {
-		t.Fatal("STRICT_SSL must fail the request instead of retrying without verification")
+		t.Fatal("without the opt-in the request must fail instead of retrying without verification")
 	}
 	if hits.Load() != 0 {
 		t.Errorf("upstream hits = %d, want no insecure attempt to have been made", hits.Load())
@@ -65,7 +90,7 @@ func TestDoRequestStrictSSLRefusesInsecureRetry(t *testing.T) {
 // swallowed by the direct replay and reported as an ordinary proxy refusal;
 // the typed check has to keep the two apart.
 func TestDoRequestDoesNotMaskCertificateErrorAsProxyFailure(t *testing.T) {
-	t.Setenv("STRICT_SSL", "1")
+	t.Setenv("ALLOW_INSECURE_TLS", "1")
 
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -162,23 +187,24 @@ func (e *wrappedErr) Error() string { return `Post "https://upstream.invalid": `
 
 func (e *wrappedErr) Unwrap() error { return e.err }
 
-// TestStrictTLSRequestedFollowsEnv pins the opt-out reading. It is read per
+// TestInsecureTLSOptInFollowsEnv pins the opt-in reading. It is read per
 // request rather than at init, so a flipped variable takes effect without a
 // new process.
-func TestStrictTLSRequestedFollowsEnv(t *testing.T) {
+func TestInsecureTLSOptInFollowsEnv(t *testing.T) {
 	cases := map[string]bool{
-		"":      false,
-		"0":     false,
-		"false": false,
-		"true":  true,
-		"1":     true,
-		" true": true,
+		"":       false,
+		"0":      false,
+		"false":  false,
+		"no":     false,
+		"true":   true,
+		" TRUE ": true,
+		"1":      true,
 	}
 	for value, want := range cases {
-		t.Run("STRICT_SSL="+value, func(t *testing.T) {
-			t.Setenv("STRICT_SSL", value)
-			if got := strictTLSRequested(); got != want {
-				t.Errorf("strictTLSRequested() = %v, want %v", got, want)
+		t.Run("ALLOW_INSECURE_TLS="+value, func(t *testing.T) {
+			t.Setenv("ALLOW_INSECURE_TLS", value)
+			if got := insecureTLSOptIn(); got != want {
+				t.Errorf("insecureTLSOptIn() = %v, want %v", got, want)
 			}
 		})
 	}

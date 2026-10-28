@@ -25,7 +25,7 @@ type connectionRow struct {
 // listConnections fetches every connection the dashboard can see.
 func listConnections(t *testing.T, env *Env) []connectionRow {
 	t.Helper()
-	res := env.Get(t, "/api/connections")
+	res := env.Get(t, "/api/connections", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/connections = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -59,7 +59,7 @@ func TestConnectionLifecycle(t *testing.T) {
 		"name":     "DeepSeek Primary",
 		"apiKey":   "sk-deepseek-secret",
 		"priority": 1,
-	})
+	}, env.AsSession())
 	if created.Status != http.StatusOK {
 		t.Fatalf("POST /api/connections = %d, want 200 (body: %s)", created.Status, truncate(created.Body))
 	}
@@ -86,7 +86,7 @@ func TestConnectionLifecycle(t *testing.T) {
 		}
 
 		// The whole response, not just this row, must be free of secrets.
-		res := env.Get(t, "/api/connections")
+		res := env.Get(t, "/api/connections", env.AsSession())
 		if strings.Contains(string(res.Body), "sk-deepseek-secret") {
 			t.Errorf("GET /api/connections leaked the api key: %s", truncate(res.Body))
 		}
@@ -99,7 +99,7 @@ func TestConnectionLifecycle(t *testing.T) {
 			"name":     "DeepSeek Renamed",
 			"apiKey":   "sk-deepseek-secret",
 			"priority": 1,
-		})
+		}, env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("PUT /api/connections/%s = %d, want 200 (body: %s)", id, res.Status, truncate(res.Body))
 		}
@@ -109,7 +109,7 @@ func TestConnectionLifecycle(t *testing.T) {
 	})
 
 	t.Run("delete removes it", func(t *testing.T) {
-		res := env.Delete(t, "/api/connections/"+id)
+		res := env.Delete(t, "/api/connections/"+id, env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("DELETE /api/connections/%s = %d, want 200 (body: %s)", id, res.Status, truncate(res.Body))
 		}
@@ -129,7 +129,7 @@ func TestConnectionNameConflictIsRefused(t *testing.T) {
 
 	first := env.Post(t, "/api/connections", map[string]any{
 		"provider": "deepseek", "authType": "apikey", "name": "Primary", "apiKey": "sk-first",
-	})
+	}, env.AsSession())
 	if first.Status != http.StatusOK {
 		t.Fatalf("first POST /api/connections = %d, want 200 (body: %s)", first.Status, truncate(first.Body))
 	}
@@ -141,7 +141,7 @@ func TestConnectionNameConflictIsRefused(t *testing.T) {
 	t.Run("duplicate name is a 409", func(t *testing.T) {
 		second := env.Post(t, "/api/connections", map[string]any{
 			"provider": "deepseek", "authType": "apikey", "name": "Primary", "apiKey": "sk-second",
-		})
+		}, env.AsSession())
 		if second.Status != http.StatusConflict {
 			t.Fatalf("duplicate POST /api/connections = %d, want 409 (body: %s)", second.Status, truncate(second.Body))
 		}
@@ -162,7 +162,7 @@ func TestConnectionNameConflictIsRefused(t *testing.T) {
 		res := env.Post(t, "/api/connections", map[string]any{
 			"provider": "deepseek", "authType": "apikey", "name": "Primary",
 			"apiKey": "sk-second", "allowOverwrite": true,
-		})
+		}, env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("overwrite POST /api/connections = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 		}
@@ -181,7 +181,7 @@ func TestConnectionNameConflictIsRefused(t *testing.T) {
 func TestConnectionValidationRejectsAnIncompletePayload(t *testing.T) {
 	env := newEnv(t)
 
-	res := env.Post(t, "/api/connections", map[string]any{"name": "No Provider"})
+	res := env.Post(t, "/api/connections", map[string]any{"name": "No Provider"}, env.AsSession())
 	if res.Status != http.StatusBadRequest {
 		t.Fatalf("POST /api/connections without a provider = %d, want 400 (body: %s)", res.Status, truncate(res.Body))
 	}

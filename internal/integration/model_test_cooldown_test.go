@@ -33,7 +33,7 @@ func runProbe(t *testing.T, env *Env, model, kind string) probeVerdict {
 	if kind != "" {
 		body["kind"] = kind
 	}
-	res := env.Post(t, "/api/models/test", body)
+	res := env.Post(t, "/api/models/test", body, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("probe status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -194,7 +194,7 @@ func TestModelTestVerdictWireShape(t *testing.T) {
 		`{"error":{"message":"quota exceeded","type":"rate_limit_error"}}`))
 	addZenConnection(t, env, up)
 
-	res := env.Post(t, "/api/models/test", map[string]string{"model": "ocz/deepseek-v4-pro"})
+	res := env.Post(t, "/api/models/test", map[string]string{"model": "ocz/deepseek-v4-pro"}, env.AsSession())
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(res.Body), &raw); err != nil {
 		t.Fatalf("decode: %v (body %s)", err, truncate(res.Body))

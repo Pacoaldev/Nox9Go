@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -228,14 +229,21 @@ func TestHandleAuthLogin_RemoteDefaultPasswordMustChange(t *testing.T) {
 	defer cleanup()
 	h := NewDashboardHandler(repo)
 
-	body := `{"password":"123456"}`
+	// Startup generates the first password; the login with it has to be
+	// replaced before a session exists. This used to fire only on a remote
+	// caller with no INITIAL_PASSWORD set.
+	generated, err := EnsureInitialPassword(repo)
+	if err != nil {
+		t.Fatalf("prepare initial password: %v", err)
+	}
+	body := fmt.Sprintf(`{"password":%q}`, generated)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.RemoteAddr = "203.0.113.10:1234"
 	req.Host = "203.0.113.10:20130"
 	rec := httptest.NewRecorder()
 	h.HandleAuthLogin(rec, req)
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for remote default password, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 403 for the generated password, got %d: %s", rec.Code, rec.Body.String())
 	}
 	var out map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
@@ -258,8 +266,12 @@ func TestHandleAuthLogin_RemoteDefaultPasswordRotation(t *testing.T) {
 	defer cleanup()
 	h := NewDashboardHandler(repo)
 
-	// Remote request supplying newPassword alongside default password rotates and succeeds
-	body := `{"password":"123456","newPassword":"custom-new-password"}`
+	// Supplying a new password alongside the generated one rotates it and succeeds.
+	generated, err := EnsureInitialPassword(repo)
+	if err != nil {
+		t.Fatalf("prepare initial password: %v", err)
+	}
+	body := fmt.Sprintf(`{"password":%q,"newPassword":"custom-new-password"}`, generated)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(body))
 	req.RemoteAddr = "203.0.113.10:1234"
 	req.Host = "203.0.113.10:20130"

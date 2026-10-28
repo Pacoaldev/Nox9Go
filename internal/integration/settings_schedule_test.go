@@ -26,7 +26,7 @@ type settingsWithAutoPing struct {
 
 func readAutoPing(t *testing.T, env *Env) autoPingValue {
 	t.Helper()
-	res := env.Get(t, "/api/settings")
+	res := env.Get(t, "/api/settings", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/settings = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -37,7 +37,7 @@ func readAutoPing(t *testing.T, env *Env) autoPingValue {
 
 func putSettings(t *testing.T, env *Env, body map[string]any) {
 	t.Helper()
-	res := env.Put(t, "/api/settings", body)
+	res := env.Put(t, "/api/settings", body, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("PUT /api/settings = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -154,7 +154,7 @@ func TestSettingsScheduleRejectsBadPayload(t *testing.T) {
 		"connection value is not a bool": {"claudeAutoPing": map[string]any{"connections": map[string]any{"conn-2": "on"}}},
 		"auto-ping is not an object":     {"claudeAutoPing": "on"},
 	} {
-		res := env.Put(t, "/api/settings", body)
+		res := env.Put(t, "/api/settings", body, env.AsSession())
 		if res.Status != http.StatusBadRequest {
 			t.Errorf("%s: PUT = %d, want 400 (body: %s)", name, res.Status, truncate(res.Body))
 		}

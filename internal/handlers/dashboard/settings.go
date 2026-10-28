@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	json "encoding/json/v2"
 	"errors"
@@ -18,7 +17,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"nox9go/proxy/internal/auth"
-	"nox9go/proxy/internal/config"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlerutil"
 	"nox9go/proxy/internal/proxy"
@@ -31,8 +29,14 @@ const (
 	proxyDefaultURL = "https://google.com/"
 	proxyMaxTimeout = 30 * time.Second
 	proxyTimeout    = 8 * time.Second
-	// defaultInitialPassword mirrors upstream DEFAULT_PASSWORD ("123456"):
-	// accepted when no bcrypt hash is stored and INITIAL_PASSWORD is unset.
+	// defaultInitialPassword mirrors upstream DEFAULT_PASSWORD. It is no longer
+	// accepted: a password every install shares is a password an attacker knows
+	// before the operator does. The first start now generates one and prints it,
+	// and the first login with it has to replace it.
+	//
+	// The constant stays because it still has to be named: a stored hash of it,
+	// left behind by an older install, is treated as "no password yet" so the
+	// upgrade forces a rotation too.
 	defaultInitialPassword = "123456"
 )
 
@@ -323,54 +327,62 @@ func (h *DashboardHandler) HandleProxyTest(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// changeDashboardPassword verifies currentPassword against the stored hash (or
-// accepts an empty value on first-time set, plus the well-known "123456" the
-// way Next's PATCH /api/settings does) and stores a bcrypt hash of the new
-// one.
+// changeDashboardPassword verifies currentPassword against the stored hash and
+// stores a bcrypt hash of the new one.
+//
+// There is no acceptable "initial" value here any more: without a stored hash
+// the dashboard has no password at all until startup writes one, so a caller
+// with no hash has nothing to rotate from. Rotating away from the generated
+// password also clears the marker, which is what lets the next login through.
 func (h *DashboardHandler) changeDashboardPassword(currentPassword, newPassword string) error {
 	raw, err := h.Repo.GetSettingsRaw()
 	if err != nil || raw == nil {
 		raw = map[string]any{}
 	}
 	hash, _ := raw["password"].(string)
-	if hash != "" {
-		if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(currentPassword)); err != nil {
-			return errors.New("Invalid current password")
-		}
-	} else {
-		initial := config.LoadConfig().InitialPassword
-		if initial == "" {
-			initial = defaultInitialPassword
-		}
-		if currentPassword != "" && currentPassword != initial && currentPassword != defaultInitialPassword {
-			return errors.New("Invalid current password")
-		}
+	if hash == "" {
+		return errors.New("No password is set; restart the gateway to configure one")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(currentPassword)); err != nil &&
+		!isGeneratedPassword(currentPassword, raw) {
+		return errors.New("Invalid current password")
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	return h.Repo.UpdateSettingsRaw(map[string]any{"password": string(hashed)})
+	return h.Repo.UpdateSettingsRaw(map[string]any{
+		"password":           string(hashed),
+		passwordGeneratedKey: false,
+	})
 }
 
-// verifyDashboardPassword mirrors Next's verifyDashboardPassword: a stored
-// bcrypt hash wins, otherwise INITIAL_PASSWORD wins, otherwise the well-known
-// "123456" default (upstream DEFAULT_PASSWORD) is accepted.
+// verifyDashboardPassword checks password against the stored bcrypt hash.
+//
+// A hash of the well-known upstream default counts as unset, so an install that
+// upgraded still has to pick a real password on its next login. The password
+// generated at first start is accepted — the login handler is what forces it to
+// be replaced before a session is issued.
 func (h *DashboardHandler) verifyDashboardPassword(password string) bool {
 	if password == "" {
 		return false
 	}
-	if raw, err := h.Repo.GetSettingsRaw(); err == nil {
-		if hash, _ := raw["password"].(string); hash != "" {
-			return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
-		}
+	raw, err := h.Repo.GetSettingsRaw()
+	if err != nil {
+		return false
 	}
-	initial := config.LoadConfig().InitialPassword
-	if initial == "" {
-		initial = defaultInitialPassword
+	hash, _ := raw["password"].(string)
+	if hash == "" || isKnownDefaultHash(hash) {
+		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(initial), []byte(password)) == 1
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil || isGeneratedPassword(password, raw)
+}
+
+// isKnownDefaultHash reports whether hash is a bcrypt hash of the well-known
+// default password an older install may still carry.
+func isKnownDefaultHash(hash string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(defaultInitialPassword)) == nil
 }
 
 // trustedRequest reports whether the caller is a local CLI client, which the

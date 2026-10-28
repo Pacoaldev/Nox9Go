@@ -36,7 +36,7 @@ func TestModelListDoesNotPoisonTheStaticCatalogCaps(t *testing.T) {
 	readWindow := func(call string) int {
 		t.Helper()
 		res := env.Get(t, "/api/models/caps?provider=opencode-zen",
-			WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+			WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("%s: /api/models/caps status = %d: %s", call, res.Status, truncate(res.Body))
 		}

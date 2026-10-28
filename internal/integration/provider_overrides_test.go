@@ -100,20 +100,20 @@ func TestProviderHeaderOverrideCannotStealCredentials(t *testing.T) {
 
 	saved := env.Put(t, "/api/providers/deepseek/overrides",
 		map[string]any{"headers": map[string]string{"X-Tenant": "acme"}},
-		WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+		WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 	if saved.Status != http.StatusOK {
 		t.Fatalf("seed PUT status = %d: %s", saved.Status, truncate(saved.Body))
 	}
 
 	stolen := env.Put(t, "/api/providers/deepseek/overrides",
 		map[string]any{"headers": map[string]string{"Authorization": "Bearer someone-else"}},
-		WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+		WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 	if stolen.Status != http.StatusBadRequest {
 		t.Fatalf("Authorization override status = %d, want 400", stolen.Status)
 	}
 
 	read := env.Get(t, "/api/providers/deepseek/overrides",
-		WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+		WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 	if read.Status != http.StatusOK {
 		t.Fatalf("GET status = %d", read.Status)
 	}

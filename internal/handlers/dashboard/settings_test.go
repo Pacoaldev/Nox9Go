@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"archive/zip"
 	"bytes"
 	json "encoding/json/v2"
@@ -65,12 +66,18 @@ func TestHandleUpdateSettings_PasswordChange(t *testing.T) {
 		t.Fatalf("expected 200 for settings update, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	// First-time password set: no current password required.
-	req = httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(`{"newPassword":"s3cret-pass","currentPassword":""}`))
+	// Startup writes the first password; rotating it needs the current one.
+	// There is no "set with an empty current password" path any more, because
+	// that path is what made a known default password acceptable.
+	initial, err := EnsureInitialPassword(repo)
+	if err != nil {
+		t.Fatalf("prepare initial password: %v", err)
+	}
+	req = httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(fmt.Sprintf(`{"newPassword":"s3cret-pass","currentPassword":%q}`, initial)))
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for first password set, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 200 for password rotation, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	raw, err := repo.GetSettingsRaw()

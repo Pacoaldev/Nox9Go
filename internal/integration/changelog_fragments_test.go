@@ -29,7 +29,7 @@ func TestChangelogIsReachableFromTheDashboard(t *testing.T) {
 		t.Fatalf("sign session token: %v", err)
 	}
 
-	res := env.Get(t, "/api/changelog", WithoutAPIKey(), WithHeader("Cookie", auth.CookieName+"="+session))
+	res := env.Get(t, "/api/changelog", WithoutAPIKey(), WithHeader("Cookie", auth.CookieName+"="+session), env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/changelog with a dashboard session = %d, want 200 (body: %s)",
 			res.Status, head(string(res.Body)))
@@ -60,7 +60,7 @@ func TestChangelogShowsPendingFragments(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(fragment) })
 
-	res := env.Get(t, "/api/changelog")
+	res := env.Get(t, "/api/changelog", env.AsSession())
 	if res.Status != 200 {
 		t.Fatalf("GET /api/changelog = %d, want 200", res.Status)
 	}

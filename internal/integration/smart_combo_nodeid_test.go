@@ -52,7 +52,7 @@ func TestSmartRulesMatchCustomModelsKeyedByNodeID(t *testing.T) {
 	for _, tc := range cases {
 		res := env.Post(t, "/api/combos/combo-ds/smart/preview", map[string]any{
 			"matchRules": []any{map[string]any{"pattern": tc.pattern, "mode": tc.mode}},
-		})
+		}, env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("%s %s: POST preview = %d, want 200 (body: %s)",
 				tc.mode, tc.pattern, res.Status, truncate(res.Body))
@@ -92,7 +92,7 @@ func TestSmartRulesMatchCustomModelsKeyedByNodeID(t *testing.T) {
 		"name":       "ds-save",
 		"models":     []string{},
 		"matchRules": []any{map[string]any{"pattern": "deepseek*", "mode": "glob"}},
-	})
+	}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("create combo with rules = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -138,7 +138,7 @@ func TestSmartRulesKeepNodeIDSpelledMember(t *testing.T) {
 		t.Fatalf("store rules: %v", err)
 	}
 
-	res := env.Post(t, "/api/combos/reconcile", nil)
+	res := env.Post(t, "/api/combos/reconcile", nil, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("POST reconcile = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}

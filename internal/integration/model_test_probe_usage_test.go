@@ -13,7 +13,7 @@ import (
 func TestModelTestProbeRecordsNoUsage(t *testing.T) {
 	env, up := newProviderEnv(t)
 
-	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"})
+	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"}, env.AsSession())
 	if res.Status != 200 {
 		t.Fatalf("probe status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -45,7 +45,7 @@ func TestModelTestProbeRecordsNoUsage(t *testing.T) {
 
 	// The overview is what renders the topology map, and it is keyed off
 	// byProvider — the reason the phantom node appeared.
-	stats := env.Get(t, "/api/usage/stats?range=24h")
+	stats := env.Get(t, "/api/usage/stats?range=24h", env.AsSession())
 	var payload struct {
 		ByProvider map[string]struct {
 			Requests int `json:"requests"`

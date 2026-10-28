@@ -89,5 +89,5 @@ Personal NOX9GO fork (`Pacoaldev/Nox9Go`). Nothing from upstream release history
 
 ### Version
 
-- Personal fork version pinned to **1.0.0** (`VERSION`, `version.json`, binary `-ldflags`).
-- Tracked-upstream baselines are embedded at build time (`upstreamwatch.BaselineUpstreamVersion` / `BaselineForkVersion`). Bump them at each port; unset means the alert stays silent.
+- The version lives in one place: the `VERSION` file. `make build` stamps it into the binary with `-ldflags`, and `scripts/gen-version-manifest.mjs` writes the matching `version.json` (per-platform download URLs and `sha256`). Nothing else hard-codes a version number.
+- The update alert watches **this project's own releases** only. It compares the compiled `CurrentVersion` against `version.json` on `main`, falling back to GitHub Releases, and offers to install. *Replaces the tracked-upstream notice, which watched the repositories this fork ports from and answered a maintainer's question rather than a user's.*

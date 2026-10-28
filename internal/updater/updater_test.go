@@ -111,11 +111,16 @@ func TestGetCachedInfo(t *testing.T) {
 
 func TestCheckUpdate_Manifest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The manifest publishes one asset per platform. A bare downloadUrl is
+		// not consulted at all any more: it described a Windows executable and
+		// was handed to every OS that had no entry of its own.
 		manifest := map[string]any{
 			"latestVersion": "2.0.0",
-			"downloadUrl":   "https://example.com/downloads/nox9go",
-			"releaseNotes":  "Major release 2.0.0",
-			"sha256":        "abcdef123456",
+			"downloadUrls": map[string]string{
+				platformKey(runtime.GOOS, runtime.GOARCH): "https://example.com/downloads/nox9go-" + platformKey(runtime.GOOS, runtime.GOARCH),
+			},
+			"releaseNotes": "Major release 2.0.0",
+			"sha256":       "abcdef123456",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.MarshalWrite(w, manifest)
@@ -136,8 +141,8 @@ func TestCheckUpdate_Manifest(t *testing.T) {
 	if info.LatestVersion != "2.0.0" {
 		t.Errorf("expected latestVersion 2.0.0, got %s", info.LatestVersion)
 	}
-	if info.DownloadURL != "https://example.com/downloads/nox9go" {
-		t.Errorf("expected downloadUrl, got %s", info.DownloadURL)
+	if want := "https://example.com/downloads/nox9go-" + platformKey(runtime.GOOS, runtime.GOARCH); info.DownloadURL != want {
+		t.Errorf("downloadUrl = %q, want %q", info.DownloadURL, want)
 	}
 }
 
@@ -263,6 +268,18 @@ func TestMatchReleaseAsset(t *testing.T) {
 	if url := matchReleaseAsset(assets, "windows", "amd64"); url != "url-windows-amd64" {
 		t.Errorf("expected url-windows-amd64, got %s", url)
 	}
+	// A platform the release does not carry is not offered anything. The old
+	// fallback returned "the first asset that is not a checksum", which handed a
+	// Linux host the Windows executable under a matching digest.
+	if url := matchReleaseAsset(assets, "freebsd", "amd64"); url != "" {
+		t.Errorf("unmatched platform = %q, want no asset", url)
+	}
+	if url := matchReleaseAsset(nil, "linux", "amd64"); url != "" {
+		t.Errorf("empty release = %q, want no asset", url)
+	}
+	if url := matchReleaseAsset(assets, "linux", "amd64"); url != "url-linux-amd64" {
+		t.Errorf("expected url-windows-amd64, got %s", url)
+	}
 }
 
 func TestAutoUpdate_StatusAndToggle(t *testing.T) {
@@ -283,6 +300,34 @@ func TestAutoUpdate_StatusAndToggle(t *testing.T) {
 	if IsAutoUpdateEnabled() {
 		t.Errorf("expected autoUpdate to be false")
 	}
+}
+
+// hostExecutableBytes is a tiny program-image header for the test host: an "MZ"
+// stub on Windows, an ELF image elsewhere. PerformSelfUpdate refuses anything
+// that is not a runnable image for this OS, so a test payload has to look like
+// one before the bytes that follow it.
+func hostExecutableBytes() []byte {
+	if runtime.GOOS == "windows" {
+		// debug/pe walks the DOS stub, the file header and the whole optional
+		// header, so the stub is padded past all of them.
+		img := make([]byte, 0x200)
+		copy(img, []byte("MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00\xb8\x00\x00\x00\x00\x00\x00\x00\x40\x00\x00\x00\x00\x00\x00\x00"))
+		const peOff = 0x80
+		copy(img[0x3c:], []byte{0x80, 0, 0, 0})
+		// Offsets are relative to the file header (peOff), not to the signature.
+		copy(img[peOff:], []byte{0x50, 0x45, 0, 0})          // "PE\0\0"
+		copy(img[peOff+4:], []byte{0x64, 0x86, 0x00, 0x00})  // IMAGE_FILE_MACHINE_AMD64
+		copy(img[peOff+20:], []byte{0xf0, 0x00})             // SizeOfOptionalHeader
+		copy(img[peOff+24:], []byte{0x0b, 0x02})             // PE32+ magic
+		copy(img[peOff+24+108:], []byte{0x10, 0x00, 0x00, 0x00}) // 16 data directories
+		return img
+	}
+	return []byte("\x7fELF\x02\x01\x01\x00")
+}
+
+// updatePayload is the binary content a release server in these tests serves.
+func updatePayload() []byte {
+	return append(hostExecutableBytes(), bytes.Repeat([]byte("NEW_BINARY_PAYLOAD"), 200)...)
 }
 
 // platformBinaryAsset is the release asset name for the platform the tests run
@@ -567,7 +612,7 @@ func TestRunCheckCycle_SkipsPrereleaseForFinalInstall(t *testing.T) {
 		restoreEnv("AUTO_UPDATE", previousAuto, hadAuto)
 	})
 
-	payload := bytes.Repeat([]byte("NEW_BINARY_PAYLOAD"), 200)
+	payload := updatePayload()
 	digest := ComputeSHA256(payload)
 	assetName := platformBinaryAsset()
 	var release, base string
@@ -658,7 +703,7 @@ func TestRunCheckCycle_SkipsPrereleaseForFinalInstall(t *testing.T) {
 // being a lead rather than an answer when it describes an update it cannot
 // verify.
 func TestCheckUpdate_ManifestWithoutDigestFallsThroughToReleaseDigest(t *testing.T) {
-	payload := bytes.Repeat([]byte("NEW_BINARY_PAYLOAD"), 200)
+	payload := updatePayload()
 	digest := ComputeSHA256(payload)
 	assetName := platformBinaryAsset()
 

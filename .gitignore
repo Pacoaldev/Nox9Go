@@ -17,8 +17,17 @@ _site/
 /tmp/*.log
 
 # Data directory
+# The resolved DATA_DIR (default per platform) holds router.db with every
+# provider token in it, plus the WAL and shared-memory sidecars.
 .9router/
+.nox9go/
 data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 
 # Local demo gateway: its SQLite data dir, engine key and captured streams. The
 # key alone is enough to talk to the running gateway as a client, so none of it
@@ -29,7 +38,11 @@ data/
 docker-compose.local.yml
 
 # Environment
+# Every variant, not just the plain file: a ".env.local" or ".env.production"
+# holds the same secrets and "git add -A" would stage it without asking.
 .env
+.env.*
+!.env.example
 
 # Editor / OS
 .idea/
@@ -75,5 +88,8 @@ stitch-screenshots/
 /docs/providers_free.md
 /docs/.providers_baseline.tsv
 /docs/proximo.md
+/docs/auditoriaUnificada.md
+# Per-machine tooling: a prompt-filter list that belongs to whoever installed it.
+/.rtk/
 /.atl/
 /SHA256SUMS.txt

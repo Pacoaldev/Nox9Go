@@ -27,7 +27,7 @@ func TestSystemPromptSettingsAndOrdering(t *testing.T) {
 		t.Fatalf("marshal settings: %v", err)
 	}
 
-	putRes := env.Put(t, "/api/settings", string(settingsBody))
+	putRes := env.Put(t, "/api/settings", string(settingsBody), env.AsSession())
 	if putRes.Status != 200 {
 		t.Fatalf("PUT /api/settings = %d, want 200 (body: %s)", putRes.Status, putRes.Body)
 	}

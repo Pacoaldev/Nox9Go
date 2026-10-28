@@ -64,8 +64,15 @@ func accountRefused(err error) bool { return errors.Is(err, errMiniMaxCodeRefuse
 // parser consumes.
 func fetchMiniMaxCodeUsage(ctx context.Context, provider, accessToken, userID string) usageResult {
 	site, ok := miniMaxCodeSites[provider]
-	if !ok || strings.TrimSpace(accessToken) == "" {
-		return usageResult{message: fmt.Sprintf("Usage API not implemented for %s", provider)}
+	if !ok {
+		// A provider that is not in this table has no quota endpoint here. That
+		// is a gap in coverage, not an error the operator caused, so it is
+		// reported as the neutral "unknown" state the tracker already renders
+		// instead of an "not implemented" failure next to a working account.
+		return usageResult{quotaStatus: "unknown"}
+	}
+	if strings.TrimSpace(accessToken) == "" {
+		return usageResult{message: fmt.Sprintf("No credential stored for %s", provider)}
 	}
 
 	var who miniMaxCodeIdentity

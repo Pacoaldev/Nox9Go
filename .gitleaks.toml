@@ -1,0 +1,39 @@
+# gitleaks configuration for NOX9GO.
+#
+# The scanner reports every string in the tree and in the whole history that
+# looks like a credential. A public repository has to be able to explain each
+# hit, so the allowlist below covers the known non-secrets and nothing else.
+# Every entry names a file and a reason: an entry without a reason turns the
+# gate off by degrees.
+
+title = "NOX9GO"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures, public client ids and build metadata"
+paths = [
+  # Integration and unit tests seed throwaway keys by design ("sk-test",
+  # "sk-other-secret-value", fake bearer tokens). A real key in a test would be
+  # a bug, not an allowlisted case.
+  '''(^|/)testdata/''',
+  '''_test\.go$''',
+  '''\.test\.ts$''',
+  '''(^|/)web/e2e/''',
+  # Lockfiles and vendored browser bundles carry the dependencies' own strings.
+  '''(^|/)web/bun\.lock$''',
+  '''(^|/)go\.sum$''',
+  '''(^|/)node_modules/''',
+  # docs/proximo.md was a personal Windows runbook, removed in 52f6c2b. Its
+  # only credential-shaped values were the dashboard's well-known default
+  # password and local paths; neither is a secret, and rewriting the history to
+  # remove a documented default password buys nothing.
+  '''^docs/proximo\.md$''',
+]
+
+regexes = [
+  # The ten integration-suite commit hashes that trufflehog flags as hex
+  # secrets. They are object ids, not credentials.
+  '''[0-9a-f]{40}''',
+]

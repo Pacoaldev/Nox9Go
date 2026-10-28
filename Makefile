@@ -42,7 +42,7 @@ AUTO_UPDATE ?= false
 # single-quoted form passed a quoted symbol name straight to the linker.
 LDFLAGS := -s -w -X "nox9go/proxy/internal/updater.CurrentVersion=$(VERSION)"
 
-.PHONY: build run dev version update test test-short test-live test-integration vet vet-integration bench bench-go cross mitm-enable mitm-disable mitm-status clean help web-build web-dev
+.PHONY: build run dev version update test test-short test-live test-integration vet vet-integration cross mitm-enable mitm-disable mitm-status clean help web-build web-dev
 
 ## web-build — build frontend static assets (Svelte/Vite) into web/dist
 #
@@ -172,14 +172,6 @@ vet-integration: web-build
 vet:
 	go vet ./...
 
-## bench — run bash comparison benchmark
-bench: build
-	bash benchmark/run_comparison.sh
-
-## bench-go — run native Go high-throughput benchmark
-bench-go:
-	go run ./benchmark/runner.go
-
 ## cross — cross-compile Linux/macOS/Windows release binaries
 #
 # `GOOS=linux GOARCH=amd64 go build` is a POSIX env-assignment prefix, and
@@ -190,8 +182,15 @@ bench-go:
 CROSS_TARGETS := linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64
 
 ifneq ($(filter cross-one,$(MAKECMDGOALS)),)
+# CGO_ENABLED=0 is what makes the output a static, dependency-free binary: a
+# cgo-capable host would otherwise link the target against its own libc and the
+# Linux and macOS artifacts would stop being portable. The README promises it,
+# so it is pinned here rather than assumed from the caller's environment.
 export GOOS := $(CROSS_OS)
 export GOARCH := $(CROSS_ARCH)
+# A static binary is the point of the release build; a host with cgo enabled
+# would otherwise link the target against its own libc.
+export CGO_ENABLED := 0
 endif
 
 CROSS_BIN := nox9go

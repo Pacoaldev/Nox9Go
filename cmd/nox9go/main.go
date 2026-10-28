@@ -152,7 +152,7 @@ func main() {
 			{
 				Name:   "status",
 				Usage:  "Show whether the background gateway is running",
-				Action: statusDetached,
+				Flags: []cli.Flag{&cli.BoolFlag{Name: "json", Usage: "print running state, pid and dashboard URL as JSON instead of prose"},},Action: statusDetached,
 			},
 			{
 				Name:  "logs",

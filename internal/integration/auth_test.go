@@ -212,9 +212,11 @@ func TestDashboardAuthGate(t *testing.T) {
 			wantCode: http.StatusUnauthorized,
 		},
 		{
-			name:     "client api key is accepted for cli compatibility",
+			// A client key is a consumer credential: it is pasted into
+			// third-party apps and CI, so it must not administer the gateway.
+			name:     "client api key is refused on admin routes",
 			opts:     nil,
-			wantCode: http.StatusOK,
+			wantCode: http.StatusUnauthorized,
 		},
 		{
 			name:     "dashboard session cookie is accepted",

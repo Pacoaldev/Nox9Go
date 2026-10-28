@@ -1,6 +1,11 @@
 {
   "latestVersion": "1.0.2",
   "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.2/nox9go-windows-amd64.exe",
-  "sha256": "7b2f8d5dc85f725f19252ffe1a9d87d994db05c32b4e58a45642036964ea49fb",
+  "downloadUrls": {
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.2/nox9go-windows-amd64.exe"
+  },
+  "sha256": {
+    "windows_amd64": "7b2f8d5dc85f725f19252ffe1a9d87d994db05c32b4e58a45642036964ea49fb"
+  },
   "releaseNotes": "NOX9GO 1.0.2 — provider probes that tell a network block from a bad key, OpenCode in the CLI tools screen, and a change log that shows this project's own notes."
 }

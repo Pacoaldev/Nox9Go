@@ -1,0 +1,197 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.27"
+  # Must match the bun that wrote web/bun.lock (lockfileVersion 2). A different
+  # major rewrites the lockfile and --frozen-lockfile then fails.
+  BUN_VERSION: "1.4.4"
+
+jobs:
+  # The frontend is embedded in the Go binary at compile time, so everything
+  # else depends on a real bundle existing. Built once here and shared.
+  web:
+    name: Frontend (build, check, lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # --frozen-lockfile: the lockfile is the source of truth. A mismatched
+      # package.json fails here instead of silently resolving a different tree.
+      - name: Install dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      # The ratchet is the gate, not a bare svelte-check: the tree carries a
+      # pinned number of pre-existing type errors, and the script fails on a
+      # new unresolved identifier or when that count grows.
+      - name: svelte-check ratchet
+        working-directory: web
+        run: bun run ratchet:svelte
+
+      - name: Lint
+        working-directory: web
+        run: bun run lint
+
+      - name: Build SPA
+        working-directory: web
+        run: bun run build
+
+      - name: Upload built SPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+
+  backend:
+    name: Backend (vet, test, build)
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # web/dist is gitignored (`//go:embed dist/*` needs it), so a clean clone
+      # cannot compile until the artifact from the Ffrontend job is in place.
+      - name: Restore built SPA
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      # A clean build proves the binary really is self-contained: no build tag
+      # or generated file that only exists in a developer's tree.
+      - name: Build from clean tree
+        run: CGO_ENABLED=0 go build -trimpath -o /tmp/nox9go ./cmd/nox9go/
+
+  race:
+    name: Race detector
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Restore built SPA
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: go test -race
+        run: go test -race ./...
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: a secret removed from HEAD is still leaked
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  vulnerabilities:
+    name: Vulnerability scan
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Restore built SPA
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  release-assets:
+    name: Update manifest matches the tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # version.json is what the updater trusts. If VERSION and the manifest
+      # disagree, or a platform lost its URL or digest, an install would be
+      # offered the wrong binary — the exact failure this job guards.
+      - name: Validate version.json
+        run: bun scripts/gen-version-manifest.mjs --check
+
+  e2e:
+    name: End-to-end
+    needs: [web, backend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Restore built SPA
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Install web dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run e2e
+        working-directory: web
+        run: bun run e2e

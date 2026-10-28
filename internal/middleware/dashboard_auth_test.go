@@ -34,11 +34,19 @@ func TestRequireDashboardAuth(t *testing.T) {
 		t.Errorf("expected 401 without credentials, got %d", rec.Code)
 	}
 
-	// Seeded valid API key bypasses the gate (CLI / built-in dashboard key).
+	// A valid, active API key must NOT administer the gateway. It is a client
+	// credential: it is pasted into third-party apps and shipped in CI jobs, so
+	// admitting it to /api/connections (and to every other admin route behind
+	// this gate) turned a leaked consumer key into control of the panel.
 	apiKeyReq := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
 	apiKeyReq.Header.Set("Authorization", "Bearer valid-token")
-	if rec := serve(apiKeyReq); rec.Code != http.StatusOK {
-		t.Errorf("expected valid API key to pass, got %d", rec.Code)
+	if rec := serve(apiKeyReq); rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected client API key to be rejected on admin routes, got %d", rec.Code)
+	}
+	xKeyReq := httptest.NewRequest(http.MethodGet, "/api/connections", nil)
+	xKeyReq.Header.Set("X-API-Key", "valid-token")
+	if rec := serve(xKeyReq); rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected X-API-Key to be rejected on admin routes, got %d", rec.Code)
 	}
 
 	// The derived CLI token bypasses the gate; an arbitrary value must not.

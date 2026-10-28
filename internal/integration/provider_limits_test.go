@@ -191,7 +191,7 @@ func TestProviderNodeLimitsAreEditableThroughTheRouter(t *testing.T) {
 	seedNaraNode(t, env, upstream, db.ProviderLimits{})
 
 	put := env.Put(t, "/api/provider-nodes/node-nara/limits",
-		map[string]any{"rpm": 42, "tokenQuota": 1000, "contractExpiresAt": "2027-01-31"})
+		map[string]any{"rpm": 42, "tokenQuota": 1000, "contractExpiresAt": "2027-01-31"}, env.AsSession())
 	if put.Status != http.StatusOK {
 		t.Fatalf("PUT limits = %d, want 200 (body: %s)", put.Status, truncate(put.Body))
 	}
@@ -212,7 +212,7 @@ func TestProviderNodeLimitsAreEditableThroughTheRouter(t *testing.T) {
 	}
 
 	// The listing the dashboard renders from must show the same row.
-	res := env.Get(t, "/api/provider-nodes")
+	res := env.Get(t, "/api/provider-nodes", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/provider-nodes = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -240,7 +240,7 @@ func TestProviderNodeLimitsAreEditableThroughTheRouter(t *testing.T) {
 		t.Fatalf("node-nara is absent from GET /api/provider-nodes: %s", truncate(res.Body))
 	}
 
-	reset := env.Post(t, "/api/provider-nodes/node-nara/quota/reset", nil)
+	reset := env.Post(t, "/api/provider-nodes/node-nara/quota/reset", nil, env.AsSession())
 	if reset.Status != http.StatusOK {
 		t.Fatalf("POST quota reset = %d, want 200 (body: %s)", reset.Status, truncate(reset.Body))
 	}
@@ -273,7 +273,7 @@ func TestProviderNodeLimits_ClearedToZero(t *testing.T) {
 			"tpm":         0,
 			"concurrency": 0,
 			"tokenQuota":  0,
-		})
+		}, env.AsSession())
 	if put.Status != http.StatusOK {
 		t.Fatalf("PUT /limits (zero patch) = %d, want 200 (body: %s)", put.Status, truncate(put.Body))
 	}
@@ -293,7 +293,7 @@ func TestProviderNodeLimits_ClearedToZero(t *testing.T) {
 // waits on it cannot disagree with the refusal it then expects.
 func nodeUsage(t *testing.T, env *Env, nodeID string) int {
 	t.Helper()
-	res := env.Get(t, "/api/provider-nodes")
+	res := env.Get(t, "/api/provider-nodes", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/provider-nodes = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}

@@ -18,7 +18,7 @@ import (
 func newAccountEnv(t *testing.T) *Env {
 	t.Helper()
 	env := newEnv(t)
-	res := env.Delete(t, "/api/translator/console-logs", WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+	res := env.Delete(t, "/api/translator/console-logs", WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("console-logs clear status = %d", res.Status)
 	}
@@ -112,7 +112,7 @@ func consoleLines(t *testing.T, env *Env) []string {
 
 func consoleEntries(t *testing.T, env *Env) []consoleEntry {
 	t.Helper()
-	res := env.Get(t, "/api/translator/console-logs", WithHeader(auth.CLITokenHeader, auth.CLIToken()))
+	res := env.Get(t, "/api/translator/console-logs", WithHeader(auth.CLITokenHeader, auth.CLIToken()), env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("console-logs status = %d", res.Status)
 	}

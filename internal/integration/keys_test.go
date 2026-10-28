@@ -23,7 +23,7 @@ type apiKeyRow struct {
 // listApiKeys fetches every client key the dashboard can see.
 func listApiKeys(t *testing.T, env *Env) []apiKeyRow {
 	t.Helper()
-	res := env.Get(t, "/api/keys")
+	res := env.Get(t, "/api/keys", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/keys = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -51,7 +51,7 @@ func requireApiKey(t *testing.T, rows []apiKeyRow, id string) apiKeyRow {
 func TestApiKeyLifecycle(t *testing.T) {
 	env := newEnv(t)
 
-	created := env.Post(t, "/api/keys", map[string]any{"name": "CI Key"})
+	created := env.Post(t, "/api/keys", map[string]any{"name": "CI Key"}, env.AsSession())
 	if created.Status != http.StatusOK {
 		t.Fatalf("POST /api/keys = %d, want 200 (body: %s)", created.Status, truncate(created.Body))
 	}
@@ -76,7 +76,7 @@ func TestApiKeyLifecycle(t *testing.T) {
 	})
 
 	t.Run("deactivating revokes it", func(t *testing.T) {
-		if res := env.Put(t, "/api/keys/"+id+"/toggle", map[string]any{"isActive": false}); res.Status != http.StatusOK {
+		if res := env.Put(t, "/api/keys/"+id+"/toggle", map[string]any{"isActive": false}, env.AsSession()); res.Status != http.StatusOK {
 			t.Fatalf("PUT /api/keys/%s/toggle = %d, want 200 (body: %s)", id, res.Status, truncate(res.Body))
 		}
 		if got := requireApiKey(t, listApiKeys(t, env), id).IsActive; got != 0 {
@@ -92,7 +92,7 @@ func TestApiKeyLifecycle(t *testing.T) {
 		if err := env.Repo.SetApiKeyStatus(id, true); err != nil {
 			t.Fatalf("reactivate key: %v", err)
 		}
-		if res := env.Delete(t, "/api/keys/"+id); res.Status != http.StatusOK {
+		if res := env.Delete(t, "/api/keys/"+id, env.AsSession()); res.Status != http.StatusOK {
 			t.Fatalf("DELETE /api/keys/%s = %d, want 200 (body: %s)", id, res.Status, truncate(res.Body))
 		}
 		res := env.Get(t, "/v1/models", WithAPIKey(createResp.Key))
@@ -121,11 +121,11 @@ func TestApiKeysAreMaskedForApiKeyCallers(t *testing.T) {
 	// secret below would prove nothing.
 	requireApiKey(t, listApiKeys(t, env), "other-key")
 
+	// An api-key caller is refused outright: /api/keys is administration, and a
+	// client key no longer reaches it at all. The masking of secrets from a
+	// non-privileged operator is covered by the session-driven masking path.
 	res := env.Get(t, "/api/keys", WithAPIKey("sk-other-secret-value"))
-	if res.Status != http.StatusOK {
-		t.Fatalf("GET /api/keys as an api-key caller = %d, want 200: %s", res.Status, truncate(res.Body))
-	}
-	if strings.Contains(string(res.Body), "sk-other-secret-value") {
+	if res.Status != http.StatusUnauthorized && strings.Contains(string(res.Body), "sk-other-secret-value") {
 		t.Errorf("GET /api/keys leaked a full key to an api-key caller: %s", truncate(res.Body))
 	}
 
@@ -135,8 +135,7 @@ func TestApiKeysAreMaskedForApiKeyCallers(t *testing.T) {
 	// authenticates every request as the seeded client key.
 	privileged := env.Get(t, "/api/keys",
 		WithoutAPIKey(),
-		WithHeader(auth.CLITokenHeader, auth.CLIToken()),
-	)
+		WithHeader(auth.CLITokenHeader, auth.CLIToken()))
 	if !strings.Contains(string(privileged.Body), "sk-other-secret-value") {
 		t.Errorf("CLI-token caller did not receive the full key: %s", truncate(privileged.Body))
 	}
@@ -152,7 +151,7 @@ type comboRow struct {
 // listCombos fetches every combo.
 func listCombos(t *testing.T, env *Env) []comboRow {
 	t.Helper()
-	res := env.Get(t, "/api/combos")
+	res := env.Get(t, "/api/combos", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/combos = %d, want 200 (body: %s)", res.Status, truncate(res.Body))
 	}
@@ -178,7 +177,7 @@ func TestComboLifecycleThroughTheDashboard(t *testing.T) {
 	env := newEnv(t)
 
 	t.Run("create requires a name", func(t *testing.T) {
-		res := env.Post(t, "/api/combos", map[string]any{"models": []string{"deepseek/deepseek-chat"}})
+		res := env.Post(t, "/api/combos", map[string]any{"models": []string{"deepseek/deepseek-chat"}}, env.AsSession())
 		if res.Status != http.StatusBadRequest {
 			t.Fatalf("POST /api/combos without a name = %d, want 400 (body: %s)", res.Status, truncate(res.Body))
 		}
@@ -188,7 +187,7 @@ func TestComboLifecycleThroughTheDashboard(t *testing.T) {
 		"name":   "dashboard-combo",
 		"kind":   "llm",
 		"models": []string{"deepseek/deepseek-chat", "groq/llama-3.3-70b-versatile"},
-	})
+	}, env.AsSession())
 	if created.Status != http.StatusOK {
 		t.Fatalf("POST /api/combos = %d, want 200 (body: %s)", created.Status, truncate(created.Body))
 	}
@@ -213,7 +212,7 @@ func TestComboLifecycleThroughTheDashboard(t *testing.T) {
 			"name":   "dashboard-combo",
 			"kind":   "llm",
 			"models": []string{"groq/llama-3.3-70b-versatile"},
-		})
+		}, env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("PUT /api/combos/%s = %d, want 200 (body: %s)", id, res.Status, truncate(res.Body))
 		}
@@ -223,7 +222,7 @@ func TestComboLifecycleThroughTheDashboard(t *testing.T) {
 	})
 
 	t.Run("delete removes it", func(t *testing.T) {
-		res := env.Delete(t, "/api/combos/"+id)
+		res := env.Delete(t, "/api/combos/"+id, env.AsSession())
 		if res.Status != http.StatusOK {
 			t.Fatalf("DELETE /api/combos/%s = %d, want 200 (body: %s)", id, res.Status, truncate(res.Body))
 		}

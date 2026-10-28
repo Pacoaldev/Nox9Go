@@ -8,11 +8,16 @@ import (
 )
 
 // RequireDashboardAuth gates the dashboard REST API behind the login session
-// when requireLogin is on. It mirrors upstream dashboardGuard: a request is let
-// through when requireLogin is disabled, when it carries a valid auth_token
-// cookie, when it presents the local CLI token header, or when it authenticates
-// with a valid API key (so CLI tools and the built-in dashboard key keep
-// working). Anything else gets a flat { error: "Unauthorized" } 401.
+// when requireLogin is on. A request is let through when requireLogin is
+// disabled, when it carries a valid auth_token cookie, or when it presents the
+// local CLI token header. Anything else gets a flat { error: "Unauthorized" } 401.
+//
+// It diverges from upstream dashboardGuard on one point on purpose: a client
+// API key does not administer the gateway. Upstream admits one "so CLI tools
+// keep working", but those keys are handed to third-party apps and CI jobs, and
+// admitting them put connection, API-key, settings, combo, proxy and vault
+// management behind a credential that is meant to travel. See the comment at the
+// bottom of the gate.
 // IsAlwaysProtectedPath reports whether the path requires full admin session or CLI token,
 // mirroring upstream ALWAYS_PROTECTED in src/dashboardGuard.js.
 // Standard client API keys and requireLogin=false are forbidden here.
@@ -191,13 +196,15 @@ func RequireDashboardAuth(repo *db.Repo) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if key := ExtractApiKey(r); key != "" {
-				if obj, err := repo.GetApiKeyByKey(key); err == nil && obj != nil && obj.IsActive == 1 {
-					next.ServeHTTP(w, r)
-					return
-				}
-			}
-			handlerutil.WriteJSONError(w, http.StatusUnauthorized, "Unauthorized: dashboard session required")
+			// A client API key is deliberately NOT an admin credential here.
+			// It used to be, for "CLI and built-in dashboard key" compatibility,
+			// which meant every engine key pasted into Cursor, Claude Code or a
+			// CI job also managed the gateway: create and delete connections and
+			// keys, rewrite settings, edit combos and proxies, rotate the vault.
+			// Those keys are made to leave this machine, so a leak turned a
+			// consumer credential into full control of the panel. Administration
+			// is now the session cookie or the local CLI token, and nothing else.
+			handlerutil.WriteJSONError(w, http.StatusUnauthorized, "Unauthorized: dashboard session or CLI token required")
 		})
 	}
 }

@@ -82,18 +82,26 @@ var (
 	insecureClients   = make(map[string]*http.Client)
 )
 
-// strictTLSRequested reports whether the operator opted out of the insecure
-// TLS fallback with STRICT_SSL=true or =1, matching upstream's opt-out. Read
-// per request rather than cached at init: upstream reads process.env on every
-// call, and a test that flips the flag must not need a new process.
-func strictTLSRequested() bool {
-	v := strings.TrimSpace(os.Getenv("STRICT_SSL"))
+// insecureTLSOptIn reports whether the operator explicitly asked for the
+// insecure TLS retry with ALLOW_INSECURE_TLS=true or =1.
+//
+// The retry replays a request whose certificate could not be verified, and
+// those requests carry the operator's provider tokens, API keys and the
+// conversation itself — so it is wide open to the attacker it is meant to
+// tolerate. It therefore starts off and has to be switched on by name, rather
+// than being on until someone remembers to set a flag that disables it.
+//
+// Read per request rather than cached at init, so a flipped variable takes
+// effect without a new process (and a test needs no new one either).
+func insecureTLSOptIn() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("ALLOW_INSECURE_TLS")))
 	return v == "true" || v == "1"
 }
 
 // InsecureClientFor returns the cached client that reaches proxyURL with
 // certificate verification disabled, or "" for a direct one. Callers check
-// strictTLSRequested first, exactly as upstream checks STRICT_SSL before
+// insecureTLSOptIn first: the unsafe client is built only when the operator
+// asked for it by name.
 // building its insecure dispatcher.
 func InsecureClientFor(proxyURL string) *http.Client {
 	insecureClientsMu.RLock()
@@ -294,7 +302,8 @@ func ForbidsDirectReplay(client *http.Client) bool {
 // instead of publishing the operator's egress IP (decolua/9router#4333). A
 // certificate verification failure gets its own single replay with verification
 // disabled, for the corporate proxies and antivirus middleboxes that re-sign
-// TLS, unless STRICT_SSL forbids it.
+// TLS, but only when ALLOW_INSECURE_TLS is set — by default the certificate
+// failure stands.
 func DoRequest(ctx context.Context, client *http.Client, method, url string, headers map[string]string, body []byte) (*http.Response, error) {
 	return retryTransientUpstream(ctx, func() (*http.Response, error) {
 		return doRequestOnce(ctx, client, method, url, headers, body)
@@ -311,11 +320,15 @@ func doRequestOnce(ctx context.Context, client *http.Client, method, url string,
 	resp, err := send(client, req)
 
 	switch {
-	case isCertificateFailure(err):
-		if strictTLSRequested() {
-			break
-		}
-		log.Warn("proxy", "TLS verification failed, retrying without certificate verification", "url", url, "error", err)
+		case isCertificateFailure(err):
+			// Default: the certificate failure is the answer. Only an operator who
+			// set ALLOW_INSECURE_TLS gets the replay, and it is announced loudly
+			// because it turns a man-in-the-middle into a silent success.
+			if !insecureTLSOptIn() {
+				log.Error("proxy", "TLS verification failed; set ALLOW_INSECURE_TLS=true only if a trusted corporate proxy re-signs TLS, otherwise install its root CA", "url", url, "error", err)
+				return nil, fmt.Errorf("upstream TLS verification failed: %w", err)
+			}
+			log.Warn("proxy", "TLS verification failed, retrying WITHOUT certificate verification (ALLOW_INSECURE_TLS is set)", "url", url, "error", err)
 		if resp, err = replayInsecureTLS(ctx, proxyURLFor(client), method, url, headers, body); err != nil {
 			return nil, fmt.Errorf("upstream request after insecure TLS retry: %w", err)
 		}

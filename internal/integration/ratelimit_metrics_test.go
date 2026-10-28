@@ -13,7 +13,7 @@ import (
 // limitKey mints a client key and returns its id and plaintext.
 func limitKey(t *testing.T, env *Env, name string) (id, plaintext string) {
 	t.Helper()
-	res := env.Post(t, "/api/keys", map[string]any{"key": "sk-" + name, "name": name})
+	res := env.Post(t, "/api/keys", map[string]any{"key": "sk-" + name, "name": name}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("create key: status %d: %s", res.Status, truncate(res.Body))
 	}
@@ -33,7 +33,7 @@ func limitKey(t *testing.T, env *Env, name string) (id, plaintext string) {
 func TestRateLimiterRejectsThroughRouter(t *testing.T) {
 	env, upstream := newProviderEnv(t)
 	id, plaintext := limitKey(t, env, "limited")
-	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 2}); put.Status != http.StatusOK {
+	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 2}, env.AsSession()); put.Status != http.StatusOK {
 		t.Fatalf("set rate limit: status %d: %s", put.Status, truncate(put.Body))
 	}
 
@@ -65,7 +65,7 @@ func TestRateLimiterRejectsThroughRouter(t *testing.T) {
 func TestRateLimitRejectionCarriesRetryHeaders(t *testing.T) {
 	env, _ := newProviderEnv(t)
 	id, plaintext := limitKey(t, env, "headers")
-	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 1}); put.Status != http.StatusOK {
+	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 1}, env.AsSession()); put.Status != http.StatusOK {
 		t.Fatalf("set rate limit: status %d", put.Status)
 	}
 
@@ -122,7 +122,7 @@ func TestKeyLimitOverridesGlobalDefault(t *testing.T) {
 		t.Fatalf("set defaults: %v", err)
 	}
 	id, plaintext := limitKey(t, env, "override")
-	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 5}); put.Status != http.StatusOK {
+	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 5}, env.AsSession()); put.Status != http.StatusOK {
 		t.Fatalf("set key limit: status %d", put.Status)
 	}
 
@@ -171,7 +171,7 @@ func TestMetricsCountsServedRequests(t *testing.T) {
 		t.Fatalf("chat: status %d", res.Status)
 	}
 
-	res := env.Get(t, "/api/metrics")
+	res := env.Get(t, "/api/metrics", env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("GET /api/metrics = %d, want 200", res.Status)
 	}
@@ -190,14 +190,14 @@ func TestMetricsCountsServedRequests(t *testing.T) {
 func TestMetricsCountsRateLimitRejections(t *testing.T) {
 	env, _ := newProviderEnv(t)
 	id, plaintext := limitKey(t, env, "metric-limited")
-	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 1}); put.Status != http.StatusOK {
+	if put := env.Put(t, "/api/keys/"+id, map[string]any{"rateLimitRpm": 1}, env.AsSession()); put.Status != http.StatusOK {
 		t.Fatalf("set rate limit: status %d", put.Status)
 	}
 
 	env.Post(t, "/v1/chat/completions", ChatBody("deepseek/deepseek-chat", false), WithAPIKey(plaintext))
 	env.Post(t, "/v1/chat/completions", ChatBody("deepseek/deepseek-chat", false), WithAPIKey(plaintext))
 
-	res := env.Get(t, "/api/metrics")
+	res := env.Get(t, "/api/metrics", env.AsSession())
 	body := string(res.Body)
 	if !strings.Contains(body, "router_rate_limit_rejects_total") {
 		t.Fatalf("metrics do not expose router_rate_limit_rejects_total: %s", truncate(res.Body))
@@ -225,7 +225,7 @@ func TestMetricsCountsGuardrailDecisions(t *testing.T) {
 		t.Fatalf("address survived the policy: %s", truncate(res.Body))
 	}
 
-	metrics := env.Get(t, "/api/metrics")
+	metrics := env.Get(t, "/api/metrics", env.AsSession())
 	body := string(metrics.Body)
 	if !strings.Contains(body, "router_guardrail_decisions_total") {
 		t.Fatalf("metrics do not expose router_guardrail_decisions_total: %s", truncate(metrics.Body))

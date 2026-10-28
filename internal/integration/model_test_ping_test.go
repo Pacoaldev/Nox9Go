@@ -32,7 +32,7 @@ func TestModelTestSystemoneProbeSkipsTheChatLane(t *testing.T) {
 	res := env.Post(t, "/api/models/test", map[string]string{
 		"model": "ocz/jev-1.13",
 		"kind":  "systemone",
-	})
+	}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -68,7 +68,7 @@ func TestModelTestSystemoneProbeReportsUpstreamChatFailure(t *testing.T) {
 	res := env.Post(t, "/api/models/test", map[string]string{
 		"model": "ocz/jev-1.13",
 		"kind":  "systemone",
-	})
+	}, env.AsSession())
 
 	var verdict struct {
 		OK     bool   `json:"ok"`
@@ -93,7 +93,7 @@ func TestModelTestSystemoneProbeReportsUpstreamChatFailure(t *testing.T) {
 func TestModelTestDefaultsToTheChatLane(t *testing.T) {
 	env, up := newProviderEnv(t)
 
-	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"})
+	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -125,7 +125,7 @@ func TestModelTestRejectsAnUnknownKind(t *testing.T) {
 	res := env.Post(t, "/api/models/test", map[string]string{
 		"model": "ocz/jev-1.13",
 		"kind":  "imageToText",
-	})
+	}, env.AsSession())
 	if res.Status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", res.Status, truncate(res.Body))
 	}
@@ -143,7 +143,7 @@ func TestModelTestReachesUpstreamEvenWhenConnectionIsPreCooled(t *testing.T) {
 		t.Fatalf("pre-cooling connection: %v", err)
 	}
 
-	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"})
+	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -168,7 +168,7 @@ func TestModelTestFailingProbeDoesNotMutateCooldownState(t *testing.T) {
 	up := env.NewUpstream(t, JSONResponder(http.StatusTooManyRequests, `{"error":{"message":"Rate limit exceeded"}}`))
 	env.AddConnection(t, "conn-fail", "deepseek", "DeepSeek Test", up, "sk-test")
 
-	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"})
+	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -208,7 +208,7 @@ func TestModelTestPassingProbeDoesNotEraseProductionCooldownState(t *testing.T) 
 		t.Fatalf("lock connection: %v", err)
 	}
 
-	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"})
+	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}
@@ -242,7 +242,7 @@ func TestModelTest410DoesNotRecordDeprecationOr24HourLock(t *testing.T) {
 	up := env.NewUpstream(t, JSONResponder(http.StatusGone, `{"error":{"type":"ModelDeprecated","message":"model retired"}}`))
 	env.AddConnection(t, "conn-410", "deepseek", "DeepSeek 410", up, "sk-410")
 
-	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"})
+	res := env.Post(t, "/api/models/test", map[string]string{"model": "ds/deepseek-chat"}, env.AsSession())
 	if res.Status != http.StatusOK {
 		t.Fatalf("status = %d, body %s", res.Status, truncate(res.Body))
 	}

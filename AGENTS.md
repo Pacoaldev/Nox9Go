@@ -2,33 +2,29 @@
 
 Personal Go reimplementation of [**decolua/9router**](https://github.com/decolua/9router), shipped as a single static binary with an embedded Svelte 5 dashboard.
 
-This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): no CI pipeline, releases are tagged manually. Everything in this document describes how *this* repo is worked on, on *this* machine.
+This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): CI runs on GitHub Actions, releases are tagged manually. Everything in this document describes how *this* repo is worked on, and every step below is meant to work on a clean clone on any supported platform.
 
 ---
 
-## 0. Read this first — the environment you are actually in
+## 0. Read this first — the environment
 
 | Fact | Value |
 | :--- | :--- |
-| Repo path | `C:\Users\spano\Documents\PROYECTOS\NOX9GO` |
 | Remote | `https://github.com/Pacoaldev/Nox9Go.git` (public) |
 | Branches | `main` only. No `dev`, no feature branches, no PR flow. |
-| Tags | `v1.0.0`, `v1.0.1` |
-| OS / shell | Windows + PowerShell 7 (`pwsh`). No bash on PATH by default. |
-| Toolchain | `go 1.27` (scoop shim), `bun` 1.x (`~\.bun\bin\bun.exe`), `git`, GNU Make **3.81** (GnuWin32) |
-| `rtk` | **NOT installed** (only `.rtk/filters.toml` exists). Run plain `git`, never `rtk git`. |
-| `golangci-lint` | Not installed. Use `go run` / `bunx` for the linters in §8. |
-| Upstream clone | **None on this machine.** `decolua/9router` is not cloned here — fetch it from GitHub (§1). The `/Users/luqmannul.hakim/htdocs/9router` path in older docs belongs to a different machine. |
-| Data dir | Resolves to `%APPDATA%\9router` on this box (a legacy DB already lives there, and it wins over `~/.nox9go`). See `internal/config` → `ResolveDataDir`. |
-| Dashboard | <http://localhost:20130/dashboard> — initial password `123456` |
-| Version | `VERSION` = `1.0.2`, `version.json` `latestVersion` = `1.0.2` |
-| Engram project key | `9router-go` |
-| Skill registry | `.atl/skill-registry.md` (regenerate: `gentle-ai skill-registry refresh --force`) |
-| Local operator guide | `docs/proximo.md` — the Windows day-to-day guide; keep it in sync with reality |
+| Supported platforms | Windows amd64, Linux amd64/arm64, macOS amd64/arm64 (`make cross`) |
+| Toolchain | `go 1.27`, `bun` 1.4.x, `git`, GNU Make 3.82+ (CI pins a version that has `$(file …)`) |
+| `golangci-lint` | Optional. The lint gate in CI is `go vet` plus `oxlint` on the frontend. |
+| Upstream clone | None needed. `decolua/9router` is read over the network (§1). |
+| Data dir | Per platform: `%APPDATA%\nox9go` on Windows, `~/.nox9go` elsewhere. Override with `DATA_DIR`. See `internal/config` → `ResolveDataDir`. |
+| Dashboard | `http://localhost:<PORT>/dashboard` (20130 by default; the startup notice prints the real port) — the first start generates the dashboard password and prints it; the first login with it forces a new one. |
+| bun version | `web/bun.lock` is `lockfileVersion: 2`, written by bun 1.4.4. `bun install --frozen-lockfile` with an older or newer major rejects the file and rewrites it, so pin 1.4.x; CI sets `BUN_VERSION` to match. |
+| Version | `VERSION` is the single source of truth. `version.json` is generated from it (see `scripts/gen-version-manifest.mjs`). |
+| CI | `.github/workflows/ci.yml` — build, vet, tests, race detector, frontend check, secret scan. |
 
-### 0.1 How the operator works (read this before you touch anything)
+### 0.1 How the project is worked on (read this before you touch anything)
 
-- **Spanish replies, English artifacts.** Talk to the operator in Spanish (Rioplatense). Code, identifiers, comments, commit messages, docs and UI copy stay in English unless the operator asks for Spanish artifacts.
+- **Language.** Code, identifiers, comments, commit messages, docs and UI copy are in English. The README is in Spanish because that is the product's audience.
 - **Minimal change by default.** Smallest change that fixes the real problem. No speculative abstractions, no "while we are here" refactors, no option menus where one path works. Over-thinking has been pushed back on before — a 15-minute detour is a defect, not diligence.
 - **Reuse before you add.** Shared state (token cache, model list, connection row, quota counter) goes through the existing helper, never a second implementation with a different shape.
 - **One question at a time, then stop.** Ask only when there is a real product decision to make; then wait for the answer instead of choosing.
@@ -44,15 +40,14 @@ This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): no CI pipeline, relea
 - **A running `nox9go.exe` cannot be overwritten** on Windows. The order is always: stop → build → start.
 - **`nox9go.exe` with no arguments opens an interactive menu**; it does not start the gateway. Use `nox9go start`.
 - **The dashboard API requires auth.** The CLI token travels in the `x-9r-cli-token` header (`sha256(machine-id + "9r-cli-auth" + cli-secret).hex[:16]`, files in the data dir). Without it: `401`. An unknown route: `404`. That pair is the cheap way to prove the wiring is alive.
-- **There is no `.github/` in this repo.** No CI job will catch anything. Every gate in §8 runs locally, on the operator's machine, by hand.
-- **The Makefile's `bench` / `bench-go` targets point at a `benchmark/` folder this fork does not have.** They are dead targets inherited from upstream.
-- **`make` is GNU Make 3.81.** The Makefile's `$(file <VERSION)` needs 3.82+, and `make` shells out to cmd.exe, where POSIX env prefixes (`PORT=20130 ./nox9go`) and `cat` do not exist. Prefer the direct `go build` / `bun` commands in §7 and §8. `make web-build` and `make help` are safe.
+- **CI lives in `.github/workflows/ci.yml`.** It builds the frontend from the lockfile, runs `svelte-check`, `go vet`, `go test ./...`, the race detector, the secret scanner and the release-asset check. The same gates run locally in §8, so a green local run is the same work CI does.
+- **`make` must be 3.82 or newer.** The Makefile reads `VERSION` with `$(file <VERSION)`, and under 3.81 that expands to empty and embeds an empty version. Every target below works under `sh` and `cmd.exe`, but this one needs the newer Make.
 
 ---
 
 ## 1. Upstream Source of Truth (fetch, don't look for a clone)
 
-Upstream remains the **behavioral specification**. There is no local clone on this machine, so upstream is read over the network.
+Upstream remains the **behavioral specification**. A local clone is optional; the commands below read it over the network.
 
 - **Upstream repository**: `https://github.com/decolua/9router`
 - **Read a file**: `https://raw.githubusercontent.com/decolua/9router/main/<path>`
@@ -198,7 +193,7 @@ The build ships one binary per target from pure Go source. That guarantee is the
 - **The two conditions are mandatory, and both are cheap. Run them before proposing the dependency, not after:**
   1. **Portability** — every pair in `CROSS_TARGETS` still builds with cgo disabled. Read the list from the `Makefile` so a target added there cannot be forgotten:
      ```powershell
-     # PowerShell (this machine)
+     # PowerShell
      $targets = (Select-String -Path Makefile -Pattern '^CROSS_TARGETS *:=').Line -replace '.*:= *',''
      foreach ($pair in $targets -split '\s+' | Where-Object { $_ }) {
        $os, $arch = $pair -split '-'
@@ -403,7 +398,7 @@ Measured on `main` + the first-paint work, 2026-10-21 (`cd web && bun run build`
 
 - **Report the numbers for a UI change**: `bun run build`, then `du -sh dist` and the largest files. A few percent of drift is noise; a larger jump needs a reason.
 - **A new runtime dependency has to pay for itself.** Icon packs, chart libraries, date/utility bundles and animation frameworks are the usual offenders. State what it buys and what it adds.
-- **Costs that never appear in the bundle still count on this box**: an animation on a list that can hold hundreds of rows, a poll faster than the data changes, an unbounded client-side array, one DOM node per data point, `backdrop-filter` inside a scrolling container, and per-frame JS on a view that stays open.
+- **Costs that never appear in the bundle still count**: an animation on a list that can hold hundreds of rows, a poll faster than the data changes, an unbounded client-side array, one DOM node per data point, `backdrop-filter` inside a scrolling container, and per-frame JS on a view that stays open.
 - **A visual addition that costs measurably more than it gives may be refused, with the measured reason attached** — name the asset or the per-frame cost, and what the user gets for it. "It is only a small card" is not a measurement.
 
 ### G. First-Paint Budget: Origin, Fonts, Compression
@@ -501,7 +496,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1
 # (or the NOX9GO.lnk shortcut on the Desktop)
 ```
 
-`scripts/start-nox9go.ps1` starts the gateway only if `nox9go status` does not report it running, replaces any stale tray, and opens <http://127.0.0.1:20130/dashboard>.
+`scripts/start-nox9go.ps1` reads `nox9go status --json` (not the human prose), starts the gateway only when `running` is false, polls the `dashboard` field of that same JSON for readiness, replaces any stale tray, and opens that URL. The address comes from the CLI, so `PORT`, `.env` and profile flags are honoured.
 
 ### 7.2 Build
 
@@ -517,9 +512,9 @@ go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
 ```
 
 The version string in the binary is `updater.CurrentVersion`. A plain `go build` leaves the source default;
-`VERSION` (currently `1.0.2`) is the value to embed. `make build` does the same thing but relies on `$(file <VERSION)`, which needs GNU Make ≥ 3.82 — this machine has 3.81, so use the explicit command above.
+`VERSION` is the value to embed; `make build` reads it from the file. If your Make predates 3.82, pass it explicitly with `-ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)"`.
 
-The top-bar update alert watches this app's own release channel only: it compares `CurrentVersion` against `version.json` on `main` (falling back to GitHub Releases for `Pacoaldev/Nox9Go`) and offers to install. The tracked-upstream baselines that used to live in `internal/upstreamwatch` were removed on request; there is no upstream-version notice any more.
+The top-bar update alert watches this app's own release channel only: it compares `CurrentVersion` against `version.json` on `main` (falling back to GitHub Releases for `Pacoaldev/Nox9Go`) and offers to install. `version.json` names one asset and one digest per platform; the updater refuses a platform the manifest does not list instead of falling back to another one's binary.
 
 ### 7.3 Verify a change in the live service
 
@@ -557,9 +552,8 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 ### 7.5 Git policy
 
-- **Everything lands on `main`.** There is no `dev` branch, no PR flow, no release pipeline. The operator pulls, works, and pushes directly.
-- **Plain git only** — `rtk` is not installed here.
-- **Never commit unless asked.** `C&P` = commit + push, done autonomously: inspect `git status` / `git diff`, stage only the intended files, Conventional Commit message matching the repo's style, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
+- **Everything lands on `main`.** There is no `dev` branch and no PR flow; changes are committed to `main` directly.
+- **Never commit unless asked.** When asked, inspect `git status` / `git diff`, stage only the intended files, write a Conventional Commit message, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
 - **Tags**: `v1.0.0`, `v1.0.1` and `v1.0.2`. The 80 upstream tags were purged on purpose.
 
 ### 7.6 Syncing a feature from upstream
@@ -623,13 +617,11 @@ if (-not (Test-Path web/dist/index.html)) { New-Item -ItemType Directory -Force 
 
 ## 9. Working Agreement for AI Agents
 
-- **Read before you write.** `AGENTS.md` (this file), then `docs/ARCHITECTURE.md` / `docs/DATABASE.md` when the change touches structure, and `docs/proximo.md` for the local Windows runbook.
+- **Read before you write.** `AGENTS.md` (this file), then `docs/ARCHITECTURE.md` / `docs/DATABASE.md` when the change touches structure. Windows runbook.
 - **Map with the real code.** Use the code graph / `codegraph_explore` before grepping around a structural question.
 - **Delegate the exploration, keep the decision.** A read-only explorer maps the area and returns `path:line` evidence; the parent decides and writes.
 - **One writer per area.** Parallel writers only with disjoint edit surfaces; the parent owns git.
 - **Report with evidence.** Every claim about behavior cites a command that was run and its output.
-- **Skills**: `.atl/skill-registry.md` is the index. Load the matching `SKILL.md` before task-specific work — for this repo that usually means `go-testing`, `experto-golang`, `experto-typescript`, `svelte` conventions, `ponytail` (minimal change), `work-unit-commits` (commit slicing) and `chained-pr`.
-- **Memory (Engram)**: project key `9router-go`. Save decisions, bug-fix root causes, and non-obvious discoveries as they happen — not at the end of the session. Use `mem_search` / `mem_context` before starting work that may have been done before, and a `mem_session_summary` before ending a session.
 - **Leave the tree clean.** No scratch files, no stray `dist` stubs, no leftover build artifacts outside `.gitignore`.
 
 ---

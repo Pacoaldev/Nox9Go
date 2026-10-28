@@ -10,7 +10,6 @@ import (
 	json "encoding/json/v2"
 
 	"nox9go/proxy/internal/auth"
-	"nox9go/proxy/internal/config"
 	"nox9go/proxy/internal/handlerutil"
 )
 
@@ -69,12 +68,12 @@ func (h *DashboardHandler) HandleAuthLogin(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			raw = settingsOrEmpty(h)
-		} else if mustChangeDefaultPassword(r, raw) {
+		} else if mustChangePassword(payload.Password, raw) {
 			noStore(w)
 			handlerutil.WriteJSON(w, http.StatusForbidden, map[string]any{
 				"success": false,
-				"error": "Default password must be changed before remote access. " +
-					"Change it from the local machine (or set INITIAL_PASSWORD).",
+				"error": "This account still uses the password generated at first start. " +
+					"Send a new one along with it to continue.",
 				"mustChangePassword": true,
 			})
 			return
@@ -271,13 +270,18 @@ func loginLabel(raw map[string]any, key, fallback string) string {
 	return fallback
 }
 
-// mustChangeDefaultPassword mirrors upstream's remote fresh-install guard: the
-// well-known default password on a non-local connection forces a rotation
-// before any session cookie is issued.
-func mustChangeDefaultPassword(r *http.Request, raw map[string]any) bool {
-	return !hasStoredPassword(raw) &&
-		config.LoadConfig().InitialPassword == "" &&
-		!nodeRequestIsLocal(r)
+// mustChangePassword reports whether this login has to replace the password
+// before a session is issued.
+//
+// The first password is generated at startup and printed once, so the operator
+// can get in; every login after that is a fresh install that has not chosen a
+// password yet, and the dashboard refuses to hand out a session until it does.
+// A stored hash of the old upstream default ("123456") counts as not chosen, so
+// an upgraded install is forced through the same step. This used to fire only
+// for a non-local caller with no INITIAL_PASSWORD, which left every local
+// install — the default way this gateway runs — on a public password.
+func mustChangePassword(password string, raw map[string]any) bool {
+	return isGeneratedPassword(password, raw)
 }
 
 // strPtr maps an empty identity claim to JSON null (upstream status shape).
