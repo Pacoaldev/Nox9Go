@@ -21,7 +21,7 @@ This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): no CI pipeline, relea
 | Upstream clone | **None on this machine.** `decolua/9router` is not cloned here — fetch it from GitHub (§1). The `/Users/luqmannul.hakim/htdocs/9router` path in older docs belongs to a different machine. |
 | Data dir | Resolves to `%APPDATA%\9router` on this box (a legacy DB already lives there, and it wins over `~/.nox9go`). See `internal/config` → `ResolveDataDir`. |
 | Dashboard | <http://localhost:20130/dashboard> — initial password `123456` |
-| Version | `VERSION` = `1.0.1`, `version.json` `latestVersion` = `1.0.1` |
+| Version | `VERSION` = `1.0.2`, `version.json` `latestVersion` = `1.0.2` |
 | Engram project key | `9router-go` |
 | Skill registry | `.atl/skill-registry.md` (regenerate: `gentle-ai skill-registry refresh --force`) |
 | Local operator guide | `docs/proximo.md` — the Windows day-to-day guide; keep it in sync with reality |
@@ -510,13 +510,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1
 cd web; bun run build; cd ..
 
 # Gateway — version + tracked-upstream baselines are embedded through ldflags
-go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.1 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/
+go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.2 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/
 
 # Tray — -H=windowsgui is mandatory, otherwise a console window flashes
 go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
 ```
 
-The version string in the binary is `updater.CurrentVersion`. A plain `go build` leaves the source default; `VERSION` (currently `1.0.1`) is the value to embed. `make build` does the same thing but relies on `$(file <VERSION)`, which needs GNU Make ≥ 3.82 — this machine has 3.81, so use the explicit command above.
+The version string in the binary is `updater.CurrentVersion`. A plain `go build` leaves the source default;
+`VERSION` (currently `1.0.2`) is the value to embed. `make build` does the same thing but relies on `$(file <VERSION)`, which needs GNU Make ≥ 3.82 — this machine has 3.81, so use the explicit command above.
 
 The two `upstreamwatch.Baseline*` values are the versions of `decolua/9router` and `luqman-v1/9router-go` this build already knows about. The top-bar update alert compares each tracked repository against its own baseline and reports nothing newer than these; leaving them unset disables the alert silently rather than announcing every version ever published. Bump them by hand at each port, from the version the port was read against.
 
@@ -531,7 +532,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 ### 7.4 Changelog & version (personal fork)
 
-- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the current version heading (`## [1.0.1]`). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
+- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the current version   heading (`## [1.0.2]`). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
 - Bump `VERSION` (and `version.json` `latestVersion`) by hand when cutting a new personal version, then rebuild with the ldflags above.
 - `GET /api/changelog` serves that file.
 
@@ -621,7 +622,7 @@ if (-not (Test-Path web/dist/index.html)) { New-Item -ItemType Directory -Force 
 | Run the unit tests | `go test ./...` |
 | Run the integration suite | `go test -tags=integration ./internal/integration/...` |
 | Build the dashboard SPA | `cd web; bun run build` |
-| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.1 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/` |
+| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.2 -X nox9go/proxy/internal/upstreamwatch.BaselineUpstreamVersion=0.5.109 -X nox9go/proxy/internal/upstreamwatch.BaselineForkVersion=1.9.14" -o nox9go.exe ./cmd/nox9go/` |
 | Build the tray | `go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/` |
 | Start everything | `powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1` |
 | Stop everything | `Stop-Process -Name "nox9go","nox9go-tray" -Force -ErrorAction SilentlyContinue` |

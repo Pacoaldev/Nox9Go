@@ -1,5 +1,5 @@
 {
-  "latestVersion": "1.0.1",
+  "latestVersion": "1.0.2",
   "downloadUrl": "",
-  "releaseNotes": "NOX9GO 1.0.1 — first public release."
+  "releaseNotes": "NOX9GO 1.0.2 — provider probes that tell a network block from a bad key, OpenCode in the CLI tools screen, and a change log that shows this project's own notes."
 }
