@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.3] - 2026-10-30
 
 The pre-publication audit (`docs/auditoriaUnificada.md`, 35 items) is closed except for two that need the repository owner to act on GitHub: the repository topics and the deletion of a local branch holding leaked OAuth secrets.
 
