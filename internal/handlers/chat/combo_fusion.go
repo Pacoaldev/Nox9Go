@@ -3,9 +3,9 @@ package chat
 import (
 	"bytes"
 	"context"
-	json "nox9go/proxy/internal/fastjson"
 	"fmt"
 	"net/http"
+	json "nox9go/proxy/internal/fastjson"
 	"strings"
 	"time"
 
@@ -167,7 +167,7 @@ func (h *ChatHandler) makePanelCall(body []byte, entry string) func(context.Cont
 				ProxyPoolID: h.ResolveProviderProxyPoolID(modelInfo.Provider),
 			}
 		} else {
-			conn, cData, err := h.getBestConnection(modelInfo.Provider, modelInfo.ConnectionID, nil, modelInfo.Model)
+			conn, cData, err := h.getBestConnectionWithContext(withComboSelection(ctx), modelInfo.Provider, modelInfo.ConnectionID, nil, modelInfo.Model)
 			if err != nil {
 				return &fusionResult{model: entry, err: err}
 			}

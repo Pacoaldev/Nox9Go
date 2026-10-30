@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { matchMemberRow, parseMember, sameProvider } from './comboMatch'
+  import { matchMemberRow, parseMember, providerFullyLocked, sameProvider } from './comboMatch'
+  import type { ConnectionLockLike } from './comboMatch'
   import type { ActiveRequestItem, RecentRequestItem } from './types'
 
   interface Props {
@@ -9,16 +10,22 @@
     recentRequests?: RecentRequestItem[]
     /** Provider that last failed, straight from the usage stream. */
     errorProvider?: string
+    /**
+     * Live connections so a member can show "locked" only when every active
+     * key of that provider is parked — one of N locked keys still rotates.
+     */
+    connections?: ConnectionLockLike[]
   }
 
   let {
     combos = [],
     activeRequests = [],
     recentRequests = [],
-    errorProvider = ''
+    errorProvider = '',
+    connections = []
   }: Props = $props()
 
-  type Status = 'idle' | 'trying' | 'connected' | 'failed'
+  type Status = 'idle' | 'trying' | 'connected' | 'failed' | 'locked'
 
   interface MemberStep {
     key: string
@@ -84,8 +91,9 @@
 
   /**
    * One row per member, in the combo's own order, each carrying what the usage
-   * stream says about it: in flight now, answered, or refused. A member that was
-   * skipped because an earlier one answered stays "idle".
+   * stream says about it: in flight now, answered, refused, or fully locked.
+   * A member skipped because an earlier one answered stays "idle". "locked"
+   * only when every active key of that provider is parked for this model.
    */
   let steps = $derived.by((): MemberStep[] => {
     const def = definition
@@ -103,6 +111,7 @@
       const latency = Number(finished?.latencyMs || 0)
       const resolved = String(inFlight?.provider || finished?.provider || provider)
       const refused = sameProvider(errorProvider, resolved) || sameProvider(errorProvider, provider)
+      const fullyLocked = providerFullyLocked(connections, provider, model)
 
       let status: Status = 'idle'
       let note = 'not used yet'
@@ -118,6 +127,9 @@
       } else if (finished) {
         status = 'failed'
         note = finishedStatus || 'failed'
+      } else if (fullyLocked) {
+        status = 'locked'
+        note = 'locked'
       }
       return { key: raw, provider, model, status, note, color: colorFor(provider), latency }
     })
@@ -127,11 +139,13 @@
     trying: steps.filter((s) => s.status === 'trying').length,
     connected: steps.filter((s) => s.status === 'connected').length,
     failed: steps.filter((s) => s.status === 'failed').length,
+    locked: steps.filter((s) => s.status === 'locked').length,
     idle: steps.filter((s) => s.status === 'idle').length
   })
 
   // The route colour: red the moment anything refused, green once a member
-  // answered, amber while one is still being tried.
+  // answered, amber while one is still being tried. A fully locked member is
+  // a deliberate skip, not a refusal — it does not paint the route red alone.
   let routeState = $derived(
     counts.failed > 0 ? 'failed' : counts.connected > 0 ? 'connected' : counts.trying > 0 ? 'trying' : 'idle'
   )
@@ -155,6 +169,7 @@
         {#if counts.trying > 0}<span data-kind="trying">{counts.trying} trying</span>{/if}
         {#if counts.connected > 0}<span data-kind="connected">{counts.connected} answered</span>{/if}
         {#if counts.failed > 0}<span data-kind="failed">{counts.failed} failed</span>{/if}
+        {#if counts.locked > 0}<span data-kind="locked">{counts.locked} locked</span>{/if}
         {#if counts.idle > 0}<span data-kind="idle">{counts.idle} remaining</span>{/if}
       </div>
     </header>
@@ -209,6 +224,8 @@
                   <span class="material-symbols-outlined cf-ico">check_circle</span>
                 {:else if step.status === 'failed'}
                   <span class="material-symbols-outlined cf-ico">cancel</span>
+                {:else if step.status === 'locked'}
+                  <span class="material-symbols-outlined cf-ico">lock</span>
                 {:else if step.status === 'trying'}
                   <span class="material-symbols-outlined cf-ico cf-spin">progress_activity</span>
                 {:else}
@@ -222,6 +239,11 @@
               <p class="cf-handoff">
                 <span class="material-symbols-outlined cf-ico">south</span>
                 failed, moving to #{i + 2} {steps[i + 1].provider}
+              </p>
+            {:else if step.status === 'locked' && steps[i + 1]}
+              <p class="cf-handoff">
+                <span class="material-symbols-outlined cf-ico">south</span>
+                locked, moving to #{i + 2} {steps[i + 1].provider}
               </p>
             {:else if step.status === 'connected'}
               <p class="cf-handoff cf-handoff-ok">
@@ -238,6 +260,7 @@
       <span data-kind="trying">trying</span>
       <span data-kind="connected">answered</span>
       <span data-kind="failed">failed → moves to the next one</span>
+      <span data-kind="locked">locked → every key cooling</span>
       <span data-kind="idle">not used yet</span>
     </footer>
   </section>

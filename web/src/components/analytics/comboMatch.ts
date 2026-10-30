@@ -15,6 +15,70 @@ export interface MemberRowLike {
   model?: string
 }
 
+/** Connection fields the combo-flow lock check reads. */
+export interface ConnectionLockLike {
+  provider?: string
+  isActive?: number | boolean
+  rateLimitedUntil?: string | null
+  oauthLockedUntil?: string | null
+  /** Flat data blob keys (modelLock_*, rateLimitedUntil) after normalizeConnection. */
+  [key: string]: unknown
+}
+
+/** True when the stamp is a parseable time still in the future. */
+export function isFutureStamp(value: unknown, nowMs = Date.now()): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false
+  const t = Date.parse(value)
+  return !Number.isNaN(t) && t > nowMs
+}
+
+/**
+ * Whether one connection is parked for this combo member.
+ *
+ * Account parks (rateLimitedUntil / oauthLockedUntil) block every model on
+ * that key. A modelLock_* only blocks the model it names — other models on
+ * the same key stay usable. One locked key must never park a sibling key.
+ */
+export function connectionBlockedForModel(
+  conn: ConnectionLockLike,
+  model: string,
+  nowMs = Date.now()
+): boolean {
+  if (isFutureStamp(conn.rateLimitedUntil, nowMs) || isFutureStamp(conn.oauthLockedUntil, nowMs)) {
+    return true
+  }
+  const tail = modelTail(model)
+  for (const [key, value] of Object.entries(conn)) {
+    if (!key.startsWith('modelLock_') || !isFutureStamp(value, nowMs)) continue
+    const lockedModel = key.slice('modelLock_'.length)
+    if (!tail) return true
+    if (lockedModel === model || modelTail(lockedModel) === tail) return true
+  }
+  return false
+}
+
+/**
+ * True when every active connection of this provider is parked for the model.
+ *
+ * A provider with two API keys (Gemini Key 156 + Key 157) is only "locked" in
+ * the combo flow when both are blocked. Zero connections → not locked (the
+ * member may be misconfigured; that is not a lockdown).
+ */
+export function providerFullyLocked(
+  connections: readonly ConnectionLockLike[],
+  provider: string,
+  model: string,
+  nowMs = Date.now()
+): boolean {
+  const active = connections.filter((c) => {
+    if (!sameProvider(c.provider, provider)) return false
+    const on = c.isActive
+    return on === 1 || on === true || on === undefined
+  })
+  if (active.length === 0) return false
+  return active.every((c) => connectionBlockedForModel(c, model, nowMs))
+}
+
 export interface ParsedMember {
   provider: string
   model: string

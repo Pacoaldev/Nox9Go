@@ -400,7 +400,10 @@ func (h *ChatHandler) getBestConnectionWithContext(ctx context.Context, provider
 			conn = c
 			break
 		}
-		if conn == nil && forceFallbackEnabled(settings) {
+		// forceFallback is for a lone provider with nowhere else to go. A
+		// combo's next member is the failover — forcing a cooling account
+		// through an active rateLimitedUntil is how an operator earns a ban.
+		if conn == nil && forceFallbackEnabled(settings) && !isComboSelection(ctx) {
 			// The operator asked for traffic to keep flowing while every
 			// account is cooling down, so take the account that frees up
 			// first instead of failing the client turn outright

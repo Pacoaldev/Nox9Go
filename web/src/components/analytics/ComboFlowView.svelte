@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api } from '../../api/client'
+  import { api, type ProviderConnection } from '../../api/client'
   import ComboFlowCard from './ComboFlowCard.svelte'
   import { connectUsageStream } from './usageStream'
   import type { ActiveRequestItem, RecentRequestItem } from './types'
@@ -9,6 +9,8 @@
   let activeRequests = $state<ActiveRequestItem[]>([])
   let recentRequests = $state<RecentRequestItem[]>([])
   let errorProvider = $state('')
+  /** Connections carry rateLimitedUntil / modelLock_* so the card can mark a member locked only when every key is parked. */
+  let connections = $state<ProviderConnection[]>([])
 
   $effect(() => {
     let cancelled = false
@@ -44,6 +46,26 @@
       if (payload.errorProvider) errorProvider = payload.errorProvider
     })
   })
+
+  // Lock stamps change without a usage event, so poll connections while this
+  // page is open. 10s keeps the 1 vCPU budget calm and still tracks a 5-min lockdown.
+  $effect(() => {
+    let cancelled = false
+    async function loadConnections() {
+      try {
+        const rows = await api.getConnections()
+        if (!cancelled) connections = Array.isArray(rows) ? rows : []
+      } catch {
+        if (!cancelled) connections = []
+      }
+    }
+    void loadConnections()
+    const timer = setInterval(loadConnections, 10_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  })
 </script>
 
 <div class="flex flex-col gap-4">
@@ -65,6 +87,7 @@
         {activeRequests}
         {recentRequests}
         {errorProvider}
+        {connections}
       />
       {#if !activeRequests.some((r) => r.comboName) && !recentRequests.some((r) => r.comboName)}
         <p class="font-body text-sm text-text-muted">

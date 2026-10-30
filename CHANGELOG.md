@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.4] - 2026-10-30
+
+Combo lockdowns are respected in the failback chain, and the Combo flow UI shows when every key of a member is parked.
+
+### Routing and quota
+
+- **A combo no longer dials a cooling account when `forceFallback` is on.** That toggle exists for a lone provider with nowhere else to go; a combo's next member is the failover. With it enabled, `getBestConnection` was forcing the soonest `rateLimitedUntil` account through the combo loop (Gemini with two locked keys still got hit), which is how an operator earns a ban. Combo (and fusion) selection now refuses force-fallback; `IsProviderAvailable` also treats an account-scoped cooldown as unavailable, while one free key among N still keeps the provider available.
+
+### Dashboard
+
+- **Combo flow shows a member as locked only when every key is parked.** Rate-limit alerts were visible in the bell panel while the combo list stayed on "not used yet", so a fully cooled Gemini/llm7 looked idle. The card now reads connection lock stamps (`rateLimitedUntil`, `modelLock_*`) and paints `locked` when every active connection of that provider is blocked for the member's model — one of N locked keys still rotates and does not mark the row.
+
 ## [1.0.3] - 2026-10-30
 
 The pre-publication audit (`docs/auditoriaUnificada.md`, 35 items) is closed except for two that need the repository owner to act on GitHub: the repository topics and the deletion of a local branch holding leaked OAuth secrets.

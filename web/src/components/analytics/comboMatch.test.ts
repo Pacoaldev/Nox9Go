@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import { matchMemberRow, modelTail, parseMember, sameProvider } from './comboMatch'
+import {
+  connectionBlockedForModel,
+  matchMemberRow,
+  modelTail,
+  parseMember,
+  providerFullyLocked,
+  sameProvider,
+} from './comboMatch'
 
 interface Row {
   provider: string
@@ -87,5 +94,46 @@ describe('matchMemberRow', () => {
 
   it('returns undefined when the stream has no row for the member', () => {
     expect(matchMemberRow([row('lucif', 'lucif')], 'tokenharbor', 'deepseek-v4-flash:free')).toBeUndefined()
+  })
+})
+
+describe('providerFullyLocked', () => {
+  const future = new Date(Date.now() + 60_000).toISOString()
+  const past = new Date(Date.now() - 60_000).toISOString()
+
+  it('is false when only one of two keys is rate-limited', () => {
+    const conns = [
+      { provider: 'gemini', isActive: 1, rateLimitedUntil: future },
+      { provider: 'gemini', isActive: 1, rateLimitedUntil: null },
+    ]
+    expect(providerFullyLocked(conns, 'gemini', 'gemini-1.5-flash')).toBe(false)
+  })
+
+  it('is true when every active key is parked', () => {
+    const conns = [
+      { provider: 'gemini', isActive: 1, rateLimitedUntil: future },
+      { provider: 'gemini', isActive: 1, [`modelLock_gemini-1.5-flash`]: future },
+    ]
+    expect(providerFullyLocked(conns, 'gemini', 'gemini-1.5-flash')).toBe(true)
+  })
+
+  it('ignores a modelLock for a different model on an otherwise free key', () => {
+    const conns = [
+      { provider: 'gemini', isActive: 1, [`modelLock_other-model`]: future },
+      { provider: 'gemini', isActive: 1, rateLimitedUntil: past },
+    ]
+    expect(providerFullyLocked(conns, 'gemini', 'gemini-1.5-flash')).toBe(false)
+  })
+
+  it('is false when the provider has no connections', () => {
+    expect(providerFullyLocked([], 'gemini', 'gemini-1.5-flash')).toBe(false)
+  })
+})
+
+describe('connectionBlockedForModel', () => {
+  const future = new Date(Date.now() + 60_000).toISOString()
+
+  it('treats an account cooldown as blocking every model on that key', () => {
+    expect(connectionBlockedForModel({ rateLimitedUntil: future }, 'any-model')).toBe(true)
   })
 })

@@ -484,6 +484,11 @@ body {
   border-color: rgba(239, 68, 68, 0.45);
   color: #ef4444;
 }
+.cf-counters span[data-kind='locked'] {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+}
 .cf-counters span[data-kind='idle'] {
   background: rgba(100, 116, 139, 0.14);
   border-color: rgba(100, 116, 139, 0.35);
@@ -689,6 +694,10 @@ body {
   border-color: #ef4444;
   color: #ef4444;
 }
+.cf-row[data-status='locked'] .cf-order-disc {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
 .cf-row[data-used='false'] {
   opacity: 0.62;
 }
@@ -711,6 +720,10 @@ body {
 .cf-row[data-status='failed'] .cf-row-card {
   border-color: rgba(239, 68, 68, 0.75);
   background: rgba(239, 68, 68, 0.06);
+}
+.cf-row[data-status='locked'] .cf-row-card {
+  border-color: rgba(245, 158, 11, 0.65);
+  background: rgba(245, 158, 11, 0.07);
 }
 .cf-row-main {
   display: flex;
@@ -794,6 +807,9 @@ body {
 .cf-row[data-status='failed'] .cf-status {
   color: #ef4444;
 }
+.cf-row[data-status='locked'] .cf-status {
+  color: #f59e0b;
+}
 .cf-ico {
   font-size: 0.78rem;
 }
@@ -852,4 +868,7 @@ body {
 }
 .cf-legend span[data-kind='failed']::before {
   background: #ef4444;
+}
+.cf-legend span[data-kind='locked']::before {
+  background: #f59e0b;
 }

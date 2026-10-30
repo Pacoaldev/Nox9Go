@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlerutil"
 	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/providers"
@@ -524,6 +525,7 @@ func upstreamErrorBody(message string) []byte {
 // adapterModels holds the capacity-adapter entries injected for this request;
 // their history is trimmed to their context window before forwarding.
 func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWriter, body []byte, comboModels []string, strategy string, isStream bool, translateResponse bool, comboName string, stickyLimit int, adapterModels ...string) {
+	ctx = withComboSelection(ctx)
 	cw := newCommittedResponseWriter(w)
 	var lastErr *upstreamError
 	var retry passRetry
@@ -629,12 +631,19 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 					connID = picked.ID
 					connData = cData
 				}
-				// Skip a connection that is already locked for this model
+				// Skip a connection that is already locked for this model, or
+				// parked on an account-scoped cooldown the selector should have
+				// refused — belt-and-suspenders so a forced pick cannot dial.
 				if connID != "" {
 					lockKey := canonicalLockModel(modelInfo.Provider, modelInfo.Model)
 					locked, _ := h.Repo.IsConnectionModelLocked(connID, lockKey)
 					if !locked && lockKey != modelInfo.Model {
 						locked, _ = h.Repo.IsConnectionModelLocked(connID, modelInfo.Model)
+					}
+					if !locked && picked != nil {
+						if until, ok := db.ConnectionBlockedUntil(picked.Data); ok && until.After(time.Now()) {
+							locked = true
+						}
 					}
 					if locked {
 						log.Warn("combo", "skip locked connection", "provider", modelInfo.Provider, "model", modelInfo.Model, "lockKey", lockKey, "conn", connID)
@@ -858,6 +867,7 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 // adapterModels holds the capacity-adapter entries injected for this request;
 // their history is trimmed to their context window before forwarding.
 func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.ResponseWriter, translatedReq map[string]any, comboModels []string, strategy string, isStream bool, comboName string, stickyLimit int, adapterModels ...string) {
+	ctx = withComboSelection(ctx)
 	cw := newCommittedResponseWriter(w)
 	var lastErr *upstreamError
 	var retry passRetry
@@ -958,6 +968,11 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 					locked, _ := h.Repo.IsConnectionModelLocked(connID, lockKey)
 					if !locked && lockKey != modelInfo.Model {
 						locked, _ = h.Repo.IsConnectionModelLocked(connID, modelInfo.Model)
+					}
+					if !locked && picked != nil {
+						if until, ok := db.ConnectionBlockedUntil(picked.Data); ok && until.After(time.Now()) {
+							locked = true
+						}
 					}
 					if locked {
 						log.Warn("combo", "skip locked connection", "provider", modelInfo.Provider, "model", modelInfo.Model, "lockKey", lockKey, "conn", connID)
