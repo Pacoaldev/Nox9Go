@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -27,13 +28,21 @@ import (
 // (+ body).
 
 const (
-	miniMaxCodeSignSecret  = "I*7Cf%WZ#S&%1RlZJ&C2"
 	miniMaxCodeSignSalt    = "ooui"
 	miniMaxCodeBrowserName = "mcode"
 	miniMaxCodeVersionCode = "22201"
 	miniMaxCodeBizID       = "3"
 	miniMaxCodeAppID       = "3001"
 )
+
+var miniMaxCodeSignSecret = getMiniMaxCodeSignSecret()
+
+func getMiniMaxCodeSignSecret() string {
+	if v := strings.TrimSpace(os.Getenv("MINIMAX_CODE_SIGN_SECRET")); v != "" {
+		return v
+	}
+	return "I*7Cf%WZ#S&%1RlZJ&C2"
+}
 
 // miniMaxCodeSite is one mcode site's account and platform hosts.
 //
