@@ -18,7 +18,7 @@ Components use Svelte 5 runes such as `$state`, `$derived`, and `$effect`, along
 Run the Go API server and the Vite dev server in **two terminals** — frontend changes hot-reload (HMR) with **no rebuild** and no binary restart:
 
 ```bash
-make dev        # terminal 1: Go API on :20130 (go run, auto-rebuild on Go changes)
+make dev        # terminal 1: Go API on :20130 (go run; restart it to pick up Go changes)
 make web-dev    # terminal 2: Vite dev server + HMR on :5173
 ```
 
@@ -31,10 +31,13 @@ Equivalently, from this directory: `bun install --frozen-lockfile && bun run dev
 ## Scripts
 
 ```bash
-bun run dev       # start Vite with hot module replacement
-bun run build     # type-check, then build the production bundle in dist/
-bun run lint      # run Oxlint
-bun run preview   # serve the production bundle locally
+bun run dev            # start Vite with hot module replacement
+bun run build          # type-check, build the bundle in dist/, precompress it
+bun run lint           # run Oxlint
+bun run preview        # serve the production bundle locally
+bun run check:svelte   # svelte-check over the app tsconfig
+bun run ratchet:svelte # svelte-check against the committed baseline
+bun run e2e            # Playwright suite (bun test e2e/); needs `npx playwright install` once
 ```
 
 `npm run <script>` is also supported for the same package scripts, but the committed `bun.lock` is the project's reproducible dependency source.
@@ -50,11 +53,11 @@ make web-build
 make build
 ```
 
-`make build` runs `web-build` first, but the target skips installation/build when `web/dist/index.html` already exists. Use `FORCE=1 make web-build` after frontend changes so fresh assets are embedded.
+`make web-build` fingerprints the frontend inputs (`web/src`, `package.json`, `bun.lock`, the tsconfigs and `vite.config.ts`) and rebuilds `web/dist` only when that fingerprint changed, so a pulled update is never embedded as the old bundle. `FORCE=1 make web-build` rebuilds regardless.
 
 ## Testing and Caveats
 
-This package currently defines development, build, lint, and preview scripts, but no frontend unit-test, component-test, end-to-end-test, or `svelte-check` script. Validate UI changes by running the Go server and exercising the affected dashboard path in a browser; validation of backend endpoints remains in the Go test suites.
+Frontend checks are `bun run lint`, `bun run check:svelte` and the Playwright suite `bun run e2e`. There are no frontend unit or component tests. Backend behavior is covered by the Go test suites.
 
 The frontend implements the upstream Next.js dashboard through Svelte 5 components. Preserve the public dashboard routes, API request/response contracts, and visible behavior while following Svelte 5 syntax.
 
