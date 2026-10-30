@@ -23,6 +23,13 @@ import { openUsageTrend, startDashboard } from './harness'
 
 const SLOW = 20_000
 
+/** Runs in the page: true when the chart tooltip (role=status with a Tokens row) names the bucket. */
+function tooltipHas(label: string): boolean {
+  return [...document.querySelectorAll('[role="status"]')].some(
+    (el) => (el.textContent ?? '').includes('Tokens') && (el.textContent ?? '').includes(label),
+  )
+}
+
 /** Three days of usage, one model family each, so the chart has a drawn area. */
 const CHART_FIXTURE = [
   { label: 'Oct 19', tokens: 1200, cost: 0.42, byModel: { claude: 1200 } },
@@ -107,12 +114,11 @@ describe('usage chart accessibility', () => {
       // bucket's label. The wait is a poll rather than a read because the
       // focus handler updates Svelte state and the DOM settles on the next
       // microtask.
-      const tooltip = page.getByRole('status')
+      // ServiceStatus renders a role=status too, so the tooltip is the one
+      // that carries the Tokens row.
+      const tooltip = page.locator('[role="status"]', { hasText: 'Tokens' })
       await tooltip.waitFor()
-      await page.waitForFunction(
-        (label) => document.querySelector('[role="status"]')?.textContent?.includes(label) ?? false,
-        CHART_FIXTURE[0].label,
-      )
+      await page.waitForFunction(tooltipHas, CHART_FIXTURE[0].label)
       expect(await tooltip.innerText()).toContain(CHART_FIXTURE[0].label)
 
       // A tooltip reachable only by hovering is unreadable to anyone driving
@@ -126,17 +132,11 @@ describe('usage chart accessibility', () => {
       // again and ArrowRight becomes idempotent after one step — a single
       // press from one start cannot tell that apart from a working walk.
       await firstPoint.press('ArrowRight')
-      await page.waitForFunction(
-        (label) => document.querySelector('[role="status"]')?.textContent?.includes(label) ?? false,
-        CHART_FIXTURE[1].label,
-      )
+      await page.waitForFunction(tooltipHas, CHART_FIXTURE[1].label)
       expect(await tooltip.innerText()).toContain(CHART_FIXTURE[1].label)
 
       await page.keyboard.press('ArrowRight')
-      await page.waitForFunction(
-        (label) => document.querySelector('[role="status"]')?.textContent?.includes(label) ?? false,
-        CHART_FIXTURE[2].label,
-      )
+      await page.waitForFunction(tooltipHas, CHART_FIXTURE[2].label)
       expect(await tooltip.innerText()).toContain(CHART_FIXTURE[2].label)
 
       const focusedLabel = await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '')

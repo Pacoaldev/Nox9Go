@@ -63,10 +63,9 @@ describe('top bar', () => {
         await menu.getByRole('menuitem', { name: label }).waitFor()
       }
 
-      // Language is the one that went the other way (#240): the dashboard ships
-      // English only, and the item's handler was an empty function, so the menu
-      // offered a control that could not do anything.
-      expect(await menu.getByRole('menuitem', { name: 'Language' }).count()).toBe(0)
+      // Language came back with a real handler: one entry per locale (English
+      // and Español), each backed by chooseLocale in TopBar.svelte.
+      expect(await menu.getByRole('menuitem', { name: /^Language: / }).count()).toBe(2)
 
       // Leaving the menu open would stack a second panel over the next test's
       // click target, so the inspection closes what it opened.
