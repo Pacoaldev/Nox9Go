@@ -48,7 +48,7 @@ The pre-publication audit (`docs/auditoriaUnificada.md`, 35 items) is closed exc
 
 ### Dashboard
 
-- **El semáforo de servicios del sidebar ahora son badges de estado.** Los tres puntos verdes (`Gateway`, `DB`, `Túnel`) del sidebar se reemplazan por dos badges tipo chip — `Tunes` (túnel Cloudflare) y `DB` (SQLite) — con el mismo estilo visual que el chip de latencia del `TopBar`. El badge del gateway local ya existe en la barra superior, así que no se duplica. En modo colapsado el sidebar muestra solo los puntitos de color.
+- **El semáforo de servicios del sidebar ahora son badges de estado.** Los tres puntos verdes (`Gateway`, `DB`, `Túnel`) del sidebar se reemplazan por dos badges tipo chip — `Tunnel` (túnel Cloudflare) y `DB` (SQLite) — con el mismo estilo visual que el chip de latencia del `TopBar`. El badge del gateway local ya existe en la barra superior, así que no se duplica. En modo colapsado el sidebar muestra solo los puntitos de color.
 
 ## [1.0.2] - 2026-10-28
 

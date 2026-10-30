@@ -51,7 +51,7 @@
       title="Túnel Cloudflare: {STATE_LABELS[status.tunnel]}"
     >
       <span class="size-1.5 rounded-full {STATE_CLASSES[status.tunnel]}"></span>
-      <span>Tunes</span>
+      <span>Tunnel</span>
     </div>
 
     <!-- Base de datos -->
