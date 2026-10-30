@@ -8,8 +8,8 @@ import "time"
 // every memory access by roughly an order of magnitude, so the assertion would
 // measure instrumentation, not the patcher; x5budget_race_test.go relaxes it.
 //
-// There is deliberately no second wall-clock budget for the scaling test:
-// TestPatchScalesLinearly compares two sizes in one process, and a ratio is the
-// shape of the cost rather than the size of the box, so it needs no ceiling
-// that a busy CI machine could invalidate.
+// TestPatchScalesLinearly still uses a ratio (not a wall-clock ceiling) on
+// plain `go test`. Under -race the ratio itself is warped by instrumentation,
+// so that test skips via patchscale_race_test.go rather than widening the
+// budget until a real quadratic would pass.
 const x5Budget = 200 * time.Millisecond

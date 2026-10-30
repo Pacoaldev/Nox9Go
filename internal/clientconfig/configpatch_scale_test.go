@@ -52,6 +52,9 @@ func buildLarge(format Format, target int) ([]byte, Edit) {
 // linear, and about sixteen when it is quadratic. The threshold sits between
 // them with room for the cache effects the larger sample picks up.
 func TestPatchScalesLinearly(t *testing.T) {
+	if patchScaleUnderRace {
+		t.Skip("ns/op ratios measure the race detector, not the patcher; see patchscale_race_test.go")
+	}
 	const small = 128 << 10
 	const large = 512 << 10
 	const maxRatio = 8.0

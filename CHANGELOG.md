@@ -4,6 +4,10 @@
 
 Combo lockdowns are respected in the failback chain, and the Combo flow UI shows when every key of a member is parked.
 
+### Tests
+
+- **`TestPatchScalesLinearly` skips under the race detector.** The test compares ns/op across a 4× sample to prove the patcher is linear (~4×), not quadratic (~16×). Under `-race` the instrumentation itself warps the ratio (CI saw 8.37× against an 8× budget on YAML with no code change), the same class of flake the TOML pass-count budget already documents. The shape check still runs on plain `go test`; race builds skip it.
+
 ### Routing and quota
 
 - **A combo no longer dials a cooling account when `forceFallback` is on.** That toggle exists for a lone provider with nowhere else to go; a combo's next member is the failover. With it enabled, `getBestConnection` was forcing the soonest `rateLimitedUntil` account through the combo loop (Gemini with two locked keys still got hit), which is how an operator earns a ban. Combo (and fusion) selection now refuses force-fallback; one free key among N still rotates, and a lone provider still surfaces "all in cooldown, earliest reset …".
