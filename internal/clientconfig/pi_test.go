@@ -1,6 +1,7 @@
 package clientconfig
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,6 +111,107 @@ func TestPiApply_PreservesExistingModelsAndOverrides(t *testing.T) {
 	}
 	if !strings.Contains(got, "// user catalogue") {
 		t.Fatalf("comment was destroyed:\n%s", got)
+	}
+}
+
+func TestPiApply_AppendsMissingModelToPopulatedCatalogue(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".pi", "agent")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	modelsFile := filepath.Join(dir, "models.json")
+	seed := "{\n" +
+		"  \"$schema\": \"https://pi.dev/schemas/models.schema.json\",\n" +
+		"  \"providers\": {\n" +
+		"    \"" + ProviderKey + "\": {\n" +
+		"      \"baseUrl\": \"http://localhost:20130/v1\",\n" +
+		"      \"api\": \"openai-completions\",\n" +
+		"      \"models\": [\n" +
+		"        { \"id\": \"MinionsPRO\", \"name\": \"MinionsPRO\", \"contextWindow\": 200000, \"maxTokens\": 32000 },\n" +
+		"        { \"id\": \"gh/gpt-4o\", \"name\": \"gh/gpt-4o\", \"contextWindow\": 128000, \"maxTokens\": 16384 }\n" +
+		"      ]\n" +
+		"    }\n" +
+		"  }\n" +
+		"}\n"
+	if err := os.WriteFile(modelsFile, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, res := applyPiToFixture(t, home, "MinionsELITE")
+	if !res.Changed {
+		t.Fatal("adding missing model must report Changed")
+	}
+
+	got := readFile(t, modelsFile)
+	if !strings.Contains(got, `"MinionsELITE"`) {
+		t.Fatalf("MinionsELITE not added to catalogue:\n%s", got)
+	}
+	if !strings.Contains(got, `"MinionsPRO"`) {
+		t.Fatalf("MinionsPRO was destroyed:\n%s", got)
+	}
+	if !strings.Contains(got, `"gh/gpt-4o"`) {
+		t.Fatalf("gh/gpt-4o was destroyed:\n%s", got)
+	}
+
+	// Idempotent: second apply must not change anything
+	_, res2 := applyPiToFixture(t, home, "MinionsELITE")
+	if res2.Changed {
+		t.Fatal("second identical apply must report Changed: false")
+	}
+}
+
+func TestPiApply_AppendsModelToEveryArrayShape(t *testing.T) {
+	cases := []struct {
+		name  string
+		array string
+		want  []string
+	}{
+		{name: "empty array", array: "[]", want: []string{"MinionsELITE"}},
+		{name: "single line", array: `[{"id": "m1", "name": "m1"}]`, want: []string{"m1", "MinionsELITE"}},
+		{name: "trailing comma", array: "[\n        { \"id\": \"m1\", \"name\": \"m1\" },\n      ]", want: []string{"m1", "MinionsELITE"}},
+		{name: "multi line", array: "[\n        { \"id\": \"m1\", \"name\": \"m1\" }\n      ]", want: []string{"m1", "MinionsELITE"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			dir := filepath.Join(home, ".pi", "agent")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			modelsFile := filepath.Join(dir, "models.json")
+			seed := "{\n  \"providers\": {\n    \"" + ProviderKey + "\": {\n" +
+				"      \"models\": " + tc.array + "\n    }\n  }\n}\n"
+			if err := os.WriteFile(modelsFile, []byte(seed), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			applyPiToFixture(t, home, "MinionsELITE")
+
+			got := readFile(t, modelsFile)
+			if !strings.Contains(got, "MinionsELITE") {
+				t.Fatalf("MinionsELITE not added:\n%s", got)
+			}
+			var parsed struct {
+				Providers map[string]struct {
+					Models []struct {
+						ID string `json:"id"`
+					} `json:"models"`
+				} `json:"providers"`
+			}
+			if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+				t.Fatalf("patched file is not valid JSON: %v\n%s", err, got)
+			}
+			ids := parsed.Providers[ProviderKey].Models
+			if len(ids) != len(tc.want) {
+				t.Fatalf("catalogue = %+v, want %v", ids, tc.want)
+			}
+			for i, want := range tc.want {
+				if ids[i].ID != want {
+					t.Fatalf("catalogue[%d] = %q, want %q", i, ids[i].ID, want)
+				}
+			}
+		})
 	}
 }
 

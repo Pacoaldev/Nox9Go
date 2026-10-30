@@ -70,12 +70,18 @@ func (a piAdapter) applyEdits(file TargetFile, opts Options) []Edit {
 	}
 	state := piInspectModels(file, a.key, model)
 	if model != "" {
-		if !state.hasModelsKey || (state.elemCount <= 1 && !state.hasTargetModel) {
+		if !state.hasModelsKey {
 			entry := `[{"id": ` + jsonString(model) + `, "name": ` + jsonString(model) +
 				`, "reasoning": true, "contextWindow": 200000, "maxTokens": 64000}]`
 			edits = append(edits, Edit{
 				KeyPath:         []string{"providers", a.key, "models"},
 				ValueJSON:       entry,
+				CreateIfMissing: true,
+			})
+		} else if !state.hasTargetModel && state.newArrayJSON != "" {
+			edits = append(edits, Edit{
+				KeyPath:         []string{"providers", a.key, "models"},
+				ValueJSON:       state.newArrayJSON,
 				CreateIfMissing: true,
 			})
 		}
@@ -93,6 +99,38 @@ type piModelsState struct {
 	hasModelsKey   bool
 	elemCount      int
 	hasTargetModel bool
+	newArrayJSON   string
+}
+
+func piAppendModelToArray(b []byte, toks []jsonTok, arrayNode *jsonNode, model string) string {
+	newEntry := `{"id": ` + jsonString(model) + `, "name": ` + jsonString(model) +
+		`, "reasoning": true, "contextWindow": 200000, "maxTokens": 64000}`
+	if len(arrayNode.elems) == 0 {
+		return "[" + newEntry + "]"
+	}
+
+	start := toks[arrayNode.tok].off
+	closeOff := toks[arrayNode.closeTok].off
+	beforeClose := string(b[start:closeOff])
+
+	lastNL := strings.LastIndexByte(beforeClose, '\n')
+	if lastNL < 0 {
+		trimmed := strings.TrimRight(beforeClose, " \t\r\n")
+		needsComma := !strings.HasSuffix(trimmed, ",") && !strings.HasSuffix(trimmed, "[")
+		if needsComma {
+			return trimmed + ", " + newEntry + "]"
+		}
+		return trimmed + newEntry + "]"
+	}
+
+	indent := beforeClose[lastNL+1:]
+	trimmed := strings.TrimRight(beforeClose, " \t\r\n")
+	needsComma := !strings.HasSuffix(trimmed, ",") && !strings.HasSuffix(trimmed, "[")
+	elemIndent := indent + "  "
+	if needsComma {
+		return trimmed + ",\n" + elemIndent + newEntry + "\n" + indent + "]"
+	}
+	return trimmed + "\n" + elemIndent + newEntry + "\n" + indent + "]"
 }
 
 func piInspectModels(file TargetFile, providerKey, targetModel string) piModelsState {
@@ -140,6 +178,9 @@ func piInspectModels(file TargetFile, providerKey, targetModel string) piModelsS
 			out.hasTargetModel = true
 			break
 		}
+	}
+	if !out.hasTargetModel {
+		out.newArrayJSON = piAppendModelToArray(b, p.toks, models.val, targetModel)
 	}
 	return out
 }

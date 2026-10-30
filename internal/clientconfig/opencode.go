@@ -36,7 +36,7 @@ func (a opencodeAdapter) Plan(opts Options) ([]FilePlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []FilePlan{{File: paths.Files[0], Edits: a.applyEdits(opts)}}, nil
+	return []FilePlan{{File: paths.Files[0], Edits: a.applyEdits(paths.Files[0], opts)}}, nil
 }
 
 func (a opencodeAdapter) Apply(opts Options) (Result, error) {
@@ -72,20 +72,52 @@ func (a opencodeAdapter) Reset(opts Options) (Result, error) {
 // opencodeApplyEdits writes the provider block, the default model, and the
 // explorer subagent.
 //
-// The provider object is one edit with ValueJSON rather than several key edits:
-// its shape is fixed (npm package, baseURL, apiKey, one models entry) and
-// writing it whole keeps the file's other providers untouched by construction.
-func (a opencodeAdapter) applyEdits(opts Options) []Edit {
+// When the provider block already exists, scalar fields (npm, baseURL, apiKey)
+// and the requested model are patched individually so any existing model
+// catalogue and per-model metadata (modalities, overrides) are preserved.
+func (a opencodeAdapter) applyEdits(file TargetFile, opts Options) []Edit {
 	// The prefix is stripped here and re-added at each write, so a caller that
 	// passes it already (a user copying a model id out of opencode) does not end
 	// up with "<key>/<key>/…".
 	model := strings.TrimPrefix(opts.Model, a.prefix())
-	provider := `{"npm": "@ai-sdk/openai-compatible", "options": {"baseURL": ` +
-		jsonString(withV1(opts.BaseURL)) + `, "apiKey": ` + jsonString(opts.APIKey) +
-		`}, "models": {` + jsonString(model) + `: {"name": ` + jsonString(model) + `}}}`
-	edits := []Edit{
-		{KeyPath: []string{"provider", a.key}, ValueJSON: provider, CreateIfMissing: true},
+	state := opencodeInspectProvider(file, a.key, model)
+
+	var edits []Edit
+	if !state.hasProvider {
+		modelsJSON := "{}"
+		if model != "" {
+			modelsJSON = `{` + jsonString(model) + `: {"name": ` + jsonString(model) + `}}`
+		}
+		provider := `{"npm": "@ai-sdk/openai-compatible", "options": {"baseURL": ` +
+			jsonString(withV1(opts.BaseURL)) + `, "apiKey": ` + jsonString(opts.APIKey) +
+			`}, "models": ` + modelsJSON + `}`
+		edits = append(edits, Edit{
+			KeyPath:         []string{"provider", a.key},
+			ValueJSON:       provider,
+			CreateIfMissing: true,
+		})
+	} else {
+		edits = append(edits,
+			Edit{KeyPath: []string{"provider", a.key, "npm"}, Value: "@ai-sdk/openai-compatible", CreateIfMissing: true},
+			Edit{KeyPath: []string{"provider", a.key, "options", "baseURL"}, Value: withV1(opts.BaseURL), CreateIfMissing: true},
+		)
+		if opts.APIKey != "" {
+			edits = append(edits, Edit{
+				KeyPath:         []string{"provider", a.key, "options", "apiKey"},
+				Value:           opts.APIKey,
+				CreateIfMissing: true,
+			})
+		}
+		if model != "" && !state.hasTargetModel {
+			modelEntry := `{"name": ` + jsonString(model) + `}`
+			edits = append(edits, Edit{
+				KeyPath:         []string{"provider", a.key, "models", model},
+				ValueJSON:       modelEntry,
+				CreateIfMissing: true,
+			})
+		}
 	}
+
 	if opts.Model != "" {
 		edits = append(edits, Edit{
 			KeyPath:         []string{"model"},
@@ -99,6 +131,45 @@ func (a opencodeAdapter) applyEdits(opts Options) []Edit {
 		)
 	}
 	return edits
+}
+
+type opencodeProviderState struct {
+	hasProvider    bool
+	hasTargetModel bool
+}
+
+func opencodeInspectProvider(file TargetFile, providerKey, targetModel string) opencodeProviderState {
+	g, err := resolveGuard(file.Dir, relFromDir(file.Dir, file.Path))
+	if err != nil {
+		return opencodeProviderState{}
+	}
+	b, err := readThroughGuard(g)
+	if err != nil || len(b) == 0 {
+		return opencodeProviderState{}
+	}
+	_, root, err := parseJSONC(b)
+	if err != nil || root.kind != jLBrace {
+		return opencodeProviderState{}
+	}
+	providerMember := findJSONMember(root, "provider")
+	if providerMember == nil || providerMember.val.kind != jLBrace {
+		return opencodeProviderState{}
+	}
+	prov := findJSONMember(providerMember.val, providerKey)
+	if prov == nil || prov.val.kind != jLBrace {
+		return opencodeProviderState{}
+	}
+	out := opencodeProviderState{hasProvider: true}
+	if targetModel == "" {
+		return out
+	}
+	models := findJSONMember(prov.val, "models")
+	if models != nil && models.val.kind == jLBrace {
+		if findJSONMember(models.val, targetModel) != nil {
+			out.hasTargetModel = true
+		}
+	}
+	return out
 }
 
 // jsonString renders a Go string as a JSON string literal.

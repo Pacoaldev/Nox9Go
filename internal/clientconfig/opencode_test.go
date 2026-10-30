@@ -136,6 +136,93 @@ func TestOpenCodeApply_ExistingJSONCAndProvider(t *testing.T) {
 	}
 }
 
+func TestOpenCodeApply_PreservesExistingCatalogueAndModels(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jsonc := filepath.Join(dir, "opencode.jsonc")
+	seed := "{\n" +
+		"  \"model\": \"" + ProviderKey + "/MinionsPRO\",\n" +
+		"  \"provider\": {\n" +
+		"    \"" + ProviderKey + "\": {\n" +
+		"      \"npm\": \"@ai-sdk/openai-compatible\",\n" +
+		"      \"options\": { \"apiKey\": \"sk-old\", \"baseURL\": \"http://localhost:20130/v1\" },\n" +
+		"      \"models\": {\n" +
+		"        \"MinionsPRO\": { \"name\": \"MinionsPRO\", \"modalities\": { \"input\": [\"text\", \"image\"] } },\n" +
+		"        \"custom-model\": { \"name\": \"Custom Model\" }\n" +
+		"      }\n" +
+		"    }\n" +
+		"  }\n" +
+		"}\n"
+	if err := os.WriteFile(jsonc, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, res := applyToFixture(t, home, "MinionsELITE")
+	if !res.Changed {
+		t.Fatal("applying new model must report Changed: true")
+	}
+
+	got := readFile(t, jsonc)
+	if !strings.Contains(got, "MinionsELITE") {
+		t.Fatalf("MinionsELITE missing from output:\n%s", got)
+	}
+	if !strings.Contains(got, `"MinionsPRO"`) {
+		t.Fatalf("existing MinionsPRO model was destroyed:\n%s", got)
+	}
+	if !strings.Contains(got, `"modalities"`) {
+		t.Fatalf("existing model metadata (modalities) was destroyed:\n%s", got)
+	}
+	if !strings.Contains(got, `"custom-model"`) {
+		t.Fatalf("existing custom-model was destroyed:\n%s", got)
+	}
+	if !strings.Contains(got, "sk-test") {
+		t.Fatalf("apiKey not updated:\n%s", got)
+	}
+
+	// Idempotent: second apply must not change anything
+	_, res2 := applyToFixture(t, home, "MinionsELITE")
+	if res2.Changed {
+		t.Fatal("second identical apply must report Changed: false")
+	}
+}
+
+func TestOpenCodeApply_AddsModelToProviderWithoutModelsMap(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jsonc := filepath.Join(dir, "opencode.jsonc")
+	seed := "{\n" +
+		"  \"provider\": {\n" +
+		"    \"" + ProviderKey + "\": {\n" +
+		"      \"name\": \"" + ProviderKey + "\",\n" +
+		"      \"npm\": \"@ai-sdk/openai-compatible\",\n" +
+		"      \"options\": { \"apiKey\": \"sk-old\", \"baseURL\": \"http://localhost:20130/v1\" }\n" +
+		"    }\n" +
+		"  }\n" +
+		"}\n"
+	if err := os.WriteFile(jsonc, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	applyToFixture(t, home, "MinionsELITE")
+
+	got := readFile(t, jsonc)
+	if !strings.Contains(got, "MinionsELITE") {
+		t.Fatalf("model not added:\n%s", got)
+	}
+	if !strings.Contains(got, `"name": "`+ProviderKey+`"`) {
+		t.Fatalf("existing provider field was destroyed:\n%s", got)
+	}
+	if !strings.Contains(got, "sk-test") {
+		t.Fatalf("apiKey not updated:\n%s", got)
+	}
+}
+
 func TestOpenCodeReset_RemovesOnlyOwnedKeys(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, ".config", "opencode")
