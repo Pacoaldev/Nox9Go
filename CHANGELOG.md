@@ -6,7 +6,7 @@ Combo lockdowns are respected in the failback chain, and the Combo flow UI shows
 
 ### Routing and quota
 
-- **A combo no longer dials a cooling account when `forceFallback` is on.** That toggle exists for a lone provider with nowhere else to go; a combo's next member is the failover. With it enabled, `getBestConnection` was forcing the soonest `rateLimitedUntil` account through the combo loop (Gemini with two locked keys still got hit), which is how an operator earns a ban. Combo (and fusion) selection now refuses force-fallback; `IsProviderAvailable` also treats an account-scoped cooldown as unavailable, while one free key among N still keeps the provider available.
+- **A combo no longer dials a cooling account when `forceFallback` is on.** That toggle exists for a lone provider with nowhere else to go; a combo's next member is the failover. With it enabled, `getBestConnection` was forcing the soonest `rateLimitedUntil` account through the combo loop (Gemini with two locked keys still got hit), which is how an operator earns a ban. Combo (and fusion) selection now refuses force-fallback; one free key among N still rotates, and a lone provider still surfaces "all in cooldown, earliest reset …".
 
 ### Dashboard
 

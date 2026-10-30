@@ -2,7 +2,6 @@ package db
 
 import (
 	"testing"
-	"time"
 )
 
 func setupHealthConnTestDB(t *testing.T) (*Repo, func()) {
@@ -149,37 +148,3 @@ func TestIsProviderAvailable_Repo(t *testing.T) {
 	}
 }
 
-// An account-scoped rateLimitedUntil must park the provider the same way a
-// model lock does. Combo members used to keep dialling through it because
-// IsProviderAvailable only looked at modelLock_*.
-func TestIsProviderAvailable_AccountCooldown(t *testing.T) {
-	repo, cleanup := setupHealthConnTestDB(t)
-	defer cleanup()
-
-	insertTestConn(t, repo)
-	until := time.Now().UTC().Add(30 * time.Minute)
-	if err := repo.LockConnectionRateLimit("conn-1", until, 2, 429, "rate limit exceeded"); err != nil {
-		t.Fatalf("LockConnectionRateLimit: %v", err)
-	}
-
-	if repo.IsProviderAvailable("openai", "gpt-4") {
-		t.Error("expected available=false when every connection carries rateLimitedUntil")
-	}
-}
-
-// One locked key must not park the whole provider: Gemini (and others) carry
-// many API keys, and the free ones must still answer.
-func TestIsProviderAvailable_OneOfTwoCoolingStillAvailable(t *testing.T) {
-	repo, cleanup := setupHealthConnTestDB(t)
-	defer cleanup()
-
-	insertTestConns(t, repo, "conn-1", "conn-2")
-	until := time.Now().UTC().Add(30 * time.Minute)
-	if err := repo.LockConnectionRateLimit("conn-1", until, 2, 429, "rate limit exceeded"); err != nil {
-		t.Fatalf("LockConnectionRateLimit: %v", err)
-	}
-
-	if !repo.IsProviderAvailable("openai", "gpt-4") {
-		t.Error("expected available=true while at least one connection is free")
-	}
-}

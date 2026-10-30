@@ -6,6 +6,7 @@ import {
   parseMember,
   providerFullyLocked,
   sameProvider,
+  type ConnectionLockLike,
 } from './comboMatch'
 
 interface Row {
@@ -110,18 +111,22 @@ describe('providerFullyLocked', () => {
   })
 
   it('is true when every active key is parked', () => {
-    const conns = [
-      { provider: 'gemini', isActive: 1, rateLimitedUntil: future },
-      { provider: 'gemini', isActive: 1, [`modelLock_gemini-1.5-flash`]: future },
-    ]
+    const modelLocked = {
+      provider: 'gemini',
+      isActive: 1,
+      'modelLock_gemini-1.5-flash': future,
+    } as ConnectionLockLike
+    const conns = [{ provider: 'gemini', isActive: 1, rateLimitedUntil: future }, modelLocked]
     expect(providerFullyLocked(conns, 'gemini', 'gemini-1.5-flash')).toBe(true)
   })
 
   it('ignores a modelLock for a different model on an otherwise free key', () => {
-    const conns = [
-      { provider: 'gemini', isActive: 1, [`modelLock_other-model`]: future },
-      { provider: 'gemini', isActive: 1, rateLimitedUntil: past },
-    ]
+    const otherModelLock = {
+      provider: 'gemini',
+      isActive: 1,
+      'modelLock_other-model': future,
+    } as ConnectionLockLike
+    const conns = [otherModelLock, { provider: 'gemini', isActive: 1, rateLimitedUntil: past }]
     expect(providerFullyLocked(conns, 'gemini', 'gemini-1.5-flash')).toBe(false)
   })
 

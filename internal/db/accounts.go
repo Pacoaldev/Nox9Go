@@ -263,10 +263,16 @@ func (r *Repo) GetConnectionBackoffLevel(connID string) int {
 }
 
 // IsProviderAvailable returns true if at least one active connection for the
-// given provider can serve the model right now: no active modelLock_<model>
-// and no account-scoped park (rateLimitedUntil / oauthLockedUntil). This is
-// the connection-based replacement for the old kv-based IsProviderHealthy,
-// matching Next.js's isModelLockActive + filterAvailableAccounts flow.
+// given provider has no active modelLock_<model>. This is the connection-based
+// replacement for the old kv-based IsProviderHealthy, matching Next.js's
+// isModelLockActive + filterAvailableAccounts flow.
+//
+// Account-scoped parks (rateLimitedUntil / oauthLockedUntil) are deliberately
+// not folded in here: the selector reports "all in cooldown, earliest reset …"
+// when every key is cooling, and callers that only check this helper would
+// collapse that into a bare "unhealthy". Combo selection refuses forceFallback
+// instead, so a cooling account is not dialled through a multi-member failback.
+//
 // Returns true when no connections exist (optimistic default for no-auth providers).
 func (r *Repo) IsProviderAvailable(provider, model string) bool {
 	if provider == "" {
@@ -276,18 +282,11 @@ func (r *Repo) IsProviderAvailable(provider, model string) bool {
 	if err != nil || len(conns) == 0 {
 		return true
 	}
-	now := time.Now()
 	for _, c := range conns {
-		if model != "" {
-			locked, err := r.IsConnectionModelLocked(c.ID, model)
-			if err != nil || locked {
-				continue
-			}
+		locked, err := r.IsConnectionModelLocked(c.ID, model)
+		if err == nil && !locked {
+			return true
 		}
-		if until, ok := ConnectionBlockedUntil(c.Data); ok && until.After(now) {
-			continue
-		}
-		return true
 	}
 	return false
 }

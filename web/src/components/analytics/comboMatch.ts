@@ -15,14 +15,18 @@ export interface MemberRowLike {
   model?: string
 }
 
-/** Connection fields the combo-flow lock check reads. */
+/**
+ * Connection fields the combo-flow lock check reads.
+ *
+ * No string index signature: that would reject ProviderConnection (and every
+ * other concrete connection type) at the call site. modelLock_* stamps are
+ * read through Object.entries after normalizeConnection flattens the data blob.
+ */
 export interface ConnectionLockLike {
   provider?: string
   isActive?: number | boolean
   rateLimitedUntil?: string | null
   oauthLockedUntil?: string | null
-  /** Flat data blob keys (modelLock_*, rateLimitedUntil) after normalizeConnection. */
-  [key: string]: unknown
 }
 
 /** True when the stamp is a parseable time still in the future. */
@@ -48,7 +52,9 @@ export function connectionBlockedForModel(
     return true
   }
   const tail = modelTail(model)
-  for (const [key, value] of Object.entries(conn)) {
+  // normalizeConnection spreads modelLock_* onto the row; they are not on the
+  // declared interface, so walk the runtime object.
+  for (const [key, value] of Object.entries(conn as Record<string, unknown>)) {
     if (!key.startsWith('modelLock_') || !isFutureStamp(value, nowMs)) continue
     const lockedModel = key.slice('modelLock_'.length)
     if (!tail) return true
