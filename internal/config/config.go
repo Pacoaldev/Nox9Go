@@ -22,8 +22,6 @@ type Config struct {
 	DatabasePath    string
 	JWTSecret       string
 	InitialPassword string
-	APIKeySecret    string
-	MachineIDSalt   string
 	RTKEnabled      bool
 	CavemanEnabled  bool
 	PonytailEnabled bool
@@ -46,8 +44,6 @@ func NewViperWithFile(configFile string) *viper.Viper {
 	v.AutomaticEnv()
 
 	v.SetDefault("PORT", 20130)
-	v.SetDefault("API_KEY_SECRET", "endpoint-proxy-api-key-secret")
-	v.SetDefault("MACHINE_ID_SALT", "endpoint-proxy-salt")
 	v.SetDefault("RTK_ENABLED", true)
 	v.SetDefault("CAVEMAN_ENABLED", false)
 	v.SetDefault("PONYTAIL_ENABLED", false)
@@ -229,16 +225,6 @@ func LoadConfigFromViper(v *viper.Viper) *Config {
 	// operator to set one explicitly rather than shipping a known password.
 	initialPassword := v.GetString("INITIAL_PASSWORD")
 
-	apiKeySecret := v.GetString("API_KEY_SECRET")
-	if apiKeySecret == "" {
-		apiKeySecret = "endpoint-proxy-api-key-secret"
-	}
-
-	machineIDSalt := v.GetString("MACHINE_ID_SALT")
-	if machineIDSalt == "" {
-		machineIDSalt = "endpoint-proxy-salt"
-	}
-
 	rtkEnabled := v.GetBool("RTK_ENABLED")
 	cavemanEnabled := v.GetBool("CAVEMAN_ENABLED")
 	ponytailEnabled := v.GetBool("PONYTAIL_ENABLED")
@@ -250,8 +236,6 @@ func LoadConfigFromViper(v *viper.Viper) *Config {
 		DatabasePath:    dbPath,
 		JWTSecret:       loadJWTSecret(v, dataDir),
 		InitialPassword: initialPassword,
-		APIKeySecret:    apiKeySecret,
-		MachineIDSalt:   machineIDSalt,
 		RTKEnabled:      rtkEnabled,
 		CavemanEnabled:  cavemanEnabled,
 		PonytailEnabled: ponytailEnabled,

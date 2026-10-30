@@ -120,8 +120,6 @@ func TestMain(m *testing.M) {
 		DatabasePath:    filepath.Join(dataDir, "db", "data.sqlite"),
 		JWTSecret:       "bootfx-jwt-secret",
 		InitialPassword: "bootfx-password",
-		APIKeySecret:    "bootfx-api-key-secret",
-		MachineIDSalt:   "bootfx-machine-salt",
 	}
 
 	shutdown.TestReset()

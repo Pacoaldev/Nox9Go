@@ -13,16 +13,12 @@ func TestLoadConfig(t *testing.T) {
 	origDataDir := os.Getenv("DATA_DIR")
 	origJwtSecret := os.Getenv("JWT_SECRET")
 	origInitialPassword := os.Getenv("INITIAL_PASSWORD")
-	origApiKeySecret := os.Getenv("API_KEY_SECRET")
-	origMachineIDSalt := os.Getenv("MACHINE_ID_SALT")
 
 	defer func() {
 		os.Setenv("PORT", origPort)
 		os.Setenv("DATA_DIR", origDataDir)
 		os.Setenv("JWT_SECRET", origJwtSecret)
 		os.Setenv("INITIAL_PASSWORD", origInitialPassword)
-		os.Setenv("API_KEY_SECRET", origApiKeySecret)
-		os.Setenv("MACHINE_ID_SALT", origMachineIDSalt)
 	}()
 
 	// Create temp directory for DATA_DIR testing
@@ -37,8 +33,6 @@ func TestLoadConfig(t *testing.T) {
 	os.Setenv("DATA_DIR", tempDir)
 	os.Setenv("JWT_SECRET", "test-secret-value-123456")
 	os.Setenv("INITIAL_PASSWORD", "custom-password")
-	os.Setenv("API_KEY_SECRET", "custom-api-key-secret")
-	os.Setenv("MACHINE_ID_SALT", "custom-salt")
 
 	cfg := LoadConfig()
 
@@ -55,12 +49,6 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.InitialPassword != "custom-password" {
 		t.Errorf("expected custom-password, got %s", cfg.InitialPassword)
 	}
-	if cfg.APIKeySecret != "custom-api-key-secret" {
-		t.Errorf("expected custom-api-key-secret, got %s", cfg.APIKeySecret)
-	}
-	if cfg.MachineIDSalt != "custom-salt" {
-		t.Errorf("expected custom-salt, got %s", cfg.MachineIDSalt)
-	}
 }
 
 func TestLoadConfigDefaults(t *testing.T) {
@@ -69,24 +57,18 @@ func TestLoadConfigDefaults(t *testing.T) {
 	origDataDir := os.Getenv("DATA_DIR")
 	origJwtSecret := os.Getenv("JWT_SECRET")
 	origInitialPassword := os.Getenv("INITIAL_PASSWORD")
-	origApiKeySecret := os.Getenv("API_KEY_SECRET")
-	origMachineIDSalt := os.Getenv("MACHINE_ID_SALT")
 
 	defer func() {
 		os.Setenv("PORT", origPort)
 		os.Setenv("DATA_DIR", origDataDir)
 		os.Setenv("JWT_SECRET", origJwtSecret)
 		os.Setenv("INITIAL_PASSWORD", origInitialPassword)
-		os.Setenv("API_KEY_SECRET", origApiKeySecret)
-		os.Setenv("MACHINE_ID_SALT", origMachineIDSalt)
 	}()
 
 	// Clear out environment to test defaults
 	os.Setenv("PORT", "")
 	os.Setenv("JWT_SECRET", "")
 	os.Setenv("INITIAL_PASSWORD", "")
-	os.Setenv("API_KEY_SECRET", "")
-	os.Setenv("MACHINE_ID_SALT", "")
 
 	// Create temp directory for DATA_DIR testing
 	tempDir, err := os.MkdirTemp("", "test_config_defaults_*")
@@ -103,12 +85,6 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	if cfg.InitialPassword != "" {
 		t.Errorf("expected no default password (operator must set INITIAL_PASSWORD), got %s", cfg.InitialPassword)
-	}
-	if cfg.APIKeySecret != "endpoint-proxy-api-key-secret" {
-		t.Errorf("expected default api-key-secret, got %s", cfg.APIKeySecret)
-	}
-	if cfg.MachineIDSalt != "endpoint-proxy-salt" {
-		t.Errorf("expected default salt, got %s", cfg.MachineIDSalt)
 	}
 
 	// Verify JWT secret is auto-generated and saved to file
@@ -148,8 +124,6 @@ func TestLoadConfigFromDotEnv(t *testing.T) {
 DATA_DIR=` + tempDataDir + `
 JWT_SECRET=dotenv-jwt-secret
 INITIAL_PASSWORD=dotenv-initial-password
-API_KEY_SECRET=dotenv-api-key-secret
-MACHINE_ID_SALT=dotenv-salt
 RTK_ENABLED=false
 CAVEMAN_ENABLED=true
 PONYTAIL_ENABLED=true
@@ -176,12 +150,6 @@ ADHD_ENABLED=true
 	if cfg.InitialPassword != "dotenv-initial-password" {
 		t.Errorf("expected initial password from .env, got %s", cfg.InitialPassword)
 	}
-	if cfg.APIKeySecret != "dotenv-api-key-secret" {
-		t.Errorf("expected api key secret from .env, got %s", cfg.APIKeySecret)
-	}
-	if cfg.MachineIDSalt != "dotenv-salt" {
-		t.Errorf("expected machine id salt from .env, got %s", cfg.MachineIDSalt)
-	}
 	if cfg.RTKEnabled != false {
 		t.Errorf("expected rtk false from .env, got %v", cfg.RTKEnabled)
 	}
@@ -199,8 +167,6 @@ ADHD_ENABLED=true
 func TestEnvPrecedenceOverDotEnv(t *testing.T) {
 	tempDir := t.TempDir()
 	envContent := `PORT=20140
-API_KEY_SECRET=dotenv-secret
-MACHINE_ID_SALT=dotenv-salt
 RTK_ENABLED=false
 CAVEMAN_ENABLED=false
 PONYTAIL_ENABLED=false
@@ -213,8 +179,6 @@ ADHD_ENABLED=false
 
 	// OS env must take precedence over .env file
 	t.Setenv("PORT", "20188")
-	t.Setenv("API_KEY_SECRET", "os-api-key-secret")
-	t.Setenv("MACHINE_ID_SALT", "os-salt")
 	t.Setenv("RTK_ENABLED", "true")
 	t.Setenv("CAVEMAN_ENABLED", "true")
 	t.Setenv("PONYTAIL_ENABLED", "true")
@@ -225,12 +189,6 @@ ADHD_ENABLED=false
 
 	if cfg.Port != 20188 {
 		t.Errorf("expected OS env PORT 20188 to override .env, got %d", cfg.Port)
-	}
-	if cfg.APIKeySecret != "os-api-key-secret" {
-		t.Errorf("expected OS env API_KEY_SECRET to override .env, got %s", cfg.APIKeySecret)
-	}
-	if cfg.MachineIDSalt != "os-salt" {
-		t.Errorf("expected OS env MACHINE_ID_SALT to override .env, got %s", cfg.MachineIDSalt)
 	}
 	if cfg.RTKEnabled != true {
 		t.Errorf("expected OS env RTK_ENABLED true to override .env, got %v", cfg.RTKEnabled)
@@ -253,12 +211,6 @@ func TestProvideViper(t *testing.T) {
 	}
 	if v.GetInt("PORT") <= 0 {
 		t.Errorf("expected positive default PORT, got %d", v.GetInt("PORT"))
-	}
-	if v.GetString("API_KEY_SECRET") == "" {
-		t.Error("expected non-empty API_KEY_SECRET")
-	}
-	if v.GetString("MACHINE_ID_SALT") == "" {
-		t.Error("expected non-empty MACHINE_ID_SALT")
 	}
 }
 
