@@ -223,6 +223,92 @@ func TestOpenCodeApply_AddsModelToProviderWithoutModelsMap(t *testing.T) {
 	}
 }
 
+// The user's own explorer agent must survive an apply: the dashboard picked a
+// model, not a subagent prompt.
+func TestOpenCodeApply_PreservesExistingExplorerBlock(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jsonc := filepath.Join(dir, "opencode.jsonc")
+	seed := "{\n" +
+		"  \"agent\": {\n" +
+		"    \"explorer\": {\n" +
+		"      \"description\": \"Fast explorer subagent for codebase exploration\",\n" +
+		"      \"mode\": \"subagent\",\n" +
+		"      \"model\": \"" + ProviderKey + "/minimax-cn/MiniMax-M3\"\n" +
+		"    }\n" +
+		"  },\n" +
+		"  \"provider\": {\n" +
+		"    \"" + ProviderKey + "\": {\n" +
+		"      \"npm\": \"@ai-sdk/openai-compatible\",\n" +
+		"      \"options\": { \"apiKey\": \"sk-old\", \"baseURL\": \"http://localhost:20130/v1\" },\n" +
+		"      \"models\": { \"MinionsPRO\": { \"name\": \"MinionsPRO\" } }\n" +
+		"    }\n" +
+		"  }\n" +
+		"}\n"
+	if err := os.WriteFile(jsonc, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	applyToFixture(t, home, "MinionsELITE")
+
+	got := readFile(t, jsonc)
+	if !strings.Contains(got, "Fast explorer subagent for codebase exploration") {
+		t.Fatalf("the user's explorer description was destroyed:\n%s", got)
+	}
+	if !strings.Contains(got, "minimax-cn/MiniMax-M3") {
+		t.Fatalf("the user's explorer model was destroyed:\n%s", got)
+	}
+	if !strings.Contains(got, "\"model\": \""+ProviderKey+"/MinionsELITE\"") {
+		t.Fatalf("the active model was not updated:\n%s", got)
+	}
+	if !strings.Contains(got, "MinionsPRO") {
+		t.Fatalf("the model catalogue was destroyed:\n%s", got)
+	}
+}
+
+// A reset must not delete an explorer agent that is not ours.
+func TestOpenCodeReset_KeepsForeignExplorerBlock(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jsonc := filepath.Join(dir, "opencode.jsonc")
+	seed := "{\n" +
+		"  \"agent\": {\n" +
+		"    \"explorer\": { \"description\": \"my own explorer\", \"mode\": \"primary\", \"model\": \"other/model\" }\n" +
+		"  },\n" +
+		"  \"provider\": {\n" +
+		"    \"" + ProviderKey + "\": { \"npm\": \"@ai-sdk/openai-compatible\" }\n" +
+		"  }\n" +
+		"}\n"
+	if err := os.WriteFile(jsonc, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := Resolve("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Reset(Options{Home: home}); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+
+	got := readFile(t, jsonc)
+	if !strings.Contains(got, "my own explorer") {
+		t.Fatalf("a foreign explorer agent was deleted:\n%s", got)
+	}
+	if !strings.Contains(got, "other/model") {
+		t.Fatalf("a foreign model was deleted:\n%s", got)
+	}
+	if strings.Contains(got, ProviderKey) {
+		t.Fatalf("reset left the provider behind:\n%s", got)
+	}
+}
+
 func TestOpenCodeReset_RemovesOnlyOwnedKeys(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, ".config", "opencode")

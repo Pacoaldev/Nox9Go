@@ -64,8 +64,10 @@ func (a opencodeAdapter) Reset(opts Options) (Result, error) {
 		edits = append(edits, Edit{KeyPath: []string{"agent", "explorer", "model"}, Delete: true})
 		edits = append(edits, Edit{KeyPath: []string{"agent", "explorer", "description"}, Delete: true})
 		edits = append(edits, Edit{KeyPath: []string{"agent", "explorer", "mode"}, Delete: true})
+		// The block itself goes only with its own fields: an explorer agent
+		// the user wrote (and that does not point at us) is theirs.
+		edits = append(edits, Edit{KeyPath: []string{"agent", "explorer"}, Delete: true})
 	}
-	edits = append(edits, Edit{KeyPath: []string{"agent", "explorer"}, Delete: true})
 	return applyPlans([]FilePlan{{File: paths.Files[0], Edits: edits}}, nil)
 }
 
@@ -124,11 +126,16 @@ func (a opencodeAdapter) applyEdits(file TargetFile, opts Options) []Edit {
 			Value:           a.prefix() + model,
 			CreateIfMissing: true,
 		})
-		edits = append(edits,
-			Edit{KeyPath: []string{"agent", "explorer", "model"}, Value: a.prefix() + model, CreateIfMissing: true},
-			Edit{KeyPath: []string{"agent", "explorer", "description"}, Value: "Explore the codebase", CreateIfMissing: true},
-			Edit{KeyPath: []string{"agent", "explorer", "mode"}, Value: "subagent", CreateIfMissing: true},
-		)
+		// The explorer subagent is created only when the file has none: an
+		// agent the user wrote — its own description, its own model — is
+		// theirs, and the dashboard picked a model, not a prompt.
+		if !state.hasExplorer {
+			edits = append(edits,
+				Edit{KeyPath: []string{"agent", "explorer", "model"}, Value: a.prefix() + model, CreateIfMissing: true},
+				Edit{KeyPath: []string{"agent", "explorer", "description"}, Value: "Explore the codebase", CreateIfMissing: true},
+				Edit{KeyPath: []string{"agent", "explorer", "mode"}, Value: "subagent", CreateIfMissing: true},
+			)
+		}
 	}
 	return edits
 }
@@ -136,6 +143,7 @@ func (a opencodeAdapter) applyEdits(file TargetFile, opts Options) []Edit {
 type opencodeProviderState struct {
 	hasProvider    bool
 	hasTargetModel bool
+	hasExplorer    bool
 }
 
 func opencodeInspectProvider(file TargetFile, providerKey, targetModel string) opencodeProviderState {
@@ -151,15 +159,21 @@ func opencodeInspectProvider(file TargetFile, providerKey, targetModel string) o
 	if err != nil || root.kind != jLBrace {
 		return opencodeProviderState{}
 	}
+	var out opencodeProviderState
+	if agent := findJSONMember(root, "agent"); agent != nil && agent.val.kind == jLBrace {
+		if findJSONMember(agent.val, "explorer") != nil {
+			out.hasExplorer = true
+		}
+	}
 	providerMember := findJSONMember(root, "provider")
 	if providerMember == nil || providerMember.val.kind != jLBrace {
-		return opencodeProviderState{}
+		return out
 	}
 	prov := findJSONMember(providerMember.val, providerKey)
 	if prov == nil || prov.val.kind != jLBrace {
-		return opencodeProviderState{}
+		return out
 	}
-	out := opencodeProviderState{hasProvider: true}
+	out.hasProvider = true
 	if targetModel == "" {
 		return out
 	}

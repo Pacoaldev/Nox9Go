@@ -303,8 +303,16 @@ func deleteJSONMember(src []byte, toks []jsonTok, obj *jsonNode, m *jsonMember) 
 		end = toks[m.val.closeTok].end()
 	}
 	end = skipJSONSpace(src, end)
-	if end < len(src) && src[end] == ',' {
-		end++
+	// A member in the middle of the object keeps the comma that follows it:
+	// that comma becomes the separator between the member before and the one
+	// after. Consuming it as well would leave the two neighbours with nothing
+	// between them, and the object would no longer parse. The first and the
+	// last member do take their trailing comma with them — nothing else needs
+	// it once they are gone.
+	if idx == 0 || idx == len(obj.members)-1 {
+		if end < len(src) && src[end] == ',' {
+			end++
+		}
 	}
 	return splice(src, start, end, nil)
 }
