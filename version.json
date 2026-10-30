@@ -1,11 +1,11 @@
 {
-  "latestVersion": "1.0.3",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.3/nox9go-windows-amd64.exe",
+  "latestVersion": "1.0.4",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.4/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.3/nox9go-windows-amd64.exe"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.4/nox9go-windows-amd64.exe"
   },
   "sha256": {
-    "windows_amd64": "03b69a0dde10bc2629b0dc8abdf03229902ca87c6d04223f2a4d5a3d28bd4384"
+    "windows_amd64": "bfc8764abb268d58eefcd84e5b635ab9ac6b3d46f9539ec1b500242484bc90d4"
   },
-  "releaseNotes": "NOX9GO 1.0.3 — pre-publication security audit resolution, hardened admin routes, removed static secrets and insecure TLS fallback, generated dashboard initial credentials, and strengthened platform-guarded binary updater."
+  "releaseNotes": "NOX9GO 1.0.4 — combo lockdown respected (no forceFallback dial of cooling keys); Combo flow shows locked when every provider key is parked."
 }
