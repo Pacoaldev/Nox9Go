@@ -64,7 +64,7 @@ var cliTools = []toolDef{
 	{id: "jcode", bin: "jcode"},
 	{id: "grok-build", bin: "grok"},
 	{id: "devin", bin: "devin", hasVer: true},
-	{id: "pi", bin: "pi"},
+	{id: "pi", bin: "pi", hasNox9Go: piHasNox9Go},
 	{id: "omp", bin: "omp", hasVer: true},
 }
 

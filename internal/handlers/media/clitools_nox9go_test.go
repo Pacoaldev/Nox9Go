@@ -62,3 +62,47 @@ func TestIsLocalGatewayURL(t *testing.T) {
 		}
 	}
 }
+
+func TestPiConfigTargetsGateway_RenamedProvider(t *testing.T) {
+	raw := []byte(`{
+  "$schema": "https://pi.dev/schemas/models.schema.json",
+  "providers": {
+    "NOX9GO": {
+      "baseUrl": "http://localhost:20130/v1",
+      "api": "openai-completions",
+      "apiKey": "sk-x"
+    }
+  }
+}`)
+	if !piConfigTargetsGateway(raw) {
+		t.Fatal("a pi provider pointing at the gateway must be detected")
+	}
+}
+
+func TestPiConfigTargetsGateway_OtherEndpoint(t *testing.T) {
+	cases := map[string]string{
+		"other port":  `{"providers": {"x": {"baseUrl": "http://localhost:3000/v1"}}}`,
+		"remote host": `{"providers": {"x": {"baseUrl": "https://api.openai.com/v1"}}}`,
+		"empty file":  ``,
+	}
+	for name, raw := range cases {
+		if piConfigTargetsGateway([]byte(raw)) {
+			t.Errorf("%s: must not report configured", name)
+		}
+	}
+}
+
+func TestToolHasNox9Go_PiRegistered(t *testing.T) {
+	found := false
+	for _, td := range cliTools {
+		if td.id == "pi" {
+			found = td.hasNox9Go != nil
+			break
+		}
+	}
+	if !found {
+		t.Fatal("pi in cliTools must wire hasNox9Go")
+	}
+}
+
+

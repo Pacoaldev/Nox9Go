@@ -281,12 +281,6 @@ func upsertEnvVar(envText, key, value string) string {
 	return envText + line + "\n"
 }
 
-// removeEnvVar deletes a single KEY=VALUE line.
-func removeEnvVar(envText, key string) string {
-	re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key) + `=.*\r?\n?`)
-	return re.ReplaceAllString(envText, "")
-}
-
 // hermesLocalEndpointRE matches the loopback hosts 9router itself binds.
 var hermesLocalEndpointRE = regexp.MustCompile(`localhost|127\.0\.0\.1|0\.0\.0\.0`)
 

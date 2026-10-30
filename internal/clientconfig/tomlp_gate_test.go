@@ -93,7 +93,8 @@ func randomValidTOML(rng *rand.Rand) string {
 			continue
 		}
 		seen[header] = true
-		b.WriteString(header + "\n")
+		b.WriteString(header)
+		b.WriteByte('\n')
 		for k := rng.Intn(3); k >= 0; k-- {
 			// A dotted key is what makes "a.b = 1" then "a = ..." reachable: the
 			// prefix is a table with no [header], which is the shape the strict

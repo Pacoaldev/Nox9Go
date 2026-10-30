@@ -195,7 +195,9 @@ func TestMediaInputCap_CountsEscapedBase64ImageFields(t *testing.T) {
 			if i > 0 {
 				b.WriteString(",")
 			}
-			b.WriteString(`"` + `A` + payload[1:] + `"`)
+			b.WriteString(`"A`)
+			b.WriteString(payload[1:])
+			b.WriteByte('"')
 		}
 		b.WriteString(`]}`)
 		use, err := measureMediaInput("application/json", []byte(b.String()))

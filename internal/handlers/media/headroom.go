@@ -87,7 +87,7 @@ func (h *HeadroomHandler) HandleHeadroomRestart(w http.ResponseWriter, r *http.R
 	h.handleHeadroomStart(w, r, true)
 }
 
-func (h *HeadroomHandler) handleHeadroomStart(w http.ResponseWriter, r *http.Request, restart bool) {
+func (h *HeadroomHandler) handleHeadroomStart(w http.ResponseWriter, _ *http.Request, restart bool) {
 	hurl := h.headroomURL()
 	if !headroom.IsLoopbackHeadroomUrl(hurl) {
 		writeHeadroomError(w, http.StatusBadRequest, "External Headroom proxies must be started outside nox9go", "EXTERNAL_PROXY")

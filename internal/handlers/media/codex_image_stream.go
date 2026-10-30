@@ -62,6 +62,9 @@ func parseCodexImageStream(r io.Reader) (imageB64 string, usage *codexImageUsage
 		}
 	}
 	flush()
+	if err := scanner.Err(); err != nil {
+		return imageB64, usage
+	}
 	return imageB64, usage
 }
 

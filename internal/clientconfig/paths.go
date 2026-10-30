@@ -100,6 +100,16 @@ func opencodePaths(home string) Paths {
 
 // fileExists reports whether p is an existing regular file. Any error is a
 // "no": an unreadable path is not a file this should prefer.
+// piPaths resolves ~/.pi/agent/models.json against home.
+func piPaths(home string) Paths {
+	dir := filepath.Join(home, ".pi", "agent")
+	path := filepath.Join(dir, "models.json")
+	return Paths{
+		Dir:   dir,
+		Files: []TargetFile{{Path: path, Dir: dir, Format: FormatJSONC, Purpose: "models"}},
+	}
+}
+
 func fileExists(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && fi.Mode().IsRegular()

@@ -23,6 +23,7 @@ const ProviderKey = "NOX9GO"
 // adapterFactories lists the clients in the order the dashboard shows them.
 var adapterFactories = []func() Adapter{
 	func() Adapter { return newOpenCodeAdapter(ProviderKey) },
+	func() Adapter { return newPiAdapter(ProviderKey) },
 }
 
 // adapterAliases maps every accepted spelling to its canonical id. The aliases
@@ -30,6 +31,7 @@ var adapterFactories = []func() Adapter{
 var adapterAliases = map[string]string{
 	"opencode":  "opencode",
 	"open-code": "opencode",
+	"pi":        "pi",
 }
 
 // registry is built once: the adapters are stateless values, so a shared map is

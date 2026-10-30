@@ -132,7 +132,7 @@ func (h *MediaHandler) handleAntigravitySTT(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (h *MediaHandler) tryAntigravitySTTConn(w http.ResponseWriter, r *http.Request, body, fileBytes []byte, filename, model, language, prompt, responseFormat string, conn *models.ProviderConnection, connData *chat.ConnectionData) error {
+func (h *MediaHandler) tryAntigravitySTTConn(w http.ResponseWriter, r *http.Request, _, fileBytes []byte, filename, model, language, prompt, responseFormat string, conn *models.ProviderConnection, connData *chat.ConnectionData) error {
 	apiKey := chat.ExtractAPIKey(connData)
 	if apiKey == "" {
 		return fmt.Errorf("no API key found for antigravity connection %s", conn.ID)

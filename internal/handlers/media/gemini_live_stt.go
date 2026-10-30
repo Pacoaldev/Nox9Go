@@ -234,7 +234,7 @@ func (s *liveSTTSession) nextTimeout() time.Duration {
 // force-close; rotating before that is the graceful play. Once the budget is
 // spent a later goAway is left to the close path, which settles on the partial
 // transcript.
-func (s *liveSTTSession) tryRotate(goAwayTime string) bool {
+func (s *liveSTTSession) tryRotate(_ string) bool {
 	if s.goAwayLeft <= 0 {
 		return false
 	}

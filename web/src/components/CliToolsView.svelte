@@ -24,6 +24,7 @@
   import { api, type APIKey } from '../api/client'
   import HermesToolCard from './cli-tools/HermesToolCard.svelte'
   import OpenCodeToolCard from './cli-tools/OpenCodeToolCard.svelte'
+  import PiToolCard from './cli-tools/PiToolCard.svelte'
 
   interface Props {
     apiKeys?: APIKey[]
@@ -419,7 +420,7 @@
       configType: 'guide',
       instructions: [
         `Add a NOX9GO provider to ~/.pi/agent/models.json (Windows: %USERPROFILE%\\.pi\\agent\\models.json):`,
-        `{"providers":{"9router":{"baseUrl":"${localOrigin}/v1","api":"openai-completions","apiKey":"${snippetApiKey}","models":[{"id":"kr/claude-sonnet-4.5","name":"9router kr/claude-sonnet-4.5","reasoning":true,"contextWindow":200000,"maxTokens":64000}]}}}`,
+        `{"providers":{"NOX9GO":{"baseUrl":"${localOrigin}/v1","api":"openai-completions","apiKey":"${snippetApiKey}","models":[{"id":"kr/claude-sonnet-4.5","name":"NOX9GO kr/claude-sonnet-4.5","reasoning":true,"contextWindow":200000,"maxTokens":64000}]}}}`,
         noApiKey
           ? `No API key exists yet — open API Keys, create one, then reopen this card. Pasting the line as-is will send "<your-nox9go-api-key>" upstream and get 401.`
           : `Run 'pi', then /model to pick the model — models.json is re-read without a restart.`,
@@ -769,6 +770,15 @@
               {/each}
             </div>
           </div>
+        {/if}
+
+        {#if selectedTool.id === 'pi'}
+          <PiToolCard
+            installed={!!statuses.pi?.installed}
+            configured={!!statuses.pi?.hasNox9Go}
+            {apiKeys}
+            onChanged={loadStatuses}
+          />
         {/if}
 
         <!-- Step-by-Step Instructions -->

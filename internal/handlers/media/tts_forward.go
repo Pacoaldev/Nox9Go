@@ -162,7 +162,7 @@ func (h *MediaHandler) forwardNvidiaTTS(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-func (h *MediaHandler) tryNvidiaTTSConn(w http.ResponseWriter, r *http.Request, body []byte, modelInfo *chat.ModelInfo, input, voice, respFmt string, conn *models.ProviderConnection, connData *chat.ConnectionData) (int, string, bool) {
+func (h *MediaHandler) tryNvidiaTTSConn(w http.ResponseWriter, r *http.Request, _ []byte, modelInfo *chat.ModelInfo, input, voice, respFmt string, conn *models.ProviderConnection, connData *chat.ConnectionData) (int, string, bool) {
 	apiKey := chat.ExtractAPIKey(connData)
 	if apiKey == "" {
 		return http.StatusUnauthorized, "no API key found for nvidia", false

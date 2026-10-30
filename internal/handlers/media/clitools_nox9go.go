@@ -65,13 +65,37 @@ func opencodeHasNox9Go() bool {
 // this build does not model, still counts when it points here — and a false
 // positive is a badge, not a write.
 func opencodeConfigTargetsGateway(raw []byte) bool {
+	return configTargetsGatewayByKey(raw, "baseURL")
+}
+
+// piHasNox9Go reports whether any provider in ~/.pi/agent/models.json points
+// at this gateway.
+func piHasNox9Go() bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	raw, err := os.ReadFile(filepath.Join(home, ".pi", "agent", "models.json"))
+	if err != nil {
+		return false
+	}
+	return piConfigTargetsGateway(raw)
+}
+
+// piConfigTargetsGateway scans a Pi models.json payload for a baseUrl or
+// baseURL that resolves to this gateway.
+func piConfigTargetsGateway(raw []byte) bool {
+	return configTargetsGatewayByKey(raw, "baseUrl") || configTargetsGatewayByKey(raw, "baseURL")
+}
+
+func configTargetsGatewayByKey(raw []byte, key string) bool {
 	s := string(raw)
 	for {
-		i := strings.Index(s, "baseURL")
+		i := strings.Index(s, key)
 		if i < 0 {
 			return false
 		}
-		rest := s[i+len("baseURL")+1:] // step past the closing quote of the key
+		rest := s[i+len(key)+1:] // step past the closing quote of the key
 		if candidate, ok := afterColonString(rest); ok && isLocalGatewayURL(candidate) {
 			return true
 		}

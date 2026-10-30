@@ -177,7 +177,7 @@ func (h *MediaHandler) handleAntigravitySearch(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (h *MediaHandler) tryAntigravitySearchConn(w http.ResponseWriter, r *http.Request, body []byte, query string, maxResults int, model string, conn *models.ProviderConnection, connData *chat.ConnectionData) *searchUpstreamError {
+func (h *MediaHandler) tryAntigravitySearchConn(w http.ResponseWriter, r *http.Request, _ []byte, query string, maxResults int, model string, conn *models.ProviderConnection, connData *chat.ConnectionData) *searchUpstreamError {
 	startTime := time.Now()
 
 	apiKey := chat.ExtractAPIKey(connData)
