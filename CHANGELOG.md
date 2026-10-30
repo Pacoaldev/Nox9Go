@@ -46,6 +46,10 @@ The pre-publication audit (`docs/auditoriaUnificada.md`, 35 items) is closed exc
 - **The end-to-end suite runs on every push, and its six remaining failures are known and do not gate.** The job had never executed: every push in this repository's history shows it cancelled. With a binary to run it starts and 40 of 46 pass; the six that fail are tests the 2026-10-24 runtime i18n changed out from under (the top bar's `Language` item came back with a real handler while the test still asserts it is absent; two selectors now match two elements). They are listed here rather than hidden because the suite is the only thing that exercises the dashboard in a browser, and it finds real product bugs — `INITIAL_PASSWORD` above was one of them. The job reports without blocking until those tests are repaired.
 - **An inherited `XDG_CONFIG_HOME` can no longer redirect a pinned `Options.Home`.** `xdgConfigHome` read the environment before the caller's home, so on a runner that exports it the OpenCode adapter patched the machine's real `~/.config/opencode/opencode.json` instead of the fixture. `Home` wins, which is what `Options.Home` already documented.
 
+### Dashboard
+
+- **El semáforo de servicios del sidebar ahora son badges de estado.** Los tres puntos verdes (`Gateway`, `DB`, `Túnel`) del sidebar se reemplazan por dos badges tipo chip — `Tunes` (túnel Cloudflare) y `DB` (SQLite) — con el mismo estilo visual que el chip de latencia del `TopBar`. El badge del gateway local ya existe en la barra superior, así que no se duplica. En modo colapsado el sidebar muestra solo los puntitos de color.
+
 ## [1.0.2] - 2026-10-28
 
 Provider probes that tell a network block from a bad key, OpenCode in the CLI tools screen, and a dashboard that shows this project's own change log.
