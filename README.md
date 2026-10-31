@@ -173,6 +173,39 @@ El mismo gateway puede enrutar:
 
 ---
 
+## Screenshots
+
+<details>
+<summary>Galería con las principales vistas del panel y la CLI (11 capturas)</summary>
+
+<table>
+  <tr>
+    <td align="center"><b>1 · Endpoint & API Key</b><br><img src="assets/screenshots/1Endpoint & Key.png" alt="Endpoint & API Key" width="480"/></td>
+    <td align="center"><b>2 · Proveedores (1/2)</b><br><img src="assets/screenshots/2Providers1.png" alt="Proveedores 1" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>3 · Proveedores (2/2)</b><br><img src="assets/screenshots/3Providers2.png" alt="Proveedores 2" width="480"/></td>
+    <td align="center"><b>4 · Combos</b><br><img src="assets/screenshots/4Combos.png" alt="Combos" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>5 · Uso (1/2)</b><br><img src="assets/screenshots/5Usage.png" alt="Uso 1" width="480"/></td>
+    <td align="center"><b>6 · Uso (2/2)</b><br><img src="assets/screenshots/6Usage2.png" alt="Uso 2" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>7 · Seguimiento de cuotas</b><br><img src="assets/screenshots/7Quota_tracker.png" alt="Quota tracker" width="480"/></td>
+    <td align="center"><b>8 · Ahorro de tokens</b><br><img src="assets/screenshots/8Token_saver.png" alt="Token saver" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>9 · CLI & IDE</b><br><img src="assets/screenshots/9CLI & Ide.png" alt="CLI & IDE" width="480"/></td>
+    <td align="center"><b>10 · Combo Flow</b><br><img src="assets/screenshots/10ComboFlow.png" alt="Combo Flow" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><b>11 · Ajustes</b><br><img src="assets/screenshots/11Settings.png" alt="Settings" width="480"/></td>
+  </tr>
+</table>
+
+</details>
+
 ## Proveedores
 
 NOX9GO incluye un catálogo de 142 proveedores registrados y permite añadir endpoints compatibles con OpenAI o Anthropic desde el panel. "Registrado" significa que el proveedor está en el catálogo con su endpoint, su método de autenticación y sus modelos; no que cada integración esté verificada contra el servicio en cada release. Los catálogos de modelos cambian más rápido de lo que se puede revisar, así que un proveedor puede dejar de responder aunque siga listado.
