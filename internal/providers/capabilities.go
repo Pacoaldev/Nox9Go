@@ -379,6 +379,19 @@ var providerCapabilities = map[string]map[string]Capabilities{
 		"deepseek-v4.1-flash": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(true), ContextWindow: 1000000, MaxOutput: 393216},
 		"deepseek-v4-flash":   {Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(false), ContextWindow: 1000000, MaxOutput: 50000},
 		"deepseek-v3-2-volc":  {Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(false)},
+	}, "runcrate": {
+		"deepseek-ai/DeepSeek-V4.1-Flash": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 393216},
+		"zai-org/GLM-5.3":                 {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 131072},
+		"Qwen/Qwen3.8-Flash":              {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 65536},
+		"openai/gpt-oss-120b":             {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 131072, MaxOutput: 32768},
+	}, "sensenova": {
+		"sensenova-6.8-flash-lite": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 262144, MaxOutput: 65536},
+		"sensenova-u1.5-lite":      {ImageOutput: true},
+		"sensenova-u1.5-fast":      {ImageOutput: true},
+		"deepseek-v4-flash":        {Reasoning: true, Tools: true, ThinkingFormat: "deepseek", ContextWindow: 1000000, MaxOutput: 65536},
+		"deepseek-flash":           {Reasoning: true, Tools: true, ThinkingFormat: "deepseek", ContextWindow: 1000000, MaxOutput: 65536},
+		"glm-5.2":                  {Reasoning: true, Tools: true, ThinkingFormat: "zai", ContextWindow: 1000000, MaxOutput: 131072},
+		"kimi-k3":                  {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "kimi", ContextWindow: 1048576, MaxOutput: 65536},
 	},
 	"poolside": {
 		"laguna-s-2.1":  {Reasoning: true, Tools: true, ThinkingFormat: "openai"},

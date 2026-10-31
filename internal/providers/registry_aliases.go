@@ -70,6 +70,8 @@ var RegistryAliases = map[string]string{
 	"perplexity-agent":    "pa",
 	"perplexity-web":      "pw",
 	"poolside":            "ps",
+	"sensenova":           "sensenova",
+	"runcrate":            "rc",
 	"qoder":               "qd",
 	"qoder-cn":            "qdcn",
 	"runwayml":            "runway",

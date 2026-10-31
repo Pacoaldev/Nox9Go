@@ -2015,6 +2015,108 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     ]
   },
   {
+    "id": "sensenova",
+    "name": "SenseNova",
+    "category": "apikey",
+    "alias": "sn",
+    "color": "#5B5CE2",
+    "icon": "auto_awesome",
+    "website": "https://token.sensenova.cn",
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm",
+      "image",
+    ]
+  },
+  {
+    "id": "runcrate",
+    "name": "Runcrate",
+    "category": "apikey",
+    "alias": "rc",
+    "color": "#1A2B79",
+    "icon": "terminal",
+    "website": "https://www.runcrate.ai",
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm",
+    ]
+  },
+  {
+    "id": "nace",
+    "name": "Nace Drex",
+    "category": "apikey",
+    "alias": "nace",
+    "color": "#1D1D16",
+    "icon": "psychology",
+    "website": "https://console.nace.ai",
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "systemone",
+    ]
+  },
+  {
+    "id": "chatgpt-web",
+    "name": "ChatGPT Web",
+    "category": "webCookie",
+    "alias": "cg",
+    "color": "#10A37F",
+    "icon": "auto_awesome",
+    "website": "https://chatgpt.com",
+    "authType": "cookie",
+    "noAuth": false,
+    "serviceKinds": [
+      "image",
+    ]
+  },
+  {
+    "id": "muse-web",
+    "name": "Muse Web",
+    "category": "webCookie",
+    "alias": "mu",
+    "color": "#7C3AED",
+    "icon": "auto_awesome",
+    "website": "https://muse.ai",
+    "authType": "cookie",
+    "noAuth": false,
+    "serviceKinds": [
+      "image",
+      "video",
+    ]
+  },
+  {
+    "id": "uc-web",
+    "name": "UC Web",
+    "category": "webCookie",
+    "alias": "uc",
+    "color": "#F43F5E",
+    "icon": "explicit",
+    "website": "https://uncensored.com",
+    "authType": "cookie",
+    "noAuth": false,
+    "serviceKinds": [
+      "image",
+      "video",
+    ]
+  },
+  {
+    "id": "veoaifree-web",
+    "name": "Veo AI Free Web",
+    "category": "free",
+    "alias": "veo-free",
+    "color": "#EA4335",
+    "icon": "movie",
+    "website": "https://veoaifree.com",
+    "authType": "none",
+    "noAuth": true,
+    "serviceKinds": [
+      "image",
+      "video",
+    ]
+  },
+  {
     "id": "sambanova",
     "hidden": true,
     "name": "SambaNova",

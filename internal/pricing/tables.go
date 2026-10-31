@@ -16,6 +16,7 @@ var (
 		// upstream does. Announced 2026-10-05 with status "Coming soon" — seeded
 		// ahead of availability.
 		"agnes-3.0-pro":              {InputPer1M: 0.45, OutputPer1M: 0.9, CachedPer1M: 0.045},
+		"sensenova-6.8-flash-lite": {InputPer1M: 0.14, OutputPer1M: 0.28},
 		"auto":                       {InputPer1M: 2, OutputPer1M: 8, CachedPer1M: 1, ReasoningPer1M: 12, CacheCreationPer1M: 2},
 		"claude-3-5-sonnet-20241022": {InputPer1M: 3, OutputPer1M: 15, CachedPer1M: 1.5, ReasoningPer1M: 15, CacheCreationPer1M: 3},
 		"claude-fable-5":             {InputPer1M: 10, OutputPer1M: 50, CachedPer1M: 1, ReasoningPer1M: 50, CacheCreationPer1M: 12.5},

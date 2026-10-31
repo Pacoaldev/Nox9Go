@@ -1204,6 +1204,42 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},
+
+	"nace": {
+		SystemoneURL: "https://console.nace.ai/v1/systemone",
+		AuthHeader:   "Authorization",
+		AuthScheme:   "bearer",
+	},
+	"runcrate": {
+		BaseURL:    "https://api.runcrate.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"sensenova": {
+		BaseURL:    "https://token.sensenova.cn/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+		ImageURL:   "https://token.sensenova.cn/v1/images/generations",
+	},
+	"chatgpt-web": {
+		BaseURL:    "https://chatgpt.com",
+		AuthHeader: "Cookie",
+		AuthScheme: "raw",
+	},
+	"muse-web": {
+		BaseURL:    "https://muse.ai",
+		AuthHeader: "Cookie",
+		AuthScheme: "raw",
+	},
+	"uc-web": {
+		BaseURL:    "https://internal.chatuncensored.ai",
+		AuthHeader: "Cookie",
+		AuthScheme: "raw",
+	},
+	"veoaifree-web": {
+		BaseURL: "https://veoaifree.com",
+		NoAuth:  true,
+	},
 	"openadapter": {
 		BaseURL:    "https://api.openadapter.in/v1/chat/completions",
 		AuthHeader: "Authorization",

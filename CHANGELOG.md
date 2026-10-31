@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.5] - 2026-10-31
+
+Seven new providers imported from the 9router-go and 9router upstream registries: SenseNova, RunCrate, Nace, and four web-based providers (ChatGPT Web, Muse Web, UC Web, Veo AI Free).
+
+### Providers
+
+- **SenseNova** (alias `sn`). OpenAI-compatible API at `token.sensenova.cn` with image generation support. Seven models including `sensenova-6.8-flash-lite`, `sensenova-u1.5-lite`, `sensenova-u1.5-fast`, `deepseek-v4-flash`, `deepseek-flash`, `glm-5.2`, and `kimi-k3`. Capabilities include Vision and ImageOutput on supported models; the flash-lite model is priced.
+- **RunCrate** (alias `rc`). Multi-model gateway at `api.runcrate.ai` exposing DeepSeek-V4.1-Flash, GLM-5.3, Qwen3.8-Flash, and gpt-oss-120b. All four models carry Reasoning, Tools, and ThinkingFormat capabilities.
+- **Nace** (alias `drex`). Drex AI API at `console.nace.ai` with two models: `drex-max` and `drex-v2.0`, both with Tools capability.
+- **ChatGPT Web** (alias `cg`). Browser-session provider at `chatgpt.com` using Cookie-based raw authentication. Models: `gpt-5-6`, `gpt-5-6-thinking`, `gpt-5.6-luna-free`.
+- **Muse Web** (alias `mu`). Browser-session provider at `muse.ai` using Cookie-based raw authentication. Models: `muse-chat`, `muse-image`, `muse-video`.
+- **UC Web** (alias `uc`). Browser-session provider at `internal.chatuncensored.ai` using Cookie-based raw authentication. Models: `seedream-v5`, `nano-banana-pro`, `sora-2`, `seedance-2.5`.
+- **Veo AI Free** (alias `veo-free`). No-auth provider at `veoaifree.com`. Models: `veo`, `seedance`, `nano-banana`.
+
+All seven providers are registered across the full stack: `KnownProviders` (BaseURL, AuthHeader, AuthScheme), `ProviderModels`, capabilities (`Vision`, `Reasoning`, `Tools`, `ThinkingFormat`, `ImageOutput`), aliases, registry aliases, executor registration (`ForwardOpenAI`), pricing tables, and the frontend catalogue (`providers.ts`).
+
+### Provider catalogue
+
+- **Provider count updated from 142 to 149.** The README badge and catalogue references now reflect the seven additions.
+
 ## [1.0.4] - 2026-10-30
 
 Combo lockdowns are respected in the failback chain, and the Combo flow UI shows when every key of a member is parked.
