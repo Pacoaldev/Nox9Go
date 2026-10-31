@@ -6,7 +6,8 @@ Seven new providers imported from the 9router-go and 9router upstream registries
 
 ### Providers
 
-- **SenseNova** (alias `sn`). OpenAI-compatible API at `token.sensenova.cn` with image generation support. Seven models including `sensenova-6.8-flash-lite`, `sensenova-u1.5-lite`, `sensenova-u1.5-fast`, `deepseek-v4-flash`, `deepseek-flash`, `glm-5.2`, and `kimi-k3`. Capabilities include Vision and ImageOutput on supported models; the flash-lite model is priced.
+- **SenseNova** (alias `sn`). OpenAI-compatible API at `token.sensenova.ai` (international Token Plan; keys from [platform.sensenova.ai/console/keys](https://platform.sensenova.ai/console/keys)) with image generation support. Seven models including `sensenova-6.8-flash-lite`, `sensenova-u1.5-lite`, `sensenova-u1.5-fast`, `deepseek-v4-flash`, `deepseek-flash`, `glm-5.2`, and `kimi-k3`. Capabilities include Vision and ImageOutput on supported models; the flash-lite model is priced.
+- **SenseNova endpoint region fix.** The catalogue initially pointed at the mainland China host (`token.sensenova.cn`) and linked "Sign up / Learn more" there. International keys from `platform.sensenova.ai` then failed connection probes with HTTP 401. BaseURL/ImageURL and the dashboard key link now use the international hosts.
 - **RunCrate** (alias `rc`). Multi-model gateway at `api.runcrate.ai` exposing DeepSeek-V4.1-Flash, GLM-5.3, Qwen3.8-Flash, and gpt-oss-120b. All four models carry Reasoning, Tools, and ThinkingFormat capabilities.
 - **Nace** (alias `drex`). Drex AI API at `console.nace.ai` with two models: `drex-max` and `drex-v2.0`, both with Tools capability.
 - **ChatGPT Web** (alias `cg`). Browser-session provider at `chatgpt.com` using Cookie-based raw authentication. Models: `gpt-5-6`, `gpt-5-6-thinking`, `gpt-5.6-luna-free`.
@@ -18,6 +19,7 @@ All seven providers are registered across the full stack: `KnownProviders` (Base
 
 ### Provider catalogue
 
+- **SumoPod key link fix.** The dashboard "Get API Key" link pointed at `https://ai.sumopod.com`, which returns 404. Keys are created at `https://sumopod.com/dashboard/api-services/keys`; `notice.apiKeyUrl` now points there. BaseURL (`ai.sumopod.com`) and the live `/v1/models` fetcher are unchanged — they already require auth and answer correctly.
 - **Provider count updated from 142 to 149.** The README badge and catalogue references now reflect the seven additions.
 
 ## [1.0.4] - 2026-10-30

@@ -146,7 +146,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "color": "#2563EB",
     "icon": "cloud",
     "website": "https://sumopod.com",
-    "notice": {"text":"OpenAI-compatible aggregator. One API key reaches every model, billed per-token. Model ids are bare (e.g. claude-opus-5-5, gemini/gemini-3.8-flash, qwen3.8-max) and are fetched live from the provider.", "apiKeyUrl":"https://ai.sumopod.com"},
+    "notice": {"text":"OpenAI-compatible aggregator. One API key reaches every model, billed per-token. Model ids are bare (e.g. claude-opus-5-5, gemini/gemini-3.8-flash, qwen3.8-max) and are fetched live from the provider.", "apiKeyUrl":"https://sumopod.com/dashboard/api-services/keys"},
     "modelsFetcher": {"url": "https://ai.sumopod.com/v1/models", "type": "openai"},
     "authType": "apikey",
     "noAuth": false,
@@ -2021,7 +2021,8 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "alias": "sn",
     "color": "#5B5CE2",
     "icon": "auto_awesome",
-    "website": "https://token.sensenova.cn",
+    "website": "https://platform.sensenova.ai",
+    "notice": {"apiKeyUrl":"https://platform.sensenova.ai/console/keys"},
     "authType": "apikey",
     "noAuth": false,
     "serviceKinds": [

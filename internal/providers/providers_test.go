@@ -204,6 +204,29 @@ func TestGetProviderModelKind(t *testing.T) {
 	}
 }
 
+func TestSenseNovaUsesInternationalTokenHost(t *testing.T) {
+	// Keys from platform.sensenova.ai only authenticate against token.sensenova.ai;
+	// the mainland .cn host returns HTTP 401 for those credentials.
+	cfg, ok := KnownProviders["sensenova"]
+	if !ok {
+		t.Fatal("expected sensenova provider registered")
+	}
+	const wantBase = "https://token.sensenova.ai/v1/chat/completions"
+	const wantImage = "https://token.sensenova.ai/v1/images/generations"
+	if cfg.BaseURL != wantBase {
+		t.Errorf("sensenova BaseURL = %q, want %q", cfg.BaseURL, wantBase)
+	}
+	if cfg.ImageURL != wantImage {
+		t.Fatalf("sensenova ImageURL = %q, want %q", cfg.ImageURL, wantImage)
+	}
+	if cfg.AuthScheme != "bearer" || cfg.AuthHeader != "Authorization" {
+		t.Fatalf("sensenova expected bearer/Authorization, got %s/%s", cfg.AuthScheme, cfg.AuthHeader)
+	}
+	if a := ResolveAlias("sn"); a != "sensenova" {
+		t.Fatalf("expected sn alias to resolve to sensenova, got %s", a)
+	}
+}
+
 func TestNewProvidersRegistry_v060(t *testing.T) {
 	// DaoXE
 	if _, ok := KnownProviders["daoxe"]; !ok {

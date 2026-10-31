@@ -85,6 +85,13 @@ describe('providers & media separation', () => {
     assert.strictEqual(clinepass.notice?.signupUrl, 'https://app.cline.bot')
   })
 
+  it('points SenseNova at the international console key page', () => {
+    const sensenova = PROVIDER_CATALOG.find((p) => p.id === 'sensenova')
+    assert.ok(sensenova)
+    assert.strictEqual(sensenova.website, 'https://platform.sensenova.ai')
+    assert.strictEqual(sensenova.notice?.apiKeyUrl, 'https://platform.sensenova.ai/console/keys')
+  })
+
   it('marks all upstream dual-auth providers (oauth+apikey registry modes)', () => {
     const dual = [
       'clinepass',
@@ -181,6 +188,7 @@ describe('providers & media separation', () => {
     assert.ok(isChatProvider(p))
     assert.strictEqual(getModelsByProviderId('sumopod').length, 61)
     assert.strictEqual(Boolean(p.modelsFetcher), true)
+    assert.strictEqual(p.notice?.apiKeyUrl, 'https://sumopod.com/dashboard/api-services/keys')
   })
 
   it('resolves every provider alias to a catalog with an entry', () => {

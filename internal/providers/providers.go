@@ -1216,10 +1216,12 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthScheme: "bearer",
 	},
 	"sensenova": {
-		BaseURL:    "https://token.sensenova.cn/v1/chat/completions",
+		// International Token Plan endpoint (platform.sensenova.ai keys).
+		// Mainland China uses token.sensenova.cn — keys are not interchangeable.
+		BaseURL:    "https://token.sensenova.ai/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
-		ImageURL:   "https://token.sensenova.cn/v1/images/generations",
+		ImageURL:   "https://token.sensenova.ai/v1/images/generations",
 	},
 	"chatgpt-web": {
 		BaseURL:    "https://chatgpt.com",
