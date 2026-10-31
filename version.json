@@ -5,7 +5,7 @@
     "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.5/nox9go-windows-amd64.exe"
   },
   "sha256": {
-    "windows_amd64": "bfc8764abb268d58eefcd84e5b635ab9ac6b3d46f9539ec1b500242484bc90d4"
+    "windows_amd64": "65a16a74393dbffa6d2fb635c90855a95dc9aa24b2b9cbcb3b29b2324504a2e9"
   },
   "releaseNotes": "NOX9GO 1.0.5 — seven new providers imported from 9router-go and 9router upstream: SenseNova, RunCrate, Nace, ChatGPT Web, Muse Web, UC Web, Veo AI Free."
 }
