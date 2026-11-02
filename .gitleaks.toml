@@ -36,4 +36,12 @@ regexes = [
   # The ten integration-suite commit hashes that trufflehog flags as hex
   # secrets. They are object ids, not credentials.
   '''[0-9a-f]{40}''',
+  # MiniMax Code's client-side signing secret. It is upstream's own public
+  # constant (decolua/9router, open-sse/services/minimaxCodeUsage.js:13,
+  # shipped inside MiniMax's web bundle), so it is public knowledge and not
+  # something this repository can rotate. Naming it keeps the gate honest
+  # about the one credential-shaped literal the tree is known to carry,
+  # instead of passing because the default rules miss a short unprefixed
+  # constant sitting in a return statement.
+  '''I\*7Cf%WZ#S&%1RlZJ&C2''',
 ]

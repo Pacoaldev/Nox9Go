@@ -45,6 +45,17 @@ func comboPassRetryWait(earliest time.Duration, rateLimited bool) time.Duration 
 	return earliest
 }
 
+// mistral429CooldownFloor is how long a Mistral account stays out of rotation
+// after a 429 that announced no window of its own.
+//
+// Mistral's free tier answers a 1 RPS burst, while the classifier's base
+// backoff for a 429 is two seconds. That put the account back in the pool
+// before the burst that exhausted it had drained, so the next request re-picked
+// it and earned another 429 — the same account, visibly "rate limited" over and
+// over. An announced Retry-After is still honoured exactly: this floor only
+// covers the case where the upstream said nothing.
+const mistral429CooldownFloor = 10 * time.Second
+
 // retryableCooldownSec returns how long a failed account must stay out of
 // rotation, in seconds, given the classifier's own backoff as the baseline.
 //
@@ -67,6 +78,12 @@ func retryableCooldownSec(provider string, statusCode int, base time.Duration, u
 	if statusCode == http.StatusTooManyRequests {
 		if wait, ok := retryAfterWait(ue); ok {
 			cooldown = wait
+		} else if isMistralProvider(provider) && cooldown < mistral429CooldownFloor {
+			// The upstream named no window, so the classifier's base is the
+			// only answer left — and for Mistral it is shorter than the
+			// burst that earned the 429, which is how one account kept
+			// absorbing the next request and earning another one.
+			cooldown = mistral429CooldownFloor
 		}
 	} else if dur, ok := extractResetDuration(ue.Body); ok {
 		cooldown = dur
@@ -79,6 +96,13 @@ func retryableCooldownSec(provider string, statusCode int, base time.Duration, u
 		}
 	}
 	return ceilSeconds(min(cooldown, maxResetCooldown))
+}
+
+// isMistralProvider reports whether provider is Mistral. Scoping the 429 floor
+// by provider keeps every other provider on the classifier's own reading of its
+// error; there is no cross-provider aliasing here, only" mistral" itself.
+func isMistralProvider(provider string) bool {
+	return strings.EqualFold(provider, "mistral")
 }
 
 // passRetry is the rate-limit bookkeeping for one combo pass. The OpenAI and

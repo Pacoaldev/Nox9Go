@@ -41,6 +41,13 @@ func getMiniMaxCodeSignSecret() string {
 	if v := strings.TrimSpace(os.Getenv("MINIMAX_CODE_SIGN_SECRET")); v != "" {
 		return v
 	}
+	// Fallback, not a secret of this project: the constant is MiniMax's own
+	// client-side signing secret, published verbatim in upstream 9router
+	// (open-sse/services/minimaxCodeUsage.js) and shipped inside MiniMax's
+	// web bundle, so it is public knowledge and nothing to rotate. The env
+	// var exists so an operator can override it the day MiniMax rotates the
+	// value; until then this default keeps the account API working out of
+	// the box.
 	return "I*7Cf%WZ#S&%1RlZJ&C2"
 }
 

@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+The failover walk no longer spends a whole account pool on one rate limit, and a
+Mistral account stays out of rotation long enough for its burst limit to recover.
+
+### Routing and quota
+
+- **A run of 429s stops the failover walk.** The walk dialled every remaining
+  account after a 429, so one client request became one upstream call per
+  account and parked each of them on its own cooldown for a limit that answered
+  all of them. Five consecutive 429s in a single turn now end the walk and the
+  upstream's own response is returned, which is what carries the `Retry-After`
+  the client needs. With 45 independently keyed Mistral accounts that turns 45
+  complaints per request into at most 5. Any other verdict resets the run, so a
+  single failing account is still worth walking past.
+- **A Mistral 429 with no announced window waits 10 seconds, not 2.** The
+  classifier's two-second base put the account back in rotation before the 1 RPS
+  burst that exhausted it had drained, so the same account kept absorbing the
+  next request and earning another 429. The floor applies only when the upstream
+  names no wait of its own; an announced `Retry-After` is still honoured exactly,
+  and every other provider keeps the classifier's own reading.
+
+### Repository
+
+- **The session review report is out of the tree.** `docs/report.md` was a
+  point-in-time AI code review (dated 2026-10-31, written against v1.0.4) whose
+  findings were superseded by the changelog; it also quoted the MiniMax Code
+  signing constant as if it were a private key. It is removed, gitignored like
+  its sibling session docs, and the constant is now what it actually is: an
+  allowlisted entry in `.gitleaks.toml` naming its upstream origin (public in
+  `decolua/9router`, shipped inside MiniMax's own web bundle), with the runtime
+  fallback in `usage_minimax_code.go` documented as public knowledge rather
+  than a secret.
+
 ## [1.0.6] - 2026-11-02
 
 Token Saver upstream updates and audit across RTK, Headroom, Caveman, and ADHD modules.

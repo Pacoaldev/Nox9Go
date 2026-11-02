@@ -151,6 +151,10 @@ func (h *ChatHandler) handleAccountFallback(
 	// of burning a healthy account.
 	excludedPools := map[string]bool{}
 	var lastErr error
+	// Run of 429s across consecutive accounts in this turn. Reset by any other
+	// verdict, because one account answering something else says the provider
+	// is not refusing the whole pool.
+	consecutive429 := 0
 	for _, c := range allConns {
 		if slices.Contains(excludeIDs, c.ID) {
 			continue
@@ -284,6 +288,22 @@ func (h *ChatHandler) handleAccountFallback(
 				h.recordProviderModelLockout(ctx, provider, model, connObj.ID, ue)
 				lastErr = ue
 				break
+			}
+			// A run of 429s across different credentials is not a fact about
+			// any one of them, so stop dialling: the remaining accounts would
+			// each be parked on their own cooldown for a limit that answered
+			// all of them. The upstream's own 429 is returned, which is what
+			// carries the Retry-After the client needs to come back on time.
+			if ue.StatusCode == http.StatusTooManyRequests {
+				consecutive429++
+				if consecutive429 >= maxConsecutive429PerTurn {
+					log.Warn("fallback", "429 on consecutive accounts, stopping the failover walk",
+						"provider", provider, "model", model, "accounts", consecutive429)
+					lastErr = ue
+					break
+				}
+			} else {
+				consecutive429 = 0
 			}
 			continue
 		}
@@ -1338,6 +1358,19 @@ const (
 	minResetCooldown = 5 * time.Second
 	maxResetCooldown = 2 * time.Hour
 )
+
+// maxConsecutive429PerTurn is how many different accounts may answer 429 in one
+// client turn before the failover walk stops.
+//
+// Without it the walk dials every remaining account: a pool of independently
+// keyed accounts turns one client request into one upstream call per account,
+// each of them parking a healthy credential on its own cooldown for a limit
+// that answered all of them. The operator then reads "rate limit exceeded" on
+// the whole pool and concludes the keys are spent, when what happened is that
+// the router spent them. Five is past the point where the limit can still be
+// read as a fact about one credential, and short enough that the surviving
+// accounts stay usable.
+const maxConsecutive429PerTurn = 5
 
 // extractResetDuration attempts to extract a structured reset duration from an error payload.
 // It parses:

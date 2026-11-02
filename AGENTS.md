@@ -20,7 +20,7 @@ This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): CI runs on GitHub Act
 | Dashboard | `http://localhost:<PORT>/dashboard` (20130 by default; the startup notice prints the real port) — the first start generates the dashboard password and prints it; the first login with it forces a new one. |
 | bun version | `web/bun.lock` is `lockfileVersion: 2`, written by bun 1.4.4. `bun install --frozen-lockfile` with an older or newer major rejects the file and rewrites it, so pin 1.4.x; CI sets `BUN_VERSION` to match. |
 | Version | `VERSION` is the single source of truth. `version.json` is generated from it (see `scripts/gen-version-manifest.mjs`). |
-| CI | `.github/workflows/ci.yml` — build, vet, tests, race detector, frontend check, secret scan. |
+| CI | `.github/workflows/ci.yml` — frontend (lockfile, ratchet, lint, build), backend (vet, test, clean build), race detector, secret scan, `govulncheck`, update-manifest check, end-to-end (Playwright). |
 
 ### 0.1 How the project is worked on (read this before you touch anything)
 
@@ -40,7 +40,7 @@ This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): CI runs on GitHub Act
 - **A running `nox9go.exe` cannot be overwritten** on Windows. The order is always: stop → build → start.
 - **`nox9go.exe` with no arguments opens an interactive menu**; it does not start the gateway. Use `nox9go start`.
 - **The dashboard API requires auth.** The CLI token travels in the `x-9r-cli-token` header (`sha256(machine-id + "9r-cli-auth" + cli-secret).hex[:16]`, files in the data dir). Without it: `401`. An unknown route: `404`. That pair is the cheap way to prove the wiring is alive.
-- **CI lives in `.github/workflows/ci.yml`.** It builds the frontend from the lockfile, runs `svelte-check`, `go vet`, `go test ./...`, the race detector, the secret scanner and the release-asset check. The same gates run locally in §8, so a green local run is the same work CI does.
+- **CI lives in `.github/workflows/ci.yml`.** It builds the frontend from the lockfile, runs the `svelte-check` ratchet and `oxlint`, builds the SPA, then `go vet`, `go test ./...`, a clean-tree build, the race detector, `gitleaks`, `govulncheck`, the update-manifest check and the end-to-end (Playwright) suite. Most gates have a local equivalent in §8; gitleaks, the manifest check and the e2e suite are the exceptions, so for those CI is the only place they run unless the tools are installed locally.
 - **`make` must be 3.82 or newer.** The Makefile reads `VERSION` with `$(file <VERSION)`, and under 3.81 that expands to empty and embeds an empty version. Every target below works under `sh` and `cmd.exe`, but this one needs the newer Make.
 
 ---
@@ -282,7 +282,7 @@ Use `net/http/httptest` (`NewRecorder`, `NewRequest`, `NewServer`) for endpoints
 
 Unit tests call handlers directly or mount a hand-built router, so they cannot see a regression in the wiring production actually uses. The suite in `internal/integration/` closes that gap: it boots `app.ProvideRouter` (the real middleware stack and route table) on a real HTTP listener against a temporary SQLite database, with every provider call intercepted by a fake `httptest` upstream seeded through `providerConnections.data.baseUrl`. `internal/integration/bootfx/` boots the full fx graph — `DatabaseModule` and `ServerModule` included — once, in its own test binary.
 
-1. **Run them with `make test-integration`** (or `go test -tags=integration ./internal/integration/...`). The tag keeps `go test ./...` fast. There is no CI here, so run it locally before calling a routing, auth, account-rotation or usage-accounting change done.
+1. **Run them with `make test-integration`** (or `go test -tags=integration ./internal/integration/...`). The tag keeps `go test ./...` fast. CI does not run this suite either (same build tag), so run it locally before calling a routing, auth, account-rotation or usage-accounting change done.
 2. **Use the harness helpers, never raw setup.** `newProviderEnv(t)` is the common fixture: an `Env` with one DeepSeek connection aimed at a fake upstream. `newEnv(t)` is the bare gateway. Both open the database, apply the real schema bootstrap and seed a client API key; `newEnv` also pins the token savers off so upstream payloads stay comparable byte for byte. Add connections with `env.AddConnection(t, ...)` and combos with `env.AddCombo(t, ...)`.
 3. **Every helper takes the running test as its first argument.** `Env` holds no `*testing.T`: capturing the parent would make a failing `t.Run` call `FailNow` on the parent from the subtest's goroutine, which the `testing` package reports as "subtest may have called FailNow on a parent test" and attributes to the wrong line.
 4. **Never let a test reach the network.** A provider must be an `env.NewUpstream(t, ...)` fake, and the fake must assert what the gateway sent (`upstream.Last(t).Model(t)`, `.Header`). `AddConnection` reads the stored row back and fails when the fake URL did not persist, because an empty `data.baseUrl` falls through to the real provider URL from `providers.KnownProviders`. No real provider credential may be required for the suite to pass.
@@ -505,7 +505,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1
 cd web; bun run build; cd ..
 
 # Gateway — version + tracked-upstream baselines are embedded through ldflags
-go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.3" -o nox9go.exe ./cmd/nox9go/
+go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go.exe ./cmd/nox9go/
 
 # Tray — -H=windowsgui is mandatory, otherwise a console window flashes
 go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
@@ -527,14 +527,14 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 ### 7.4 Changelog & version (personal fork)
 
-- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the current version   heading (`## [1.0.3]`). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
+- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the topmost version heading (`## [1.0.6]` today). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
 - Bump `VERSION` (and `version.json` `latestVersion`) by hand when cutting a new personal version, then rebuild with the ldflags above.
 - `GET /api/changelog` serves that file.
 - **Publish the release so the dashboard's update button can install it.** The gateway reads the manifest at `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` and, when that manifest carries no `sha256`, falls back to the GitHub Releases API. Both channels are anonymous, so the repository has to be public. The installer refuses to replace the running binary without a digest (`internal/updater/updater.go`), so a release needs the binary **and** a `SHA256SUMS.txt` listing it, and `version.json` has to carry the asset's `downloadUrl` and `sha256` for the manifest channel to answer on its own:
 
   ```powershell
   # 1. release build — the asset name must carry OS and arch, the updater selects by name
-  go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.3 ..." -o nox9go-windows-amd64.exe ./cmd/nox9go/
+  go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION) ..." -o nox9go-windows-amd64.exe ./cmd/nox9go/
   go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
 
   # 2. digest, in sha256sum format
@@ -543,7 +543,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
     Set-Content SHA256SUMS.txt -Encoding ascii
 
   # 3. the release (reuses the tag if it already exists)
-  gh release create v1.0.3 nox9go-windows-amd64.exe nox9go-tray.exe SHA256SUMS.txt --title "v1.0.3 — ..." --notes-file notes.md
+  gh release create "v$(cat VERSION)" nox9go-windows-amd64.exe nox9go-tray.exe SHA256SUMS.txt --title "v$(cat VERSION) — ..." --notes-file notes.md
 
   # 4. the manifest: downloadUrl + sha256 of the asset, committed to main
   ```
@@ -554,7 +554,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 - **Everything lands on `main`.** There is no `dev` branch and no PR flow; changes are committed to `main` directly.
 - **Never commit unless asked.** When asked, inspect `git status` / `git diff`, stage only the intended files, write a Conventional Commit message, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
-- **Tags**: `v1.0.0`, `v1.0.1`, `v1.0.2` and `v1.0.3`. The 80 upstream tags were purged on purpose.
+- **Tags**: `v1.0.0` through `v1.0.6`. The 80 upstream tags were purged on purpose.
 
 ### 7.6 Syncing a feature from upstream
 
@@ -567,7 +567,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 ---
 
-## 8. Verification Gates (local — there is no CI)
+## 8. Verification Gates (local)
 
 Run what the change touches. Quote the observed result.
 
@@ -593,6 +593,12 @@ make vet-svelte
 # Linters (not installed as binaries here; run them on demand)
 bunx oxlint --deny-warnings --cwd web
 go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+# Update-manifest check (what the updater trusts; CI runs the same)
+bun scripts/gen-version-manifest.mjs --check
+
+# End-to-end suite (real gateway + Playwright; browsers need `bunx playwright install --with-deps chromium` once)
+cd web; bun run e2e
 
 # Embedded asset contract (compression variants, font origin, icon budget)
 go test ./web/...
@@ -633,7 +639,7 @@ if (-not (Test-Path web/dist/index.html)) { New-Item -ItemType Directory -Force 
 | Run the unit tests | `go test ./...` |
 | Run the integration suite | `go test -tags=integration ./internal/integration/...` |
 | Build the dashboard SPA | `cd web; bun run build` |
-| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=1.0.3" -o nox9go.exe ./cmd/nox9go/` |
+| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go.exe ./cmd/nox9go/` |
 | Build the tray | `go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/` |
 | Start everything | `powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1` |
 | Stop everything | `Stop-Process -Name "nox9go","nox9go-tray" -Force -ErrorAction SilentlyContinue` |
