@@ -595,6 +595,9 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 			}
 
 			var entrySuccess bool
+			// entry429 counts consecutive 429s within this model entry's
+			// connAttempt loop — mirrors the same cap in handleAccountFallback.
+			entry429 := 0
 			// Try up to 10 connections for this model entry
 			for connAttempt := 0; connAttempt < 10; connAttempt++ {
 				var connID string
@@ -809,6 +812,22 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 							// In combo loops, fail over immediately to the next connection/model without blocking the client turn
 							log.Info("combo", "transient failover skip", "status", ue.StatusCode, "provider", modelInfo.Provider, "conn", connID)
 						}
+						// A run of 429s across different connections is a quota
+						// fact about the provider, not about any individual key.
+						// Stop walking after the cap: continuing only locks more
+						// healthy accounts on the same cooldown for no gain.
+						if ue.StatusCode == http.StatusTooManyRequests {
+							entry429++
+							if entry429 >= maxConsecutive429PerTurn {
+								log.Warn("combo", "429 on consecutive connections, stopping entry walk",
+									"provider", modelInfo.Provider, "model", modelInfo.Model, "accounts", entry429)
+								retry.note(ue)
+								lastErr = ue
+								break
+							}
+						} else {
+							entry429 = 0
+						}
 						retry.note(ue)
 						lastErr = ue
 						if isKnownNoAuth {
@@ -932,6 +951,9 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 			}
 
 			var entrySuccess bool
+			// entry429 counts consecutive 429s within this model entry's
+			// connAttempt loop — mirrors the same cap in handleAccountFallback.
+			entry429 := 0
 			// Try up to 10 connections for this model entry
 			for connAttempt := 0; connAttempt < 10; connAttempt++ {
 				var connID string
@@ -1120,6 +1142,22 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 						if ue.StatusCode == http.StatusServiceUnavailable || ue.StatusCode == http.StatusBadGateway || ue.StatusCode == http.StatusGatewayTimeout {
 							// In combo loops, fail over immediately to the next connection/model without blocking the client turn
 							log.Info("combo", "transient failover skip", "status", ue.StatusCode, "provider", modelInfo.Provider, "conn", connID)
+						}
+						// A run of 429s across different connections is a quota
+						// fact about the provider, not about any individual key.
+						// Stop walking after the cap: continuing only locks more
+						// healthy accounts on the same cooldown for no gain.
+						if ue.StatusCode == http.StatusTooManyRequests {
+							entry429++
+							if entry429 >= maxConsecutive429PerTurn {
+								log.Warn("combo", "429 on consecutive connections, stopping entry walk",
+									"provider", modelInfo.Provider, "model", modelInfo.Model, "accounts", entry429)
+								retry.note(ue)
+								lastErr = ue
+								break
+							}
+						} else {
+							entry429 = 0
 						}
 						retry.note(ue)
 						lastErr = ue
