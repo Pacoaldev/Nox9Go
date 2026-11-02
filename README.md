@@ -38,8 +38,9 @@ Mantiene compatibilidad con el formato de API y la base de datos SQLite del proy
 ### Requisitos
 
 - Go 1.27
-- Bun 1.x, solo para compilar el dashboard
+- Bun 1.4.x (se pin a 1.4.4 en `web/bun.lock`; otro major rechaza el lockfile y lo reescribe), solo para compilar el dashboard
 - Un puerto libre, por defecto `20130`
+- GNU Make 3.82 o superior (`make` lee `VERSION` con `$(file <VERSION)`, que en versiones anteriores se expande vacío)
 
 ### Compilar y arrancar
 
@@ -59,10 +60,10 @@ Abre el panel:
 http://localhost:20130
 ```
 
-La contraseña inicial es:
+La contraseña inicial se genera **aleatoriamente en el primer arranque** (24 caracteres) y se imprime **una sola vez** en la salida del gateway. El primer login con ella obliga a cambiarla (`403 mustChangePassword`). Si no la ves, busca en el log del gateway o configúrala tú con `INITIAL_PASSWORD`:
 
 ```text
-123456
+INITIAL_PASSWORD=mipassword
 ```
 
 ### Conectar una herramienta
@@ -130,6 +131,7 @@ En lugar de apuntar cada herramienta a un proveedor distinto, todas apuntan a NO
 | Función | Descripción |
 |---|---|
 | **RTK** | Comprime salidas de herramientas como `git diff`, `grep`, `ls` o `tree` antes de enviarlas al modelo. Activado por defecto. |
+| **Headroom** | Detiene la generación cuando la respuesta supera el umbral de tokens configurado. |
 | **Caveman** | Reduce la verbosidad de las respuestas conservando el contenido técnico. |
 | **Ponytail** | Favorece código mínimo, directo y orientado a YAGNI. |
 | **ADHD** | Prioriza respuestas orientadas a la siguiente acción. |
@@ -267,7 +269,16 @@ glm/glm-4.6
 | `nox9go restart` | Reinicia el gateway |
 | `nox9go status` | Muestra estado, PID, panel y logs |
 | `nox9go logs -n 100` | Muestra las últimas 100 líneas de log |
+| `nox9go rtk` | Activa o desactiva RTK |
+| `nox9go caveman` | Activa el estilo Caveman |
+| `nox9go ponytail` | Activa el estilo Ponytail |
+| `nox9go adhd` | Activa el estilo ADHD |
+| `nox9go auto-update` | Activa o desactiva las actualizaciones automáticas |
+| `nox9go no-injection-guard` | Activa o desactiva la protección contra prompt injection |
+| `nox9go update` | Comprueba e instala actualizaciones del gateway |
+| `nox9go status --json` | Devuelve el estado en JSON para scripts |
 | `nox9go service install` | Registra el arranque automático |
+| `nox9go service start` / `restart` | Arranca o reinicia el servicio registrado |
 | `nox9go service status` | Consulta el servicio registrado |
 | `nox9go service uninstall` | Elimina el arranque automático |
 | `nox9go version` | Muestra versión, sistema y arquitectura |
@@ -300,7 +311,7 @@ La configuración en ejecución se realiza mediante variables de entorno.
 |---|---|---|
 | `PORT` | `20130` | Puerto HTTP del gateway |
 | `HOST` | Localhost | Interfaz de escucha |
-| `DATA_DIR` | `~/.nox9go` | Directorio de datos |
+| `DATA_DIR` | `%APPDATA%\nox9go` (Windows) / `~/.nox9go` (resto) | Directorio de datos |
 | `DB_PATH` | `DATA_DIR/db/data.sqlite` | Ruta de la base SQLite |
 | `RTK_ENABLED` | `true` | Activa o desactiva RTK |
 | `CAVEMAN_ENABLED` | `false` | Activa el estilo Caveman |
@@ -308,6 +319,18 @@ La configuración en ejecución se realiza mediante variables de entorno.
 | `ADHD_ENABLED` | `false` | Activa el estilo ADHD |
 | `INJECTION_GUARD_DISABLED` | `false` | Desactiva la protección contra prompt injection |
 | `AUTO_UPDATE` | `false` | Permite actualizaciones automáticas |
+| `INITIAL_PASSWORD` | aleatoria en primer arranque | Contraseña del panel; si se genera, se imprime una vez y obliga a cambiarla |
+| `JWT_SECRET` | aleatoria y persistida en el data dir | Secreto de firma de la sesiones del panel; úsalo para fijar tu propio valor |
+| `MINIMAX_CODE_SIGN_SECRET` | **requerido** | Necesario para MiniMax Code; sin él la cuenta falla con error claro |
+| `ALLOW_INSECURE_TLS` | `false` | Escape hatch intencional: omite la verificación TLS (no usar en producción) |
+| `ANTIGRAVITY_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Antigravity; los IDs vienen con defaults públicos, los secretos no |
+| `GEMINI_CLI_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Gemini CLI |
+| `XAI_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de xAI / Grok |
+| `CODEX_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de OpenAI Codex |
+| `GITHUB_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de GitHub Copilot |
+| `IFLOW_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de iFlow |
+| `KIMI_CODING_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Kimi |
+| `QWEN_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Qwen |
 
 ---
 
@@ -367,6 +390,13 @@ El proyecto publica dos binarios con funciones distintas:
 
 ---
 
+### Herramientas adicionales
+
+- **Túnel Cloudflare:** expone el gateway temporalmente mediante Cloudflare quick tunnel; habilita, desactiva y consulta su estado desde la CLI o el panel, y guarda el estado en el directorio de datos.
+- **CliToolsView / adaptador Pi:** conecta herramientas de línea de comandos al mismo catálogo de proveedores, cuentas y combos del panel.
+
+---
+
 ## Preguntas frecuentes
 
 ### ¿NOX9GO cobra algo?
@@ -395,7 +425,7 @@ No. Node.js y Bun solo son necesarios para compilar el dashboard desde el códig
 
 NOX9GO habla con cada proveedor por su API oficial siempre que exista una. Pero algunos de los proveedores que ofrece funcionan de otra forma, y conviene saberlo antes de conectarlos y no descubrirlo después:
 
-- **Reutiliza sesiones de navegador.** Para los proveedores que no tienen API pública (por ejemplo `perplexity-web`, `deepseek-web`, `gemini-web`), el gateway puede leer la cookie de sesión de Chrome o Firefox en tu equipo para enviar las peticiones como lo haría el navegador. Eso significa que el proceso puede leer y descifrar el almacén de cookies de tu perfil.
+- **Reutiliza sesiones de navegador.** Para los proveedores que no tienen API pública (por ejemplo `perplexity-web`, `deepseek-web`, `gemini-web`, `chatgpt-web`, `grok-web`, `muse-web` y `uc-web`), el gateway puede leer la cookie de sesión de Chrome o Firefox en tu equipo para enviar las peticiones como lo haría el navegador. Eso significa que el proceso puede leer y descifrar el almacén de cookies de tu perfil.
 - **Imita al cliente oficial.** En varios de estos casos el gateway se presenta ante el servicio con la identidad y la huella de red del cliente o CLI oficial (cabeceras de versión, huella TLS, marcas específicas de cada servicio). Es intencionado: es lo que hace que el servicio acepte la petición.
 - **Esto puede incumplir los términos del servicio.** Muchos proveedores prohíben expresamente el acceso automatizado fuera de su API, o hacerlo con un cliente que no es el suyo. Usado contra un servicio de pago sin autorización, puede además contravenir normas sobre acceso no autorizado en tu jurisdicción.
 
