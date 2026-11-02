@@ -89,6 +89,7 @@ stitch-screenshots/
 /docs/.providers_baseline.tsv
 /docs/proximo.md
 /docs/auditoriaUnificada.md
+*.code-workspace
 # Per-machine tooling: a prompt-filter list that belongs to whoever installed it.
 /.rtk/
 /.atl/
