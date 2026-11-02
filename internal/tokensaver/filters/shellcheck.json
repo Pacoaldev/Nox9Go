@@ -1,0 +1,36 @@
+{
+  "id": "shellcheck",
+  "label": "ShellCheck",
+  "description": "Compact ShellCheck bash/sh script linter output.",
+  "category": "build",
+  "priority": 80,
+  "match": {
+    "outputTypes": [],
+    "commands": ["^shellcheck\\b"],
+    "patterns": ["In \\S+ line \\d+:", "\\^-- SC\\d+:"]
+  },
+  "rules": {
+    "stripAnsi": true,
+    "dropPatterns": ["^\\s*$"],
+    "includePatterns": ["In ", "line ", "\\^-- SC", "error", "warning"],
+    "collapsePatterns": [],
+    "deduplicate": true,
+    "maxLines": 50,
+    "headLines": 25,
+    "tailLines": 25,
+    "onEmpty": "shellcheck: ok"
+  },
+  "preserve": {
+    "errorPatterns": ["error", "SC"],
+    "summaryPatterns": ["In "]
+  },
+  "tests": [
+    {
+      "name": "shellcheck warning sample",
+      "command": "shellcheck",
+      "input": "In script.sh line 3:\nif [[ $1 == \"\" ]]\n     ^-- SC2236: Use -z instead of ! -n.\n",
+      "expected": "In script.sh line 3:\nif [[ $1 == \"\" ]]\n     ^-- SC2236: Use -z instead of ! -n."
+    }
+  ]
+}
+

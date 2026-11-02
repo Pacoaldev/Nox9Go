@@ -109,7 +109,8 @@ func rtkLogBody(lines int, at int, diagnostic string) string {
 	var b strings.Builder
 	for i := range lines {
 		if i == at {
-			b.WriteString(diagnostic + "\n")
+			b.WriteString(diagnostic)
+			b.WriteByte('\n')
 			continue
 		}
 		fmt.Fprintf(&b, "service %d healthy\n", i)

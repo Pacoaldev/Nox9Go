@@ -1,0 +1,42 @@
+{
+  "id": "brew-install",
+  "label": "Homebrew Install",
+  "description": "Strip Homebrew download/pouring noise and summarize.",
+  "category": "package",
+  "priority": 70,
+  "match": {
+    "outputTypes": [],
+    "commands": ["^brew\\s+(install|upgrade)\\b"],
+    "patterns": ["==> Downloading", "==> Pouring", "already installed", "==> Summary"]
+  },
+  "rules": {
+    "stripAnsi": true,
+    "dropPatterns": ["^\\s*$", "^==> Downloading", "^==> Pouring", "^Already downloaded:", "^###", "^==> Fetching"],
+    "matchOutput": [
+      {
+        "pattern": "already installed",
+        "message": "brew: ok (already installed)"
+      }
+    ],
+    "includePatterns": ["==> Summary", "Error:", "Warning:", "brew: ok"],
+    "collapsePatterns": [],
+    "deduplicate": true,
+    "maxLines": 25,
+    "headLines": 10,
+    "tailLines": 15,
+    "onEmpty": "brew: ok"
+  },
+  "preserve": {
+    "errorPatterns": ["Error:", "Warning:"],
+    "summaryPatterns": ["==> Summary"]
+  },
+  "tests": [
+    {
+      "name": "brew already installed",
+      "command": "brew install rtk",
+      "input": "Warning: rtk 0.27.1 is already installed and up-to-date.\n",
+      "expected": "brew: ok (already installed)"
+    }
+  ]
+}
+

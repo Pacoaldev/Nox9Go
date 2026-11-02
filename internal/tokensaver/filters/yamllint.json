@@ -1,0 +1,36 @@
+{
+  "id": "yamllint",
+  "label": "YAML Lint",
+  "description": "Compact yamllint linter output.",
+  "category": "build",
+  "priority": 80,
+  "match": {
+    "outputTypes": [],
+    "commands": ["^yamllint\\b"],
+    "patterns": ["\\s+warning\\s+", "\\s+error\\s+"]
+  },
+  "rules": {
+    "stripAnsi": true,
+    "dropPatterns": ["^\\s*$"],
+    "includePatterns": ["error", "warning", "^\\S+\\.ya?ml$"],
+    "collapsePatterns": [],
+    "deduplicate": true,
+    "maxLines": 50,
+    "headLines": 25,
+    "tailLines": 25,
+    "onEmpty": "yamllint: ok"
+  },
+  "preserve": {
+    "errorPatterns": ["error"],
+    "summaryPatterns": ["warning"]
+  },
+  "tests": [
+    {
+      "name": "yamllint sample",
+      "command": "yamllint",
+      "input": "config.yml\n  3:1     warning  missing document start\n",
+      "expected": "config.yml\n  3:1     warning  missing document start"
+    }
+  ]
+}
+

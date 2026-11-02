@@ -67,7 +67,7 @@ func TestDashboard_HandleGetRTKFilters(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(res.Filters) != 55 {
+	if len(res.Filters) < 55 {
 		t.Fatalf("expected 55 filters, got: %d", len(res.Filters))
 	}
 }

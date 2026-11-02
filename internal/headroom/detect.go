@@ -39,7 +39,7 @@ const (
 )
 
 var (
-	pythonCandNames = []string{"python3.13", "python3.12", "python3.11", "python3.10", "python3", "python"}
+	pythonCandNames = []string{"python3.14", "python3.13", "python3.12", "python3.11", "python3.10", "python3", "python"}
 	// loopbackHosts is the detect.js LOOPBACK_HOSTS set (Go's URL.Hostname()
 	// already strips IPv6 brackets, so "[::1]" maps to "::1" here).
 	loopbackHosts = map[string]bool{"localhost": true, "127.0.0.1": true, "::1": true, "0.0.0.0": true}
@@ -62,6 +62,7 @@ func extraBinDirs() []string {
 	dirs := []string{
 		"/usr/local/bin",
 		"/opt/homebrew/bin",
+		"/Library/Frameworks/Python.framework/Versions/3.14/bin",
 		"/Library/Frameworks/Python.framework/Versions/3.13/bin",
 		"/Library/Frameworks/Python.framework/Versions/3.12/bin",
 		"/Library/Frameworks/Python.framework/Versions/3.11/bin",

@@ -400,6 +400,7 @@ f6e5d4c3b2a1   redis:7-alpine "docker-entrypoint.s…"   2 hours ago     Up 2 ho
           maxChars: rtkMaxChars,
           deduplicate: rtkDeduplicate,
           categories: rtkCategories,
+          filters: rtkFilters,
           rawRetention: rtkRawRetention,
         },
       })
@@ -890,7 +891,7 @@ f6e5d4c3b2a1   redis:7-alpine "docker-entrypoint.s…"   2 hours ago     Up 2 ho
     {/if}
   </div>
 
-  <Card id="rtk">
+  <Card>
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-lg font-semibold flex items-center gap-2">
         <span class="material-symbols-outlined text-primary">bolt</span>
@@ -1069,7 +1070,7 @@ f6e5d4c3b2a1   redis:7-alpine "docker-entrypoint.s…"   2 hours ago     Up 2 ho
             <div class="space-y-3">
               <div class="flex items-center justify-between">
                 <div>
-                  <p class="text-xs font-medium text-text-main">Granular Filter Controls (55 Filters)</p>
+                  <p class="text-xs font-medium text-text-main">Granular Filter Controls ({rtkFiltersList.length || 60} Filters)</p>
                   <p class="text-[11px] text-text-muted">Configure active OmniRoute rules per category or toggle individual tool filters</p>
                 </div>
                 {#if rtkFiltersLoading}
@@ -1082,9 +1083,9 @@ f6e5d4c3b2a1   redis:7-alpine "docker-entrypoint.s…"   2 hours ago     Up 2 ho
 
               {#each [
                 { key: 'git', label: 'Git Commands', desc: 'git diff, status, log, branch' },
-                { key: 'build', label: 'Compilers & Build', desc: 'tsc, eslint, vite, webpack, go, gradle, make, nx, turbo, ruff, biome' },
+                { key: 'build', label: 'Compilers & Build', desc: 'tsc, eslint, oxlint, vite, webpack, go, gradle, make, nx, turbo, ruff, biome, shellcheck, markdownlint, yamllint' },
                 { key: 'test', label: 'Test Runners', desc: 'jest, vitest, pytest, go test, cargo test, playwright' },
-                { key: 'package', label: 'Package Managers', desc: 'npm, pnpm, pip, poetry, uv, bundle, composer' },
+                { key: 'package', label: 'Package Managers', desc: 'npm, pnpm, pip, poetry, uv, bundle, composer, brew' },
                 { key: 'docker', label: 'Cloud & Containers', desc: 'docker, kubectl, aws, gcloud, gh, terraform, tofu, rsync, curl, wget' },
                 { key: 'system', label: 'System Tools', desc: 'ls, ps, df, du, find, grep, stacktraces, json, generic' }
               ] as group}
@@ -1997,7 +1998,7 @@ f6e5d4c3b2a1   redis:7-alpine "docker-entrypoint.s…"   2 hours ago     Up 2 ho
       </p>
     {:else if !headroomStatus.python}
       <p class="text-sm text-warning">
-        Python ≥ 3.10 required for local managed mode. Install Python first, or use an external proxy URL.
+        Python ≥ 3.11 required for local managed mode. Install Python first, or use an external proxy URL.
       </p>
     {:else}
       <div class="flex flex-col gap-1">

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.6] - 2026-11-02
+
+Token Saver upstream updates and audit across RTK, Headroom, Caveman, and ADHD modules.
+
+### Token Saver
+
+- **RTK tool compression filters.** Ported five new command compactors from upstream rtk-ai/rtk (oxlint, shellcheck, markdownlint, yamllint, brew-install), bringing the embedded catalog from 55 to 60 filters.
+- **RTK live test bench filter selection.** Fixed the test bench payload in the dashboard so tests execute against the user selected active filters rather than defaulting to all.
+- **Headroom Python 3.14 support.** Added python3.14 to candidate binaries and framework search paths. Updated dashboard guidance to reflect headroom-ai v0.42.0 requiring Python >= 3.11.
+- **Caveman negation protection.** Added upstream safety floor across Lite, Full, and Ultra prompts to preserve negation words (not, never, no, only) and avoid loss of negative intent during compression.
+- **ADHD debug spiral escape hatch.** Added the upstream rule to the Full prompt to break infinite retry loops after three consecutive failed attempts by stating the unproven assumption and asking a diagnostic question.
+
+### Fixes
+
+- **Token Saver view card property.** Removed non-standard id attribute on the Svelte Card component.
+- **Linter cleanups.** Fixed inefficient string concatenation in RTK regression tests.
+
 ## [1.0.5] - 2026-10-31
 
 Seven new providers imported from the 9router-go and 9router upstream registries: SenseNova, RunCrate, Nace, and four web-based providers (ChatGPT Web, Muse Web, UC Web, Veo AI Free).

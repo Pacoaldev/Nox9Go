@@ -1,0 +1,36 @@
+{
+  "id": "markdownlint",
+  "label": "Markdownlint",
+  "description": "Compact Markdownlint document linter output.",
+  "category": "build",
+  "priority": 80,
+  "match": {
+    "outputTypes": [],
+    "commands": ["^markdownlint\\b", "^npx\\s+markdownlint\\b"],
+    "patterns": ["MD\\d{3}/", "markdownlint"]
+  },
+  "rules": {
+    "stripAnsi": true,
+    "dropPatterns": ["^\\s*$"],
+    "includePatterns": ["MD\\d{3}", "error", "warning"],
+    "collapsePatterns": [],
+    "deduplicate": true,
+    "maxLines": 50,
+    "headLines": 25,
+    "tailLines": 25,
+    "onEmpty": "markdownlint: ok"
+  },
+  "preserve": {
+    "errorPatterns": ["error", "MD\\d{3}"],
+    "summaryPatterns": ["MD\\d{3}"]
+  },
+  "tests": [
+    {
+      "name": "markdownlint sample",
+      "command": "markdownlint",
+      "input": "README.md:1:1 MD041/first-line-heading First line should be h1\n",
+      "expected": "README.md:1:1 MD041/first-line-heading First line should be h1"
+    }
+  ]
+}
+

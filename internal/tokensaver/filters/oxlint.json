@@ -1,0 +1,36 @@
+{
+  "id": "oxlint",
+  "label": "Oxlint",
+  "description": "Compact Oxlint JS/TS linter output.",
+  "category": "build",
+  "priority": 80,
+  "match": {
+    "outputTypes": [],
+    "commands": ["^oxlint\\b", "^npx\\s+oxlint\\b", "^bunx\\s+oxlint\\b"],
+    "patterns": ["Finished in \\d+", "Found \\d+ warning", "oxlint"]
+  },
+  "rules": {
+    "stripAnsi": true,
+    "dropPatterns": ["^\\s*$", "^Finished in \\d+", "^Found \\d+ warning"],
+    "includePatterns": ["error", "warning", "✖", "×", "^\\s*[╭│╰]"],
+    "collapsePatterns": [],
+    "deduplicate": true,
+    "maxLines": 50,
+    "headLines": 25,
+    "tailLines": 25,
+    "onEmpty": "oxlint: ok"
+  },
+  "preserve": {
+    "errorPatterns": ["error", "✖", "×"],
+    "summaryPatterns": ["Found", "Finished"]
+  },
+  "tests": [
+    {
+      "name": "oxlint warning sample",
+      "command": "oxlint",
+      "input": "  × eslint(no-console): Unexpected console statement.\n   ╭─[src/app.ts:5:3]\n 5 │   console.log(\"debug\");\n   ╰────\nFinished in 12ms on 100 files.\n",
+      "expected": "  × eslint(no-console): Unexpected console statement.\n   ╭─[src/app.ts:5:3]\n 5 │   console.log(\"debug\");\n   ╰────"
+    }
+  ]
+}
+

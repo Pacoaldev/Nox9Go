@@ -1,11 +1,11 @@
 {
-  "latestVersion": "1.0.5",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.5/nox9go-windows-amd64.exe",
+  "latestVersion": "1.0.6",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.6/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.5/nox9go-windows-amd64.exe"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.6/nox9go-windows-amd64.exe"
   },
   "sha256": {
-    "windows_amd64": "65a16a74393dbffa6d2fb635c90855a95dc9aa24b2b9cbcb3b29b2324504a2e9"
+    "windows_amd64": "c59ae3523c36ff03af595fb275d7066ce70bfdeb4514a57a1f298f5168b027e2"
   },
-  "releaseNotes": "NOX9GO 1.0.5 — seven new providers imported from 9router-go and 9router upstream: SenseNova, RunCrate, Nace, ChatGPT Web, Muse Web, UC Web, Veo AI Free."
+  "releaseNotes": "NOX9GO 1.0.6 — Token Saver upstream updates and audit across RTK, Headroom, Caveman, and ADHD modules."
 }
