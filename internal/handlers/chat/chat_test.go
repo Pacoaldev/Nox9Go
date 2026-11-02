@@ -717,6 +717,10 @@ func TestResolveProviderAlias(t *testing.T) {
 		{"oa", "openai"},
 		{"deepseek", "deepseek"},
 		{"unknown-provider", "unknown-provider"},
+		{"nara", "nararouter"},
+		{"nanarouter", "nararouter"},
+		{"bynara", "nararouter"},
+		{"nararouter", "nararouter"},
 	}
 
 	for _, tt := range tests {
@@ -1520,5 +1524,39 @@ func TestLogFailurePersistsSingleSanitizedError(t *testing.T) {
 	}
 	if status != "error" {
 		t.Fatalf("status = %q, want error", status)
+	}
+}
+
+func TestResolveModel_NaraRouter(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+
+	repo := db.NewRepo(database)
+	handler := NewChatHandler(repo)
+
+	tests := []struct {
+		input        string
+		wantProvider string
+		wantModel    string
+	}{
+		{"nara/laguna-s-2.1", "nararouter", "laguna-s-2.1"},
+		{"nanarouter/laguna-s-2.1", "nararouter", "laguna-s-2.1"},
+		{"nararouter/laguna-s-2.1", "nararouter", "laguna-s-2.1"},
+		{"bynara/laguna-s-2.1", "nararouter", "laguna-s-2.1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			info, err := handler.ResolveModel(tt.input)
+			if err != nil {
+				t.Fatalf("ResolveModel(%q) failed: %v", tt.input, err)
+			}
+			if info.Provider != tt.wantProvider {
+				t.Errorf("Provider = %q, want %q", info.Provider, tt.wantProvider)
+			}
+			if info.Model != tt.wantModel {
+				t.Errorf("Model = %q, want %q", info.Model, tt.wantModel)
+			}
+		})
 	}
 }

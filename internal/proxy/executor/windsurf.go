@@ -252,20 +252,22 @@ func wsDecodeDoneChunk(buf []byte) (int, int) {
 		off = o
 		fieldNum := int(tag >> 3)
 		wireType := int(tag & 0x07)
-		if wireType == 0 {
+		switch wireType {
+		case 0:
 			v, o := wsReadVarint(usage, off)
 			off = o
-			if fieldNum == 1 {
+			switch fieldNum {
+			case 1:
 				prompt = int(v)
-			} else if fieldNum == 2 {
+			case 2:
 				completion = int(v)
 			}
-		} else if wireType == 2 {
+		case 2:
 			ln, o := wsReadVarint(usage, off)
 			off = o
 			off += int(ln)
-		} else {
-			break
+		default:
+			return prompt, completion
 		}
 	}
 	return prompt, completion

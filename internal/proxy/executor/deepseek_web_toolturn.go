@@ -99,18 +99,6 @@ func deepSeekAccumulate(upstream io.Reader) (*deepSeekStreamAccumulator, error) 
 	return accumulator, nil
 }
 
-// deepSeekToolPlainText returns the answer with the tool-call scaffolding
-// removed when there is one, so the fallback prose path does not show the user a
-// raw JSON object the extractor merely rejected for a trivial reason.
-func deepSeekToolPlainText(accumulator *deepSeekStreamAccumulator) string {
-	return deepSeekStripToolScaffold(accumulator.contentText())
-}
-
-// deepSeekWriteToolCall answers with an OpenAI tool_calls message, keeping any
-// text the model wrote around the calls.
-func deepSeekWriteToolCall(w http.ResponseWriter, req *Request, model string, call deepSeekToolRequest, preamble string) error {
-	return deepSeekWriteToolCalls(w, req, model, []deepSeekToolRequest{call}, preamble)
-}
 
 // deepSeekWriteToolCalls answers with an OpenAI tool_calls message.
 func deepSeekWriteToolCalls(w http.ResponseWriter, req *Request, model string, calls []deepSeekToolRequest, preamble string) error {

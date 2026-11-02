@@ -481,28 +481,6 @@ func codexUsageMap(resp map[string]any) map[string]any {
 	return chunkUsage
 }
 
-// toolCallIndex returns the OpenAI tool-call id + index for a Codex event.
-// It uses the upstream call_id (falling back to a stable fabricated id) and
-// assigns an index on first sight, so all fragments of one call share them.
-func toolCallIndex(state *CodexStreamState, event map[string]any) (string, int) {
-	if state.ToolCallIdx == nil {
-		state.ToolCallIdx = make(map[string]int)
-	}
-	id, _ := event["call_id"].(string)
-	if id == "" {
-		id = state.CurrentToolCallID
-	}
-	if id == "" {
-		id = fmt.Sprintf("call_%d", state.ToolCallCount)
-	}
-	if idx, ok := state.ToolCallIdx[id]; ok {
-		return id, idx
-	}
-	idx := state.ToolCallCount
-	state.ToolCallIdx[id] = idx
-	state.ToolCallCount++
-	return id, idx
-}
 
 func handleCodexStream(w http.ResponseWriter, req *Request, upstream io.Reader) error {
 	responseID := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
@@ -646,7 +624,7 @@ func handleCodexStream(w http.ResponseWriter, req *Request, upstream io.Reader) 
 
 		// Finish stream
 		if !state.Completed {
-			finishChunk := []byte(fmt.Sprintf("data: %s\n\n", fmt.Sprintf(`{"id":"%s","object":"chat.completion.chunk","created":%d,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`, responseID, created)))
+			finishChunk := fmt.Appendf(nil, "data: %s\n\n", fmt.Sprintf(`{"id":"%s","object":"chat.completion.chunk","created":%d,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`, responseID, created))
 			if translated, terr := translator.TranslateOpenAIToClaudeStreamSession(sessionKey, finishChunk); terr == nil && translated != nil {
 				hw.Write(translated)
 			}
@@ -790,7 +768,7 @@ func writeSSEFinish(w http.ResponseWriter, flusher http.Flusher, req *Request, s
 			}},
 		}
 		if b, err := json.Marshal(chunk); err == nil {
-			if _, werr := w.Write([]byte(fmt.Sprintf("data: %s\n\n", string(b)))); werr != nil {
+			if _, werr := w.Write(fmt.Appendf(nil, "data: %s\n\n", b)); werr != nil {
 				return werr
 			}
 		}
@@ -843,7 +821,7 @@ func writeSSE(w io.Writer, data any) error {
 	if err != nil {
 		return fmt.Errorf("writeSSE marshal: %w", err)
 	}
-	if _, err := w.Write([]byte(fmt.Sprintf("data: %s\n\n", string(b)))); err != nil {
+	if _, err := w.Write(fmt.Appendf(nil, "data: %s\n\n", b)); err != nil {
 		return err
 	}
 	return nil
@@ -1214,7 +1192,7 @@ func handleCommandcodeStream(w http.ResponseWriter, req *Request, upstream io.Re
 
 		flusher, _ := w.(http.Flusher)
 		for _, chunk := range chunks {
-			if _, err := w.Write([]byte(fmt.Sprintf("data: %s\n\n", chunk))); err != nil {
+			if _, err := w.Write(fmt.Appendf(nil, "data: %s\n\n", chunk)); err != nil {
 				return err
 			}
 			if flusher != nil {
@@ -1234,7 +1212,7 @@ func handleCommandcodeStream(w http.ResponseWriter, req *Request, upstream io.Re
 	flusher, _ := w.(http.Flusher)
 	if !state.Finished {
 		finishChunk := BuildCommandcodeChunk(state, map[string]any{}, "stop")
-		if _, err := w.Write([]byte(fmt.Sprintf("data: %s\n\n", finishChunk))); err != nil {
+		if _, err := w.Write(fmt.Appendf(nil, "data: %s\n\n", finishChunk)); err != nil {
 			return err
 		}
 	}

@@ -59,16 +59,20 @@ func patternOf(i int) string {
 func BenchmarkPatternMatchIndexed(b *testing.B) {
 	models := registryModelSamples()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	i := 0
+	for b.Loop() {
 		indexedPatternFirstMatch(models[i%len(models)])
+		i++
 	}
 }
 
 func BenchmarkPatternMatchLinear(b *testing.B) {
 	models := registryModelSamples()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	i := 0
+	for b.Loop() {
 		oldPatternFirstMatch(models[i%len(models)])
+		i++
 	}
 }
 

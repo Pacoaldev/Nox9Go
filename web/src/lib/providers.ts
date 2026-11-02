@@ -1,4 +1,3 @@
-// Auto-generated provider catalog matching upstream 9router
 export interface ProviderCatalogItem {
   id: string
   name: string
@@ -1792,7 +1791,8 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "color": "#F59E0B",
     "icon": "route",
     "website": "https://router.bynara.id",
-    "notice": {"text":"OpenAI-compatible router. Free tier, no card required.","apiKeyUrl":"https://router.bynara.id"},
+    "notice": {"text":"OpenAI-compatible router. Free tier (7M tokens/day), no card required. Key from Telegram @nara_router_bot or router.bynara.id.","apiKeyUrl":"https://router.bynara.id"},
+    "modelsFetcher": {"url": "https://router.bynara.id/v1/models", "type": "openai"},
     "authType": "apikey",
     "noAuth": false,
     "serviceKinds": [

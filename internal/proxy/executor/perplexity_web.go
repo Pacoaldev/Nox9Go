@@ -138,7 +138,7 @@ func pplxStatusError(resp *http.Response) error {
 
 // pplxFoldCompletion consumes a whole event stream and folds it into one
 // chat.completion.
-func pplxFoldCompletion(ctx context.Context, req *Request, upstream io.Reader) (*pplxCompletion, error) {
+func pplxFoldCompletion(_ context.Context, req *Request, upstream io.Reader) (*pplxCompletion, error) {
 	acc := newPplxAccumulator(req)
 	if err := scanPplxEvents(upstream, acc.apply); err != nil {
 		return nil, fmt.Errorf("perplexity-web: read stream: %w", err)

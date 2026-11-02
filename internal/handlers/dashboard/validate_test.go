@@ -845,3 +845,12 @@ func TestHandleValidateProvider_Nous(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateDefaultModel_NaraRouter(t *testing.T) {
+	if got := validateDefaultModel("nararouter"); got != "laguna-s-2.1" {
+		t.Errorf("validateDefaultModel(nararouter) = %q, want laguna-s-2.1", got)
+	}
+	if got := validateDefaultModel("nara"); got != "laguna-s-2.1" {
+		t.Errorf("validateDefaultModel(nara) = %q, want laguna-s-2.1", got)
+	}
+}

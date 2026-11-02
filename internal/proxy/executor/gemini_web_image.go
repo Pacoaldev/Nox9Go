@@ -469,11 +469,17 @@ func (s *geminiWebSession) uploadResumable(ctx context.Context, image geminiWebI
 // posts.
 func geminiWebMultipartBody(boundary string, image geminiWebImage) string {
 	var b strings.Builder
-	b.WriteString("--" + boundary + "\r\n")
-	b.WriteString("Content-Disposition: form-data; name=\"file\"; filename=\"" + image.Name + "\"\r\n")
-	b.WriteString("Content-Type: " + image.MIME + "\r\n\r\n")
+	b.WriteString("--")
+	b.WriteString(boundary)
+	b.WriteString("\r\nContent-Disposition: form-data; name=\"file\"; filename=\"")
+	b.WriteString(image.Name)
+	b.WriteString("\"\r\nContent-Type: ")
+	b.WriteString(image.MIME)
+	b.WriteString("\r\n\r\n")
 	b.Write(image.Data)
-	b.WriteString("\r\n--" + boundary + "--\r\n")
+	b.WriteString("\r\n--")
+	b.WriteString(boundary)
+	b.WriteString("--\r\n")
 	return b.String()
 }
 

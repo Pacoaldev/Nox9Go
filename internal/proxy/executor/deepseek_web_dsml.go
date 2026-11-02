@@ -301,7 +301,3 @@ func deepSeekStripDSML(text string) string {
 	return text
 }
 
-// deepSeekDSMLInvokeCount reports how many invokes an answer carries, for the log.
-func deepSeekDSMLInvokeCount(text string) int {
-	return len(deepSeekDSMLInvokeOpen.FindAllStringIndex(text, -1))
-}

@@ -1697,9 +1697,7 @@ func ForwardOpencodeGo(w http.ResponseWriter, req *Request) error {
 			cfg.StaticHeaders = headersCopy
 		} else if !strings.HasSuffix(cfg.BaseURL, "/responses") {
 			baseURL := strings.TrimRight(cfg.BaseURL, "/")
-			if strings.HasSuffix(baseURL, "/chat/completions") {
-				baseURL = strings.TrimSuffix(baseURL, "/chat/completions")
-			}
+			baseURL = strings.TrimSuffix(baseURL, "/chat/completions")
 			cfg.BaseURL = baseURL + "/responses"
 		}
 		headers := make(map[string]string)
@@ -1750,9 +1748,7 @@ func ForwardOpencodeGo(w http.ResponseWriter, req *Request) error {
 		messagesURL := "https://opencode.ai/zen/go/v1/messages"
 		if req.Config != nil && req.Config.BaseURL != "" && !strings.Contains(req.Config.BaseURL, "opencode.ai") {
 			base := strings.TrimRight(req.Config.BaseURL, "/")
-			if strings.HasSuffix(base, "/chat/completions") {
-				base = strings.TrimSuffix(base, "/chat/completions")
-			}
+			base = strings.TrimSuffix(base, "/chat/completions")
 			messagesURL = base + "/messages"
 		}
 		headers := map[string]string{

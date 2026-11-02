@@ -97,6 +97,8 @@ export const PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "tinyfish": "tinyfish",
   "morph": "morph",
   "nanobanana": "nb",
+  "nararouter": "nara",
+  "nara": "nara",
   "nebius": "nebius",
   "nvidia": "nvidia",
   "ollama": "ollama",
@@ -3458,6 +3460,20 @@ export const BUILTIN_MODELS_BY_PROVIDER: Record<string, ProviderModel[]> = {
       ],
       "kind": "image"
     }
+  ],
+  "nararouter": [
+    { "id": "laguna-s-2.1", "name": "Laguna S 2.1", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
+    { "id": "stepfun-3.7-flash", "name": "StepFun 3.7 Flash", "contextLength": 262144, "capabilities": ["tools"] },
+    { "id": "step-5-preview", "name": "Step 5 Preview", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
+    { "id": "gpt-5.6-luna", "name": "GPT 5.6 Luna", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
+    { "id": "gpt-5.6-sol", "name": "GPT 5.6 Sol", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
+    { "id": "gpt-5.6-terra", "name": "GPT 5.6 Terra", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
+    { "id": "agnes-2.0-flash", "name": "Agnes 2.0 Flash", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
+    { "id": "agnes-2.5-flash", "name": "Agnes 2.5 Flash", "contextLength": 524288, "capabilities": ["reasoning", "tools"] },
+    { "id": "minimax-m3-free", "name": "MiniMax M3 Free", "contextLength": 1000000, "capabilities": ["reasoning"] },
+    { "id": "mistral-large", "name": "Mistral Large", "contextLength": 252000, "capabilities": ["tools"] },
+    { "id": "mistral-medium-3-5", "name": "Mistral Medium 3.5", "contextLength": 256000, "capabilities": ["tools"] },
+    { "id": "qwen3.8-27b", "name": "Qwen 3.8 27B", "capabilities": ["tools"] }
   ],
   "daoxe": [
     { "id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6" },

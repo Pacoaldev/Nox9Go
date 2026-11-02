@@ -154,6 +154,8 @@ var ProviderModels = map[string][]string{
 	"nan":                  {"deepseek-v4-flash", "mimo-v2.5", "mimo-v2.6-flash", "qwen3.8-flash", "qwen3.6", "glm5.3", "glm5.3-flash", "gemma4"},
 	"nanobanana":           {"nanobanana-flash", "nanobanana-pro"},
 	"nb":                   {"nanobanana-flash", "nanobanana-pro"},
+	"nararouter":           {"laguna-s-2.1", "stepfun-3.7-flash", "step-5-preview", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "agnes-2.0-flash", "agnes-2.5-flash", "minimax-m3-free", "mistral-large", "mistral-medium-3-5", "qwen3.8-27b"},
+	"nara":                 {"laguna-s-2.1", "stepfun-3.7-flash", "step-5-preview", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "agnes-2.0-flash", "agnes-2.5-flash", "minimax-m3-free", "mistral-large", "mistral-medium-3-5", "qwen3.8-27b"},
 	"nebius":               {"meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen3-Embedding-8B"},
 	"nous":                 {"meituan/longcat-2.0:free", "meituan/longcat-2.5-preview:free", "stepfun/step-5-preview:free", "upstage/solar-mini4:free", "stepfun/step-3.7-flash:free", "poolside/laguna-s-2.1:free", "poolside/laguna-xs-2.1:free", "stealth/missingno"},
 	"nvidia":               {"minimaxai/minimax-m2.7", "minimaxai/minimax-m3", "z-ai/glm-5.2", "deepseek-ai/deepseek-v4-pro", "deepseek-ai/deepseek-v4-flash", "moonshotai/kimi-k2.6", "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nv-embedqa-e5-v5", "nvidia/parakeet-ctc-1.1b-asr", "fastpitch", "tacotron2"},

@@ -64,7 +64,9 @@ func qoderSSE(chunks ...string) string {
 		if err != nil {
 			continue
 		}
-		b.WriteString("data: " + string(frame) + "\n\n")
+		b.WriteString("data: ")
+		b.Write(frame)
+		b.WriteString("\n\n")
 	}
 	b.WriteString("event:finish\n")
 	b.WriteString("data: {\"firstTokenDuration\":10,\"totalDuration\":20,\"serverDuration\":5}\n\n")

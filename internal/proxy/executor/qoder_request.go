@@ -148,7 +148,7 @@ func qoderStableChatRecordId(model string, messages []any, tools []any, maxToken
 			h.Write(encoded)
 		}
 	}
-	h.Write([]byte(fmt.Sprintf("\x00mt=%d", maxTokens)))
+	h.Write(fmt.Appendf(nil, "\x00mt=%d", maxTokens))
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 

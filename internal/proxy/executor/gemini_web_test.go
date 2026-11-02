@@ -567,10 +567,9 @@ func TestGeminiWebCarriesTheConnectionProxyIntoTheTLSStack(t *testing.T) {
 	// A connection with no pool must yield no proxy, so the direct path is
 	// unchanged rather than accidentally routed somewhere.
 	direct := &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
-	if got := geminiWebProxyFrom(&http.Client{}); got != "" {
+	if got := geminiWebProxyFrom(direct); got != "" {
 		t.Errorf("geminiWebProxyFrom() = %q, want empty for a transport with no proxy", got)
 	}
-	_ = direct
 }
 
 // TestGeminiWebRefusesAModelTheSessionCannotServe proves a model the session does
@@ -1165,7 +1164,9 @@ func geminiWebReasoningFixture(thoughts, answer string) string {
 		payload = append(payload, map[string]any{"40": "cf41b0e0dd7d53e5", "26": "ctx"})
 		encoded, _ := json.Marshal(payload)
 		envelope, _ := json.Marshal([]any{[]any{"wrb.fr", nil, string(encoded)}})
-		sb.WriteString("177\n" + string(envelope) + "\n")
+		sb.WriteString("177\n")
+		sb.Write(envelope)
+		sb.WriteString("\n")
 	}
 	sb.WriteString(`[["e",11,null,null,22118]]` + "\n")
 	return sb.String()

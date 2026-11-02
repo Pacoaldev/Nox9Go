@@ -19,8 +19,11 @@ func deepseekBody(turns int) []byte {
 	var b strings.Builder
 	b.WriteString(`{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"sys"}`)
 	for i := 0; i < turns; i++ {
-		b.WriteString(`,{"role":"assistant","content":"a` + strconv.Itoa(i) + `"}`)
-		b.WriteString(`,{"role":"user","content":"u` + strconv.Itoa(i) + `"}`)
+		b.WriteString(`,{"role":"assistant","content":"a`)
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(`"},{"role":"user","content":"u`)
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(`"}`)
 	}
 	b.WriteString(`]}`)
 	return []byte(b.String())

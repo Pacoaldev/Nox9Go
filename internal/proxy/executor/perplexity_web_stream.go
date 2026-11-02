@@ -417,7 +417,7 @@ func (e *pplxEmitter) writeChunk(delta map[string]any, finishReason any, usage m
 	if err != nil {
 		return fmt.Errorf("perplexity-web: marshal chunk: %w", err)
 	}
-	sseLine := []byte(fmt.Sprintf("data: %s\n\n", string(raw)))
+	sseLine := fmt.Appendf(nil, "data: %s\n\n", raw)
 	if e.claude {
 		translated, terr := translator.TranslateOpenAIToClaudeStreamSession(e.sessionKey, sseLine)
 		if terr != nil {

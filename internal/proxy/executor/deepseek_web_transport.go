@@ -139,7 +139,7 @@ func (t *deepSeekTransport) seedCookie(origin, cookie string) {
 // it holds whatever the site last issued. A header written here would be
 // appended to rather than replaced, sending the name twice — and the site
 // reads the first value, which would be the stale one.
-func (t *deepSeekTransport) do(ctx context.Context, request *fhttp.Request) (*fhttp.Response, error) {
+func (t *deepSeekTransport) do(_ context.Context, request *fhttp.Request) (*fhttp.Response, error) {
 	request.Header.Del("cookie")
 	return t.client.Do(request)
 }

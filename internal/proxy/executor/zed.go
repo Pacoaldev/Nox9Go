@@ -885,7 +885,7 @@ func zedHead(body []byte, n int) string {
 		case b == '\t':
 			out = append(out, '\\', 't')
 		case b < 0x20 || b == 0x7f:
-			out = append(out, []byte(fmt.Sprintf("\\x%02x", b))...)
+			out = fmt.Appendf(out, "\\x%02x", b)
 		default:
 			out = append(out, b)
 		}

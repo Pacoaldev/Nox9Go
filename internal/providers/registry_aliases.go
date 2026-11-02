@@ -61,6 +61,7 @@ var RegistryAliases = map[string]string{
 	"muse":                "muse",
 	"nanobanana":          "nb",
 	"nan":                 "nan",
+	"nararouter":          "nara",
 	"nous":                "nous",
 	"openadapter":         "oad",
 	"opencode":            "oc",

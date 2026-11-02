@@ -201,6 +201,7 @@ var modelsListURL = map[string]string{
 	"gonkabroker": "https://proxy.gonkabroker.com/v1/models",
 	"mixlayer":    "https://mixlayer.ai/v1/models",
 	"nararouter":  "https://router.bynara.id/v1/models",
+	"nara":        "https://router.bynara.id/v1/models",
 	"onomeo":      "https://onomeo.com/v1/models",
 }
 
@@ -1347,6 +1348,11 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthScheme: "bearer",
 	},
 	"nararouter": {
+		BaseURL:    "https://router.bynara.id/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"nara": {
 		BaseURL:    "https://router.bynara.id/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",

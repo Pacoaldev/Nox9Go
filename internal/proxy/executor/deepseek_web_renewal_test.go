@@ -172,7 +172,7 @@ func deepSeekRenewalSetData(t *testing.T, repo *db.Repo, conn *models.ProviderCo
 }
 
 // restoreConn stands the connection lookup in for one connection.
-func restoreConn(t *testing.T, repo *db.Repo, conn *models.ProviderConnection) {
+func restoreConn(t *testing.T, _ *db.Repo, conn *models.ProviderConnection) {
 	t.Helper()
 	original := deepSeekRenewalConn
 	deepSeekRenewalConn = func(_ *db.Repo, id string) (*models.ProviderConnection, error) {

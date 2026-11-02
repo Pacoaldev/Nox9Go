@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -300,12 +299,3 @@ func (s *geminiWebStealthClient) closeIdleConnections() {
 	s.client.CloseIdleConnections()
 }
 
-// geminiWebHeadersDisabled reports whether the stealth stack is turned off.
-//
-// A switch exists because the fingerprint is an assumption about the site's
-// defences, not a measured requirement: anonymous turns were served over plain
-// net/http. If the extra stack ever misbehaves, the provider can be returned to
-// the plain client without a code change.
-func geminiWebHeadersDisabled() bool {
-	return os.Getenv("GEMINI_WEB_PLAIN_HTTP") == "1"
-}

@@ -5,7 +5,6 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	"strings"
-	"time"
 )
 
 // Qoder credential helpers — port of open-sse/shared/qoder/cosy.js
@@ -25,10 +24,6 @@ import (
 // while chat routes them through the proxied transport. One implementation of
 // the exchange, two transports.
 type QoderDoer func(ctx context.Context, method, rawURL string, headers map[string]string, body []byte) (int, []byte, error)
-
-// qoderCredentialTimeout bounds one credential exchange when no doer supplies
-// its own deadline.
-const qoderCredentialTimeout = 20 * time.Second
 
 // qoderProbeUserAgent is what the official CLI announces. Qoder's WAF answers a
 // default Go User-Agent with a bare 403.

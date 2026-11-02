@@ -227,9 +227,9 @@ func deepSeekSettleSession(
 	prompt string,
 	accumulator *deepSeekStreamAccumulator,
 	runErr error,
-	ctx context.Context,
-	turn deepSeekTurn,
-	accessToken string,
+	_ context.Context,
+	_ deepSeekTurn,
+	_ string,
 ) bool {
 	if session.key == "" || !session.claim.pin {
 		return false

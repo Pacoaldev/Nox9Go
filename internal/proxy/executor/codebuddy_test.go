@@ -344,9 +344,13 @@ func TestSSEToOpenAIJSON_NotSSE(t *testing.T) {
 func TestSSEToOpenAIJSON_RepeatedArgumentDeltaAppends(t *testing.T) {
 	parts := []string{`{"cmd":"run `, `run `, `echo done"}`}
 	var sse strings.Builder
-	sse.WriteString(`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_r","type":"function","function":{"name":"run_tool","arguments":"` + escapeJSONArg(parts[0]) + `"}}]}}]}` + "\n\n")
+	sse.WriteString(`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_r","type":"function","function":{"name":"run_tool","arguments":"`)
+	sse.WriteString(escapeJSONArg(parts[0]))
+	sse.WriteString("\"}}]}}]}\n\n")
 	for _, p := range parts[1:] {
-		sse.WriteString(`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"` + escapeJSONArg(p) + `"}}]}}]}` + "\n\n")
+		sse.WriteString(`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"`)
+		sse.WriteString(escapeJSONArg(p))
+		sse.WriteString("\"}}]}}]}\n\n")
 	}
 
 	out, ok := sseToOpenAIJSON([]byte(sse.String()))

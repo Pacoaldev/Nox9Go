@@ -92,6 +92,25 @@ func TestAggregatorProviders(t *testing.T) {
 			aliases:    []string{"nous-portal", "nous-research", "ns"},
 			modelsList: "https://inference-api.nousresearch.com/v1/models", wantFetcher: true,
 		},
+		{
+			id: "nararouter", baseURL: "https://router.bynara.id/v1/chat/completions",
+			models: []string{
+				"laguna-s-2.1",
+				"stepfun-3.7-flash",
+				"step-5-preview",
+				"gpt-5.6-luna",
+				"gpt-5.6-sol",
+				"gpt-5.6-terra",
+				"agnes-2.0-flash",
+				"agnes-2.5-flash",
+				"minimax-m3-free",
+				"mistral-large",
+				"mistral-medium-3-5",
+				"qwen3.8-27b",
+			},
+			aliases:    []string{"nara", "nanarouter", "bynara"},
+			modelsList: "https://router.bynara.id/v1/models", wantFetcher: true,
+		},
 	}
 
 	for _, tt := range tests {

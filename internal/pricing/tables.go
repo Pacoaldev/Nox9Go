@@ -297,6 +297,12 @@ var (
 			"poolside/laguna-xs-2.1:free":      {InputPer1M: 0, OutputPer1M: 0, CachedPer1M: 0, ReasoningPer1M: 0},
 			"stealth/missingno":                {InputPer1M: 0, OutputPer1M: 0, CachedPer1M: 0, ReasoningPer1M: 0},
 		},
+		"nararouter": {
+			"laguna-s-2.1": {InputPer1M: 0, OutputPer1M: 0, CachedPer1M: 0, ReasoningPer1M: 0},
+		},
+		"nara": {
+			"laguna-s-2.1": {InputPer1M: 0, OutputPer1M: 0, CachedPer1M: 0, ReasoningPer1M: 0},
+		},
 	}
 )
 

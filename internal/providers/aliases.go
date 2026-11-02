@@ -84,6 +84,9 @@ var ProviderAliasMap = map[string]string{
 	// would let `jev/<model>` cross into v1m, which AGENTS.md §3 forbids and
 	// which would silently hijack a model id two other providers already own.
 	// The canonical `v1m/` prefix still reaches every v1m model.
+	"nara":           "nararouter",
+	"nanarouter":     "nararouter",
+	"bynara":         "nararouter",
 	"ne":             "nebius",
 	"nous-portal":    "nous",
 	"nous-research":  "nous",

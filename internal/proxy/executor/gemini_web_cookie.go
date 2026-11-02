@@ -138,7 +138,7 @@ func geminiWebSAPISIDHash(cookie, origin string) string {
 		origin = geminiWebOrigin
 	}
 	seconds := time.Now().Unix()
-	sum := sha1.Sum([]byte(fmt.Sprintf("%d %s %s", seconds, sapisid, origin)))
+	sum := sha1.Sum(fmt.Appendf(nil, "%d %s %s", seconds, sapisid, origin))
 	return fmt.Sprintf("SAPISIDHASH %d_%s", seconds, hex.EncodeToString(sum[:]))
 }
 

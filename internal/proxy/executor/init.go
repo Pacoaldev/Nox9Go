@@ -114,5 +114,7 @@ func RegisterAll() {
 	Register("minimax-code-global", func() Executor { return ForwardMinimaxCode })
 	Register("daoxe", func() Executor { return ForwardOpenAI })
 	Register("nan", func() Executor { return ForwardOpenAI })
+	Register("nararouter", func() Executor { return ForwardOpenAI })
+	Register("nara", func() Executor { return ForwardOpenAI })
 	Register("openadapter", func() Executor { return ForwardOpenAI })
 }

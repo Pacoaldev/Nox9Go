@@ -10,7 +10,9 @@ func joinEvents(events []SSEEvent) string {
 	var b strings.Builder
 	for _, ev := range events {
 		if ev.Type != "" {
-			b.WriteString("event: " + ev.Type + "\ndata: ")
+			b.WriteString("event: ")
+			b.WriteString(ev.Type)
+			b.WriteString("\ndata: ")
 		} else {
 			b.WriteString("data: ")
 		}

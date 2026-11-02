@@ -165,13 +165,14 @@ func TestForwardFreebuff_FullCycle(t *testing.T) {
 			var req map[string]any
 			_ = json.UnmarshalRead(r.Body, &req)
 			action, _ := req["action"].(string)
-			if action == "START" {
+			switch action {
+			case "START":
 				atomic.AddInt64(&startRunCalls, 1)
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.MarshalWrite(w, map[string]any{
 					"runId": "run-xyz-123",
 				})
-			} else if action == "FINISH" {
+			case "FINISH":
 				atomic.AddInt64(&finishRunCalls, 1)
 				w.WriteHeader(http.StatusOK)
 			}

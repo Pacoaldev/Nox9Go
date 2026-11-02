@@ -187,7 +187,7 @@ func startFreebuffRun(ctx context.Context, client *http.Client, baseURL, token, 
 	return data.RunID, nil
 }
 
-func finishFreebuffRun(ctx context.Context, client *http.Client, baseURL, token, runID, status string, headers map[string]string) {
+func finishFreebuffRun(_ context.Context, client *http.Client, baseURL, token, runID, status string, headers map[string]string) {
 	if runID == "" {
 		return
 	}
