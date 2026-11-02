@@ -35,12 +35,19 @@ import (
 const testModelTimeout = 45 * time.Second
 
 const (
-	// probeMaxTokens is generous on purpose: a reasoning model spends a small
-	// budget on chain-of-thought and a starved probe reports "no choices" for a
-	// model that is working (upstream issue #3010).
-	probeMaxTokens   = 1024
+	// probeMaxTokens is the chat-probe completion budget. It used to be 1024
+	// so a reasoning model that spent the whole window on chain-of-thought
+	// still produced a choice (upstream issue #3010); chatVerdict already
+	// treats a length-limited reasoning-only reply as a pass. 256 keeps that
+	// path alive while Check All Models stops burning a full 1k-token
+	// completion per visible model (the burst that trips free-tier RPM).
+	probeMaxTokens   = 256
 	probeTextLimit   = 240
 	probeBodyReadCap = 8 << 20
+	// probeRetryAfterCap bounds how long the dashboard may be told to wait
+	// between Check All probes after a 429. Longer upstream windows belong
+	// on the row as an error, not as a multi-minute sweep stall.
+	probeRetryAfterCap = 10
 )
 
 type testModelRequest struct {
@@ -242,13 +249,14 @@ func silentWAV() []byte {
 // {ok, latencyMs, error, status, note} so the SPA can render the server's own
 // measurement instead of its browser clock.
 type testModelResult struct {
-	OK        bool   `json:"ok"`
-	LatencyMs int64  `json:"latencyMs"`
-	Status    int    `json:"status,omitempty"`
-	Note      string `json:"note,omitempty"`
-	Error     string `json:"error,omitempty"`
-	Blocked   bool   `json:"blocked,omitempty"`
-	ResetAt   string `json:"resetAt,omitempty"`
+	OK         bool   `json:"ok"`
+	LatencyMs  int64  `json:"latencyMs"`
+	Status     int    `json:"status,omitempty"`
+	Note       string `json:"note,omitempty"`
+	Error      string `json:"error,omitempty"`
+	Blocked    bool   `json:"blocked,omitempty"`
+	ResetAt    string `json:"resetAt,omitempty"`
+	RetryAfter int    `json:"retryAfter,omitempty"`
 }
 
 // readProbeResult decides pass or fail from the probe response.
@@ -275,6 +283,7 @@ func readProbeResult(rec *httptest.ResponseRecorder, kind string) testModelResul
 			res.Blocked = true
 			res.ResetAt = resetAt
 		}
+		res.RetryAfter = probeRetryAfterSeconds(status, rec.Header().Get("Retry-After"))
 		return res
 	}
 
@@ -300,6 +309,25 @@ func hasReceivedFirstToken(body []byte) bool {
 		}
 	}
 	return false
+}
+
+// probeRetryAfterSeconds reads the upstream Retry-After the chat lane forwards
+// onto the probe recorder. Only a 429 carries a wait the Check All sweep should
+// honour; other statuses keep RetryAfter unset so the SPA does not pause on a
+// permanent failure.
+func probeRetryAfterSeconds(status int, header string) int {
+	if status != http.StatusTooManyRequests {
+		return 0
+	}
+	header = strings.TrimSpace(header)
+	secs, err := strconv.Atoi(header)
+	if err != nil || secs <= 0 {
+		return 0
+	}
+	if secs > probeRetryAfterCap {
+		return probeRetryAfterCap
+	}
+	return secs
 }
 
 // cooldownMarkers are the exact sentences the gateway itself emits when every

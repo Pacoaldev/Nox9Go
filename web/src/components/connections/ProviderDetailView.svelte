@@ -54,6 +54,7 @@
   import { proxyBadgeInfo } from './proxyBadge'
   import {
     formatCheckAllSummary,
+    probeBackoffMs,
     getBlockedModelIds,
     getFailedModelIds,
     parseModelTestVerdict,
@@ -2135,6 +2136,12 @@
       if (!silent && verdict.error) {
         activeModelTestError = `${modelId}: ${verdict.error}`
       }
+      // Check All shares keys across models; honour a 429 wait so the next
+      // worker does not immediately re-hit the same free-tier RPM window.
+      if (silent) {
+        const waitMs = probeBackoffMs(res)
+        if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
+      }
     } catch (err) {
       if (pid !== providerId) return
       modelTestStatuses[modelId] = 'error'
@@ -2448,7 +2455,7 @@
   }
 
   // Each probe is a real completion that consumes account quota, so Test all
-  // runs at most 2 at once; a lower ceiling than the registry sweep's 6.
+  // runs at most 2 at once — same ceiling as Check All Models.
   const COMPATIBLE_TEST_CONCURRENCY = 2
 
   // Bounded pool: see COMPATIBLE_TEST_CONCURRENCY above. Guarded the way
@@ -2762,10 +2769,14 @@
     }
   }
 
-  // Bounded concurrency pool: each probe is a real chat completion that can
-  // take seconds, so running all of them at once would hammer the provider and
-  // the browser (a ~30-model provider fires 30 simultaneous fetches).
-  const TEST_CONCURRENCY = 6
+  // Bounded concurrency pool: each probe is a real chat completion. Keep this
+  // aligned with COMPATIBLE_TEST_CONCURRENCY — six parallel completions was
+  // enough to trip free-tier RPM (llm7 429 "Retry after 1 seconds") on a
+  // two-model Check All.
+  const TEST_CONCURRENCY = 2
+  // Stagger probe starts so two workers do not fire in the same instant
+  // against one shared key pool.
+  const TEST_PROBE_GAP_MS = 300
 
   // Runs ids through the bounded pool, then publishes the sweep summary. A
   // run that outlives its provider panel publishes nothing: the verdicts it
@@ -2776,9 +2787,14 @@
     checkAllProgress = { done: 0, total: ids.length }
     try {
       let cursor = 0
+      let nextStartAt = 0
       const workers = Array.from({ length: Math.min(TEST_CONCURRENCY, ids.length) }, async () => {
         while (cursor < ids.length && pid === providerId) {
           const i = cursor++
+          const wait = Math.max(0, nextStartAt - Date.now())
+          nextStartAt = Math.max(Date.now(), nextStartAt) + TEST_PROBE_GAP_MS
+          if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+          if (pid !== providerId) return
           await testModel(ids[i], true)
           if (pid !== providerId) return
           checkAllProgress = { ...checkAllProgress, done: checkAllProgress.done + 1 }

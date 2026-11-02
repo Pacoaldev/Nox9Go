@@ -4,6 +4,10 @@
 
 Seven new providers imported from the 9router-go and 9router upstream registries: SenseNova, RunCrate, Nace, and four web-based providers (ChatGPT Web, Muse Web, UC Web, Veo AI Free).
 
+### Dashboard
+
+- **Check All Models is gentler on free-tier RPM.** Each probe used a 1024-token chat completion with six parallel workers, which was enough for llm7 to answer `HTTP 429 Rate limit exceeded. Retry after 1 seconds` on a two-model sweep. Chat probes now ask for 256 tokens (length-limited reasoning replies still count as a pass), Check All runs at most two probes at once with a short start stagger, and a 429 surfaces `retryAfter` so the sweep waits before the next model instead of immediately re-hitting the same key pool.
+
 ### Providers
 
 - **SenseNova** (alias `sn`). OpenAI-compatible API at `token.sensenova.ai` (international Token Plan; keys from [platform.sensenova.ai/console/keys](https://platform.sensenova.ai/console/keys)) with image generation support. Seven models including `sensenova-6.8-flash-lite`, `sensenova-u1.5-lite`, `sensenova-u1.5-fast`, `deepseek-v4-flash`, `deepseek-flash`, `glm-5.2`, and `kimi-k3`. Capabilities include Vision and ImageOutput on supported models; the flash-lite model is priced.

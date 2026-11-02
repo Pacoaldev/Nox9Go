@@ -4,6 +4,7 @@ import {
   getBlockedModelIds,
   getFailedModelIds,
   parseModelTestVerdict,
+  probeBackoffMs,
 } from './modelCheckAll'
 
 describe('parseModelTestVerdict', () => {
@@ -152,5 +153,30 @@ describe('getFailedModelIds', () => {
   test('returns an empty list when nothing failed', () => {
     expect(getFailedModelIds({ m1: 'ok', m2: 'blocked' })).toEqual([])
     expect(getFailedModelIds({})).toEqual([])
+  })
+})
+
+describe('probeBackoffMs', () => {
+  test('returns 0 when the probe was not rate-limited', () => {
+    expect(probeBackoffMs({ status: 404, error: 'HTTP 404' })).toBe(0)
+    expect(probeBackoffMs({ status: 200 })).toBe(0)
+  })
+
+  test('honours the gateway retryAfter field first', () => {
+    expect(probeBackoffMs({ status: 429, retryAfter: 2, error: 'Retry after 9 seconds' })).toBe(2000)
+  })
+
+  test('parses llm7-style Retry after prose when retryAfter is absent', () => {
+    expect(
+      probeBackoffMs({
+        status: 429,
+        error: 'HTTP 429 Rate limit exceeded. Retry after 1 seconds.',
+      }),
+    ).toBe(1000)
+  })
+
+  test('defaults to 1s on a bare 429 and caps long waits', () => {
+    expect(probeBackoffMs({ status: 429 })).toBe(1000)
+    expect(probeBackoffMs({ status: 429, retryAfter: 60 })).toBe(10_000)
   })
 })

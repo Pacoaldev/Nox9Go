@@ -111,8 +111,8 @@ func TestModelTestDefaultsToTheChatLane(t *testing.T) {
 	if !strings.HasSuffix(last.Path, "/chat/completions") {
 		t.Errorf("upstream path = %q, want the chat completions lane", last.Path)
 	}
-	if !strings.Contains(string(last.Body), `"max_tokens":1024`) {
-		t.Errorf("probe body = %s, want the 1024-token reasoning budget", string(last.Body))
+	if !strings.Contains(string(last.Body), `"max_tokens":256`) {
+		t.Errorf("probe body = %s, want the lean 256-token probe budget", string(last.Body))
 	}
 }
 
