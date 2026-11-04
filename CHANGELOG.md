@@ -44,12 +44,17 @@ Mistral account stays out of rotation long enough for its burst limit to recover
   (`https://api.xkiro.com`) with 106 cataloged models across LLM, image generation, and TTS,
   live `/v1/models` discovery, per-model pricing and capabilities, and `/v1/usage` key
   validation and quota tracking.
+- **Live catalog tool capabilities.** Added explicit `tools` capability reporting for live
+  catalog models, including Zed's `supports_tools` signal and Kiro's agentic variants.
 - **HCNSec provider gateway.** Added HCNSec (`hcnsec`, alias `hc`) OpenAI-compatible gateway
   (`https://api.hcnsec.cn`) relaying GLM, DeepSeek, Qwen, Step, MiMo, MiniCPM, and SenseNova
   models with speech, embeddings, and dynamic catalog discovery (`luqman-v1/9router-go#854`).
 
 ### Wire protocols and translation
 
+- **Groq rejects unsupported prompt cache metadata.** Remove top-level `prompt_cache_key`
+  before forwarding OpenAI-compatible requests to Groq; retain it for providers such as
+  CodeBuddy that use it for conversation identity.
 - **Gemini embeddings dimension mapping.** Ported `dimensions` forwarding to Gemini's
   `outputDimensionality` (upstream `decolua/9router#1366`, `luqman-v1/9router-go#895`).
 - **Tool schema regex lookaround stripping.** Widened regex pattern sanitization to
