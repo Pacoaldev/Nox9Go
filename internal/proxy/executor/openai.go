@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,7 +19,26 @@ import (
 )
 
 // ForwardOpenAI sends an OpenAI-format request and writes the response.
+func stripUnsupportedPromptCacheKey(body []byte) []byte {
+	var request map[string]json.RawMessage
+	if err := json.Unmarshal(body, &request); err != nil {
+		return body
+	}
+	if _, exists := request["prompt_cache_key"]; !exists {
+		return body
+	}
+	delete(request, "prompt_cache_key")
+	cleaned, err := json.Marshal(request)
+	if err != nil {
+		return body
+	}
+	return cleaned
+}
+
 func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
+	if req.Provider == "groq" {
+		req.Body = stripUnsupportedPromptCacheKey(req.Body)
+	}
 	resp, err := proxy.ForwardOpenAI(req.Ctx, req.Client, req.Config, req.APIKey, req.Body, req.IsStream)
 	if err != nil {
 		return fmt.Errorf("ForwardOpenAI upstream: %w", err)

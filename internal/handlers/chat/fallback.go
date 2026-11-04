@@ -872,6 +872,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 	if exec := executor.Get(provider); exec != nil {
 		execReq := &executor.Request{
 			Ctx:            ctx,
+			Provider:       provider,
 			Client:         httpClient,
 			Config:         providerCfg,
 			APIKey:         apiKey,
@@ -918,6 +919,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 			if exec := executor.Get(provider); exec != nil {
 				retryReq := &executor.Request{
 					Ctx:            ctx,
+					Provider:       provider,
 					Client:         httpClient,
 					Config:         providerCfg,
 					APIKey:         apiKey,

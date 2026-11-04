@@ -23,12 +23,13 @@ type LeaseStore interface {
 // Request holds all inputs for an executor.
 type Request struct {
 	Ctx            context.Context
+	Provider       string
 	Client         *http.Client
 	Config         *providers.ProviderConfig
 	APIKey         string
 	Body           []byte
 	IsStream       bool
-	ClaudeClient   bool              // /v1/messages client: body is Claude Messages, response must be translated back
+	ClaudeClient   bool // /v1/messages client: body is Claude Messages, response must be translated back
 	TranslateResp  bool
 	ConnectionID   string            // for OAuth refresh by fallback
 	SessionID      string            // client session / conversation id
