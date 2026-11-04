@@ -278,7 +278,8 @@ func runPromotionBuild(root string) (string, bool) {
 		out, err := cmd.CombinedOutput()
 		log.Write(out)
 		if err != nil {
-			log.WriteString(newlineByte + err.Error())
+			log.WriteString(newlineByte)
+			log.WriteString(err.Error())
 			return log.String(), false
 		}
 	}

@@ -10,8 +10,6 @@ import (
 // Svelte set use, and spelling them once here keeps every insertion readable.
 const newlineByte = string(rune(10))
 
-func nll() string { return newlineByte }
-
 // closeBraceLn is the newline plus the brace that ends an indented block. Both
 // Go maps and the two TS object literals in this promotion close that way.
 func closeBraceLn() string { return newlineByte + "}" }

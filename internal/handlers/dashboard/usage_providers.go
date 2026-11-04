@@ -107,6 +107,8 @@ func fetchProviderUsage(ctx context.Context, provider string, data map[string]an
 		return fetchGeminiWebUsage(ctx, apiKey), true
 	case "opencode-zen":
 		return fetchOpenCodeZenUsage(ctx, apiKey, connectionBaseURL(data)), true
+	case "xkiro":
+		return fetchXKiroUsage(ctx, apiKey), true
 	case "minimax-code", "minimax-code-global":
 		return fetchMiniMaxCodeUsage(ctx, provider, accessToken, psdStr(psd, "realUserID")), true
 	default:
@@ -346,6 +348,92 @@ func firstNonEmptyStr(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// ---------- xkiro: GET /v1/usage ----------
+
+func fetchXKiroUsage(ctx context.Context, apiKey string) usageResult {
+	if strings.TrimSpace(apiKey) == "" {
+		return usageResult{message: "xKiro API key not available. Add a key to view usage."}
+	}
+	status, _, out, err := usageGet(ctx, "https://api.xkiro.com/v1/usage", map[string]string{
+		"Authorization": "Bearer " + strings.TrimSpace(apiKey),
+		"Accept":        "application/json",
+	})
+	if err != nil {
+		return usageResult{message: fmt.Sprintf("xKiro error: %v", err)}
+	}
+	if status == 401 || status == 403 {
+		return usageResult{plan: "xKiro", message: "xKiro authentication failed. Check the API key."}
+	}
+	if status < 200 || status >= 300 {
+		return usageResult{plan: "xKiro", message: fmt.Sprintf("xKiro usage API error (%d)", status)}
+	}
+	data := usageJSON(out)
+	if data == nil {
+		return usageResult{message: "xKiro usage response was not JSON."}
+	}
+	plan := "xKiro"
+	if p, ok := data["plan"].(string); ok && strings.TrimSpace(p) != "" {
+		plan = "xKiro (" + strings.ToUpper(strings.TrimSpace(p)) + ")"
+	}
+	quotas := map[string]any{}
+	if windows, ok := data["windows"].([]any); ok {
+		for _, wRaw := range windows {
+			wm, ok := wRaw.(map[string]any)
+			if !ok {
+				continue
+			}
+			kind := strings.ToLower(strings.TrimSpace(usageStr(wm["kind"])))
+			label := "Window"
+			switch kind {
+			case "short":
+				label = "5h Window (USD)"
+			case "long":
+				label = "Weekly Window (USD)"
+			default:
+				if kind != "" {
+					label = strings.ToUpper(kind[:1]) + kind[1:] + " Window (USD)"
+				}
+			}
+			used := math.Max(0, usageNum(wm["spent_usd"], 0))
+			total := math.Max(0, usageNum(wm["cap_usd"], 0))
+			if total <= 0 && used <= 0 {
+				continue
+			}
+			resetAt := ""
+			if sec := usageNum(wm["resets_in_sec"], 0); sec > 0 {
+				resetAt = time.Now().Add(time.Duration(sec) * time.Second).UTC().Format(time.RFC3339)
+			}
+			quotas[label] = usageQuota(used, total, resetAt)
+		}
+	}
+	if ft, ok := data["free_tokens"].(map[string]any); ok {
+		used := math.Max(0, usageNum(ft["used_today"], 0))
+		total := math.Max(0, usageNum(ft["limit_per_day"], 0))
+		if total > 0 || used > 0 {
+			quotas["Free Tokens (Daily)"] = usageQuota(used, total, "")
+		}
+	}
+	if wallet, ok := data["wallet"].(map[string]any); ok {
+		bal := math.Max(0, usageNum(wallet["balance_usd"], 0))
+		if bal > 0 || len(quotas) == 0 {
+			remPct := 0.0
+			if bal > 0 {
+				remPct = 100.0
+			}
+			quotas["Wallet Balance (USD)"] = map[string]any{
+				"used":                0,
+				"total":               bal,
+				"remainingPercentage": remPct,
+				"resetAt":             nil,
+				"unlimited":           false,
+				"isCreditBalance":     true,
+				"currency":            "USD",
+			}
+		}
+	}
+	return usageResult{plan: plan, quotas: quotas}
 }
 
 // ---------- deepseek: GET /user/balance ----------
@@ -1137,9 +1225,10 @@ func fetchKiroUsage(ctx context.Context, accessToken string, psd map[string]any)
 		authMethod = "builder-id"
 	}
 	extra := map[string]string{}
-	if authMethod == "api_key" {
+	switch authMethod {
+	case "api_key":
 		extra["tokentype"] = "API_KEY"
-	} else if authMethod == "external_idp" {
+	case "external_idp":
 		extra["TokenType"] = "EXTERNAL_IDP"
 	}
 	var profileARN string
@@ -1689,11 +1778,12 @@ func fetchAntigravityDashboardUsage(ctx context.Context, accessToken, projectID 
 	// (no session rows — upstream shows 19 rows, not 21).
 	if weekly := fetchAntigravityDashboardWeekly(ctx, accessToken, pid); len(weekly) > 0 {
 		for key, wq := range weekly {
-			if key == "gemini_weekly" {
+			switch key {
+			case "gemini_weekly":
 				antigravityReconcileFamily(quotas, "gemini-", "image", wq)
-			} else if key == "argon_weekly" {
+			case "argon_weekly":
 				antigravityReconcileFamily(quotas, "gemini-4-argon", "", wq)
-			} else if key == "claude_gpt_weekly" {
+			case "claude_gpt_weekly":
 				antigravityReconcileFamily(quotas, "claude-", "", wq)
 			}
 			quotas[key] = wq

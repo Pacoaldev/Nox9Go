@@ -138,6 +138,7 @@ var ProviderAliasMap = map[string]string{
 	"xq":             "xquik",
 	"zd":             "zed",
 	"hc":             "hcnsec",
+	"xk":             "xkiro",
 }
 
 // ResolveAlias returns the canonical provider ID for an alias, or the alias itself if not found.

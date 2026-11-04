@@ -284,10 +284,7 @@ func (h *DashboardHandler) validateProviderNodeConnection(
 
 	// 2. Anthropic Compatible
 	if strings.HasPrefix(node.ID, "anthropic-compatible-") || nodeType == "anthropic-compatible" {
-		base := strings.TrimSuffix(baseURL, "/")
-		if strings.HasSuffix(base, "/messages") {
-			base = base[:len(base)-len("/messages")]
-		}
+		base := strings.TrimSuffix(strings.TrimSuffix(baseURL, "/"), "/messages")
 		model := AnthropicValidationModel
 		if psd != nil {
 			if m, ok := psd["assignedModel"].(string); ok && strings.TrimSpace(m) != "" {
@@ -468,6 +465,8 @@ func validateProviderKey(ctx context.Context, provider string, cfg providers.Pro
 		// host — this entry signs its own request against the resolved region.
 		valid, message := proxy.BedrockProbe(ctx, http.DefaultClient, apiKey, psd)
 		return validateOutcome{valid: valid, supported: true, message: message}
+	case "xkiro":
+		return validateXKiro(ctx, cfg, apiKey)
 	case "nous":
 		return validateNous(ctx, apiKey)
 	}
@@ -569,6 +568,29 @@ func validateGeneric(ctx context.Context, provider string, cfg providers.Provide
 	log.Debug("probe", "provider key test passed (chat fallback)",
 		"provider", provider, "endpoint", cfg.BaseURL, "status", status)
 	return validateOutcome{valid: valid, supported: true}
+}
+
+func validateXKiro(ctx context.Context, cfg providers.ProviderConfig, apiKey string) validateOutcome {
+	usageURL := strings.TrimSpace(cfg.UsageURL)
+	if usageURL == "" {
+		usageURL = "https://api.xkiro.com/v1/usage"
+	}
+	headers := validateAuthHeaders(cfg, apiKey)
+	headers["Accept"] = "application/json"
+	status, _, err := validateProbeDo(ctx, http.MethodGet, usageURL, headers, nil)
+	if err != nil {
+		return validateOutcome{supported: true, message: err.Error()}
+	}
+	valid := status >= 200 && status < 300
+	out := validateOutcome{valid: valid, supported: true}
+	if !valid {
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			out.message = fmt.Sprintf("Invalid API key (HTTP %d)", status)
+		} else {
+			out.message = fmt.Sprintf("Unexpected status (HTTP %d)", status)
+		}
+	}
+	return out
 }
 
 func validateNous(ctx context.Context, apiKey string) validateOutcome {
@@ -922,7 +944,7 @@ func validateQoder(ctx context.Context, provider, apiKey string, psd map[string]
 // credential exchange and the model-list fetch while keeping their own
 // transports (the probe honours a connection's proxy-bound client and is
 // stubbed in tests).
-func qoderProbeDoer(ctx context.Context) executor.QoderDoer {
+func qoderProbeDoer(_ context.Context) executor.QoderDoer {
 	return func(innerCtx context.Context, method, rawURL string, headers map[string]string, body []byte) (int, []byte, error) {
 		return validateProbeDo(innerCtx, method, rawURL, headers, body)
 	}

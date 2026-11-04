@@ -260,6 +260,9 @@ func TestHandleExportImportDatabase_RoundTrip(t *testing.T) {
 		conns = append(conns, data)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
 	if len(conns) != 1 {
 		t.Fatalf("expected 1 restored connection, got %d", len(conns))
 	}

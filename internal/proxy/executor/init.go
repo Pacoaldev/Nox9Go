@@ -117,4 +117,8 @@ func RegisterAll() {
 	Register("nararouter", func() Executor { return ForwardOpenAI })
 	Register("nara", func() Executor { return ForwardOpenAI })
 	Register("openadapter", func() Executor { return ForwardOpenAI })
+	Register("hcnsec", func() Executor { return ForwardOpenAI })
+	Register("hc", func() Executor { return ForwardOpenAI })
+	Register("xkiro", func() Executor { return ForwardOpenAI })
+	Register("xk", func() Executor { return ForwardOpenAI })
 }

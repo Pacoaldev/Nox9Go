@@ -243,7 +243,7 @@ func (h *DashboardHandler) reconcileSmartCombosBestEffort(ctx context.Context, r
 // the custom-model scope for every alias that still resolves. Both spellings of
 // a registry model are carried (alias and canonical id) so a member is never
 // pruned for being written the other way round.
-func (h *DashboardHandler) smartComboCandidates(ctx context.Context) ([]smart.Candidate, error) {
+func (h *DashboardHandler) smartComboCandidates(_ context.Context) ([]smart.Candidate, error) {
 	conns, err := h.Repo.GetProviderConnections("", true)
 	if err != nil {
 		return nil, fmt.Errorf("smart candidates: connections: %w", err)

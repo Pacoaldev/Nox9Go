@@ -846,6 +846,46 @@ func TestHandleValidateProvider_Nous(t *testing.T) {
 	})
 }
 
+func TestHandleValidateProvider_XKiro(t *testing.T) {
+	t.Run("valid key probes GET /v1/usage", func(t *testing.T) {
+		calls := staticProbeStub(t, http.StatusOK)
+		rec, out := postValidate(t, `{"provider":"xkiro","apiKey":"sk-xt-valid"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if out["valid"] != true {
+			t.Fatalf("expected valid=true, got %v", out)
+		}
+		if len(*calls) != 1 {
+			t.Fatalf("expected 1 probe call, got %d", len(*calls))
+		}
+		call := (*calls)[0]
+		if call.url != "https://api.xkiro.com/v1/usage" {
+			t.Errorf("expected URL https://api.xkiro.com/v1/usage, got %q", call.url)
+		}
+		if call.method != http.MethodGet {
+			t.Errorf("expected GET, got %q", call.method)
+		}
+		if got := call.headers.Get("Authorization"); got != "Bearer sk-xt-valid" {
+			t.Errorf("expected Authorization Bearer sk-xt-valid, got %q", got)
+		}
+	})
+
+	t.Run("rejected key on alias xk returns 401 error", func(t *testing.T) {
+		staticProbeStub(t, http.StatusUnauthorized)
+		rec, out := postValidate(t, `{"provider":"xk","apiKey":"sk-xt-bad"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if out["valid"] != false {
+			t.Errorf("expected valid=false, got %v", out)
+		}
+		if out["error"] != "Invalid API key (HTTP 401)" {
+			t.Errorf("expected 'Invalid API key (HTTP 401)', got %v", out["error"])
+		}
+	})
+}
+
 func TestValidateDefaultModel_NaraRouter(t *testing.T) {
 	if got := validateDefaultModel("nararouter"); got != "laguna-s-2.1" {
 		t.Errorf("validateDefaultModel(nararouter) = %q, want laguna-s-2.1", got)

@@ -74,17 +74,6 @@ func (h *DashboardHandler) countProxyPoolBindings() map[string]int {
 	return boundCounts
 }
 
-// isPoolRotationStrategy mirrors the accepted pool-rotation values in the chat
-// package. Kept as a literal list rather than shared so the dashboard does not
-// import the handler it serves.
-func isPoolRotationStrategy(s string) bool {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "round-robin", "roundrobin", "random":
-		return true
-	}
-	return false
-}
-
 // HandleGetProxyPools handles GET /api/proxy-pools.
 func (h *DashboardHandler) HandleGetProxyPools(w http.ResponseWriter, r *http.Request) {
 	includeUsage := r.URL.Query().Get("includeUsage") == "true"

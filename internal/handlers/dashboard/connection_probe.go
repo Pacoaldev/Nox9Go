@@ -37,7 +37,6 @@ const (
 	// connectionProxyProbeTimeout mirrors the proxy pool test timeout.
 	connectionProxyProbeTimeout = 5 * time.Second
 
-	codexCLIVersion          = providers.CodexCLIVersion
 	grokCLIProbeURL          = "https://cli-chat-proxy.grok.com/v1/user"
 	grokCLIProbeUA           = providers.GrokCLIPagerUserAgent
 	kimchiProbeURL           = "https://api.cast.ai/v1/llm/openai/supported-providers"
@@ -53,7 +52,6 @@ const (
 	// subscription's connection probe as well as the pasted API key's: both
 	// store the minted Model API key as the bearer token.
 	museProbeURL    = "https://api.meta.ai/v1/models"
-	museProbeAPIKey = "muse-spark-1.3"
 	// v1m has no /models endpoint; the cheapest call that proves a key is a
 	// single-token System One evaluation (upstream validateUrl defaults to
 	// the provider's chat base URL).
@@ -64,8 +62,6 @@ const (
 	// plain bearer call there: a 401/403 is the only invalid answer.
 	miniMaxCodeCatalogURL       = "https://agent.minimax.cn/mavis/api/v1/models?region=cn&buildEnv=prod"
 	miniMaxCodeGlobalCatalogURL = "https://agent.minimax.io/mavis/api/v1/models?region=en&buildEnv=prod"
-	// Upstream accepts any non-401/403 answer as proof the credentials work.
-	connectionBrowserUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 )
 
 // AnthropicValidationModel is the model an Anthropic-compatible endpoint is
@@ -753,7 +749,7 @@ func isClineWorkOSJWT(token string) bool {
 	return true
 }
 
-func (h *DashboardHandler) probeFreebuff(ctx context.Context, conn *models.ProviderConnection, data connectionProbeData, client *http.Client) probeOutcome {
+func (h *DashboardHandler) probeFreebuff(ctx context.Context, _ *models.ProviderConnection, data connectionProbeData, client *http.Client) probeOutcome {
 	token := data.AccessToken
 	if token == "" {
 		token = data.APIKey

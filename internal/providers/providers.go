@@ -204,6 +204,8 @@ var modelsListURL = map[string]string{
 	"nararouter":  "https://router.bynara.id/v1/models",
 	"nara":        "https://router.bynara.id/v1/models",
 	"onomeo":      "https://onomeo.com/v1/models",
+	"xkiro":       "https://api.xkiro.com/v1/models",
+	"xk":          "https://api.xkiro.com/v1/models",
 }
 
 // modelsListHeaders carries the extra headers one live-catalogue endpoint
@@ -1380,6 +1382,28 @@ var KnownProviders = map[string]ProviderConfig{
 	// builds the URL per request.
 	"replicate": {
 		BaseURL:    "https://api.replicate.com/v1",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"xkiro": {
+		BaseURL:     "https://api.xkiro.com/v1/chat/completions",
+		AuthHeader:  "Authorization",
+		AuthScheme:  "bearer",
+		ImageURL:    "https://api.xkiro.com/v1/images/generations",
+		TTSURL:      "https://api.xkiro.com/v1/audio/speech",
+		VoicesURL:   "https://api.xkiro.com/v1/audio/voices",
+		FetchURL:    "https://api.xkiro.com/v1/fetch",
+		FetchMethod: "POST",
+		UsageURL:    "https://api.xkiro.com/v1/usage",
+	},
+	"xk": {
+		BaseURL:     "https://api.xkiro.com/v1/chat/completions",
+		ImageURL:    "https://api.xkiro.com/v1/images/generations",
+		TTSURL:      "https://api.xkiro.com/v1/audio/speech",
+		VoicesURL:   "https://api.xkiro.com/v1/audio/voices",
+		FetchURL:    "https://api.xkiro.com/v1/fetch",
+		FetchMethod: "POST",
+		UsageURL:    "https://api.xkiro.com/v1/usage",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},

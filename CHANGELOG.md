@@ -40,6 +40,10 @@ Mistral account stays out of rotation long enough for its burst limit to recover
 
 ### Providers
 
+- **xKiro provider gateway.** Added xKiro (`xkiro`, alias `xk`) OpenAI-compatible gateway
+  (`https://api.xkiro.com`) with 106 cataloged models across LLM, image generation, and TTS,
+  live `/v1/models` discovery, per-model pricing and capabilities, and `/v1/usage` key
+  validation and quota tracking.
 - **HCNSec provider gateway.** Added HCNSec (`hcnsec`, alias `hc`) OpenAI-compatible gateway
   (`https://api.hcnsec.cn`) relaying GLM, DeepSeek, Qwen, Step, MiMo, MiniCPM, and SenseNova
   models with speech, embeddings, and dynamic catalog discovery (`luqman-v1/9router-go#854`).

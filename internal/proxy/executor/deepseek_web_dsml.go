@@ -48,7 +48,6 @@ var (
 	// An opening tag is `<` followed by the namespace. It cannot match a closing
 	// tag, whose `<` is followed by `/` — so a scan for openers never trips over
 	// a terminator.
-	deepSeekDSMLBlockOpen     = regexp.MustCompile(`<[｜|]{1,2}\s*DSML\s*[｜|]{1,2}`)
 	deepSeekDSMLCallsOpen     = regexp.MustCompile(`<[｜|]{1,2}\s*DSML\s*[｜|]{1,2}\s*calls\b`)
 	deepSeekDSMLInvokeOpen    = regexp.MustCompile(`<[｜|]{1,2}\s*DSML\s*[｜|]{1,2}\s*invoke\b`)
 	deepSeekDSMLParameterOpen = regexp.MustCompile(`<[｜|]{1,2}\s*DSML\s*[｜|]{1,2}\s*parameter\b`)

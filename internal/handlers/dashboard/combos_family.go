@@ -74,7 +74,7 @@ func (h *DashboardHandler) HandleAutoFamilyCombos(w http.ResponseWriter, r *http
 
 // usableModelFamilies maps a normalized family to every usable "alias/model"
 // id belonging to it, across all providers with an active connection.
-func (h *DashboardHandler) usableModelFamilies(ctx context.Context) (map[string][]string, error) {
+func (h *DashboardHandler) usableModelFamilies(_ context.Context) (map[string][]string, error) {
 	conns, err := h.Repo.GetProviderConnections("", true)
 	if err != nil {
 		return nil, fmt.Errorf("usableModelFamilies: list connections: %w", err)

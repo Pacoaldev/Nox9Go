@@ -523,10 +523,7 @@ func validateOpenAICompatibleNode(w http.ResponseWriter, ctx context.Context, ba
 // validateAnthropicCompatibleNode probes GET {base}/models with x-api-key,
 // falling back to a chat request when the model endpoint is absent.
 func validateAnthropicCompatibleNode(w http.ResponseWriter, ctx context.Context, baseURL, apiKey, modelID string) {
-	base := strings.TrimSpace(baseURL)
-	if strings.HasSuffix(base, "/messages") {
-		base = base[:len(base)-len("/messages")]
-	}
+	base := strings.TrimSuffix(strings.TrimSpace(baseURL), "/messages")
 	headers := map[string]string{
 		"x-api-key":         apiKey,
 		"anthropic-version": "2023-06-01",

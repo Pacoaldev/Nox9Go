@@ -66,7 +66,7 @@ func TestHandleUpdateConnection_ProxyPoolBinding(t *testing.T) {
 		t.Fatalf("unknown pool status = %d, want 400: %s", rec.Code, rec.Body.String())
 	}
 	var errBody map[string]map[string]any
-	_ = json.Unmarshal([]byte(put(`{"proxyPoolId":"nope"}`).Body.String()), &errBody)
+	_ = json.Unmarshal(put(`{"proxyPoolId":"nope"}`).Body.Bytes(), &errBody)
 	if errBody["error"]["message"] != "Proxy pool not found" {
 		t.Errorf("unexpected error payload: %v", errBody)
 	}

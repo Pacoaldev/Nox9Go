@@ -166,7 +166,7 @@ func uniqueSortedProviders(conns []*models.ProviderConnection) []string {
 	return out
 }
 
-func sortProviderConnections(conns []*models.ProviderConnection, sortMode string) {
+func sortProviderConnections(conns []*models.ProviderConnection, _ string) {
 	order := map[string]int{}
 	for i, p := range usageSupportedProviders {
 		order[p] = i

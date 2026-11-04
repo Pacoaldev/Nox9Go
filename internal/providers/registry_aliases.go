@@ -90,4 +90,5 @@ var RegistryAliases = map[string]string{
 	"xiaomi-tokenplan":    "xmtp",
 	"zed":                 "zd",
 	"hcnsec":              "hc",
+	"xkiro":               "xk",
 }

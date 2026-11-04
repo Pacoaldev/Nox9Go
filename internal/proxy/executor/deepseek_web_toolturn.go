@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+
 	"time"
 
 	"nox9go/proxy/internal/proxy"
@@ -363,25 +363,3 @@ func deepSeekFinishReason(message map[string]any) string {
 	return "stop"
 }
 
-// deepSeekStripToolScaffold removes a leading instruction echo.
-//
-// The prompt tells the model to reply with a single JSON object, and models
-// sometimes echo that instruction back before complying. When the answer is not
-// a declared tool call, the echoed scaffolding is noise the user would read, so
-// it is dropped — but only when what follows still has content, so an answer
-// that is *only* the echo is never emptied.
-func deepSeekStripToolScaffold(text string) string {
-	trimmed := strings.TrimSpace(text)
-	if !strings.HasPrefix(trimmed, "{") {
-		return trimmed
-	}
-	end := strings.LastIndex(trimmed, "}")
-	if end > 0 && end < len(trimmed)-1 {
-		tail := strings.TrimSpace(trimmed[end+1:])
-		if tail != "" && !strings.HasPrefix(tail, "{") {
-			return trimmed[:end+1] + "\n" + tail
-		}
-		return trimmed[:end+1]
-	}
-	return trimmed
-}

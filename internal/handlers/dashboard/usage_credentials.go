@@ -168,7 +168,7 @@ func (h *DashboardHandler) markDeadGrant(conn *models.ProviderConnection, refres
 // a concurrent refresh would log the account out rather than renew it. A read
 // that fails, or a row that carries no token, leaves the snapshot in place:
 // this narrows what the refresh spends, it does not decide whether to refresh.
-func (h *DashboardHandler) adoptStoredUsageCredentials(ctx context.Context, conn *models.ProviderConnection, creds usageCredentials) usageCredentials {
+func (h *DashboardHandler) adoptStoredUsageCredentials(_ context.Context, conn *models.ProviderConnection, creds usageCredentials) usageCredentials {
 	if h.Repo == nil || conn == nil || conn.ID == "" {
 		return creds
 	}

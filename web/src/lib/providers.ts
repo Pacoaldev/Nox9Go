@@ -138,6 +138,25 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     ]
   },
   {
+    "id": "xkiro",
+    "name": "xKiro",
+    "category": "apikey",
+    "alias": "xk",
+    "color": "#22C55E",
+    "icon": "bolt",
+    "website": "https://xkiro.com",
+    "notice": {"text":"Unified AI gateway (api.xkiro.com) with 100+ LLM models, image generation, TTS, and 300M free tokens/day. Accepts a bearer token (sk-xt-...) or x-api-key header.", "apiKeyUrl":"https://xkiro.com"},
+    "modelsFetcher": {"url": "https://api.xkiro.com/v1/models", "type": "openai"},
+    "authType": "apikey",
+    "noAuth": false,
+    "usage": true,
+    "serviceKinds": [
+      "llm",
+      "image",
+      "tts"
+    ]
+  },
+  {
     "id": "hcnsec",
     "name": "HCNSec",
     "category": "apikey",

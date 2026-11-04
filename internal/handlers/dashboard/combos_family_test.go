@@ -202,7 +202,9 @@ func TestAutoFamilyComboID_StableAndSafe(t *testing.T) {
 		t.Errorf("autoFamilyComboID(claude-sonnet) = %q, want %q", got, want)
 	}
 	// Same family must always map to the same id so regeneration upserts.
-	if autoFamilyComboID("gpt-mini") != autoFamilyComboID("gpt-mini") {
+	id1 := autoFamilyComboID("gpt-mini")
+	id2 := autoFamilyComboID("gpt-mini")
+	if id1 != id2 {
 		t.Error("autoFamilyComboID is not stable")
 	}
 }
