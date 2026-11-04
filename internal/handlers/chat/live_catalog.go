@@ -63,6 +63,11 @@ var (
 type LiveCapabilities struct {
 	Thinking bool `json:"thinking"`
 	Agentic  bool `json:"agentic"`
+	// Tools states that the model can call tools. Zed reports it as
+	// `supports_tools`; Kiro's agentic variants are the tool-capable ones.
+	// The combo aggregate folds this into its own `tools` flag, so a leaf
+	// that states it must not be counted as a leaf without tools.
+	Tools bool `json:"tools,omitempty"`
 
 	// A catalogue may also state the model's real windows and effort levels.
 	// Carrying them here lets the listing publish the provider's own numbers,
@@ -367,8 +372,8 @@ func expandKiroVariants(upstreamID, display string, ctxLen int) []LiveModel {
 	}
 	if base != "auto" {
 		variants = append(variants,
-			LiveModel{ID: base + "-agentic", Name: display + " (Agentic)", ContextLength: ctxLen, Capabilities: &LiveCapabilities{Agentic: true}},
-			LiveModel{ID: base + "-thinking-agentic", Name: display + " (Thinking + Agentic)", ContextLength: ctxLen, Capabilities: &LiveCapabilities{Thinking: true, Agentic: true}},
+			LiveModel{ID: base + "-agentic", Name: display + " (Agentic)", ContextLength: ctxLen, Capabilities: &LiveCapabilities{Agentic: true, Tools: true}},
+			LiveModel{ID: base + "-thinking-agentic", Name: display + " (Thinking + Agentic)", ContextLength: ctxLen, Capabilities: &LiveCapabilities{Thinking: true, Agentic: true, Tools: true}},
 		)
 	}
 	return variants

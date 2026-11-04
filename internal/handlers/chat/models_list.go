@@ -1122,6 +1122,7 @@ func (h *ChatHandler) aggregateComboCapabilities(combo *models.Combo) (*provider
 			caps = append(caps, providers.CapabilitiesDetail{
 				ThinkingCanDisable: true,
 				Reasoning:          live.Capabilities.Thinking,
+				Tools:              live.Capabilities.Tools,
 				ContextWindow:      live.ContextLength,
 				MaxOutput:          live.MaxOutput,
 			})

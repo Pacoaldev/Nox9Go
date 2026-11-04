@@ -56,6 +56,7 @@ func (h *ChatHandler) fetchZedLiveCatalog(ctx context.Context, conn *models.Prov
 			Capabilities: &LiveCapabilities{
 				Thinking:           m.SupportsThinking,
 				Agentic:            m.SupportsTools,
+				Tools:              m.SupportsTools,
 				Vision:             m.SupportsImages,
 				ContextWindow:      m.MaxTokenCount,
 				MaxOutput:          m.MaxOutputTokens,
