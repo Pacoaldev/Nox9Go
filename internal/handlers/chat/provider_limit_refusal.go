@@ -20,6 +20,8 @@ import (
 const (
 	axisContract   = "contract"
 	axisTokenQuota = "token_quota"
+	// axisCircuit is a provider whose circuit breaker is open after repeated 5xx.
+	axisCircuit = "circuit_open"
 )
 
 // providerRefusalStatus derives the HTTP status from the axis. Congestion is a 429:
@@ -29,6 +31,8 @@ func providerRefusalStatus(axis string) int {
 	switch axis {
 	case axisContract, axisTokenQuota:
 		return http.StatusForbidden
+	case axisCircuit:
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusTooManyRequests
 	}
@@ -41,6 +45,8 @@ func providerRefusalType(axis string) string {
 		return "provider_contract_expired"
 	case axisTokenQuota:
 		return "provider_token_quota_exhausted"
+	case axisCircuit:
+		return "provider_circuit_open"
 	default:
 		return "rate_limit_exceeded"
 	}

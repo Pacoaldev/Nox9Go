@@ -7,6 +7,22 @@ Mistral account stays out of rotation long enough for its burst limit to recover
 
 ### Routing and quota
 
+- **Gemini transport timeout failover.** Classify transient transport faults
+  (`http2: timeout awaiting response headers`, `EOF`, `connection reset by peer`) as
+  retryable HTTP 502 `UpstreamFailure` in `ForwardGemini` so timeouts trigger combo
+  and account failover rather than aborting the turn (`luqman-v1/9router-go#922`).
+- **Tool call loop and anomaly detection.** Ported deterministic loop detector in
+  `internal/detection` analyzing trailing tool calls for stuck identical calls, cyclic
+  patterns, and repeated errors, logging findings to request anomalies (`luqman-v1/9router-go#921`).
+- **Provider circuit breaker.** Ported admission control from `luqman-v1/9router-go#858`.
+  After 5 consecutive provider-level 5xx failures, outbound traffic to that provider
+  trips open for 30s with exponential backoff on repeated probe failures. It rejects
+  with HTTP 503 `provider_circuit_open` so combo candidates immediately advance to the
+  next provider without penalizing account cooldowns.
+- **Model health background scheduler.** Ported opt-in health loop from `luqman-v1/9router-go#921`.
+  Monitors imported custom models when configured via `modelHealth` in settings.
+  Disables models in `disabledModels` after repeated consecutive probe failures and
+  can automatically re-enable them upon recovery.
 - **A run of 429s stops the failover walk.** The walk dialled every remaining
   account after a 429, so one client request became one upstream call per
   account and parked each of them on its own cooldown for a limit that answered
@@ -21,6 +37,22 @@ Mistral account stays out of rotation long enough for its burst limit to recover
   next request and earning another 429. The floor applies only when the upstream
   names no wait of its own; an announced `Retry-After` is still honoured exactly,
   and every other provider keeps the classifier's own reading.
+
+### Providers
+
+- **HCNSec provider gateway.** Added HCNSec (`hcnsec`, alias `hc`) OpenAI-compatible gateway
+  (`https://api.hcnsec.cn`) relaying GLM, DeepSeek, Qwen, Step, MiMo, MiniCPM, and SenseNova
+  models with speech, embeddings, and dynamic catalog discovery (`luqman-v1/9router-go#854`).
+
+### Wire protocols and translation
+
+- **Gemini embeddings dimension mapping.** Ported `dimensions` forwarding to Gemini's
+  `outputDimensionality` (upstream `decolua/9router#1366`, `luqman-v1/9router-go#895`).
+- **Tool schema regex lookaround stripping.** Widened regex pattern sanitization to
+  strip lookarounds (`(?=...)`, `(?<!...)`, etc.) across all OpenAI-compatible targets
+  instead of only OpenRouter (`luqman-v1/9router-go#886`).
+- **SSE delta reasoning recognition.** Recognized `delta.reasoning` chunks alongside
+  `delta.reasoning_content` in SSE streams and empty success probes (`luqman-v1/9router-go#938`).
 
 ### Repository
 

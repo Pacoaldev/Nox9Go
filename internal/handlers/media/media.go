@@ -122,6 +122,11 @@ func (h *MediaHandler) HandleEmbeddings(w http.ResponseWriter, r *http.Request) 
 	embeddingsURL := buildEmbeddingsURL(providerCfg.BaseURL)
 	finalBody := handlerutil.UpdateModelInBody(body, modelInfo.Model)
 
+	// Gemini embeddings take dimensions as outputDimensionality (upstream decolua/9router#1366).
+	if providers.ResolveAlias(modelInfo.Provider) == "gemini" {
+		finalBody = forwardGeminiEmbeddingDimensions(finalBody)
+	}
+
 	req, err := http.NewRequestWithContext(r.Context(), "POST", embeddingsURL, strings.NewReader(string(finalBody)))
 	if err != nil {
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, fmt.Sprintf("create request: %v", err))

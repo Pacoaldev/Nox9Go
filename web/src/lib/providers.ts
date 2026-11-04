@@ -138,6 +138,25 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     ]
   },
   {
+    "id": "hcnsec",
+    "name": "HCNSec",
+    "category": "apikey",
+    "alias": "hc",
+    "color": "#0284C7",
+    "icon": "security",
+    "website": "https://api.hcnsec.cn",
+    "notice": {"text":"OpenAI-compatible gateway from HCNSec, offering multi-vendor models, speech, and embeddings. Accepts a bearer token.", "apiKeyUrl":"https://api.hcnsec.cn"},
+    "modelsFetcher": {"url": "https://api.hcnsec.cn/v1/models", "type": "openai"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm",
+      "stt",
+      "tts",
+      "embedding"
+    ]
+  },
+  {
     "id": "sumopod",
     "name": "SumoPod",
     "category": "apikey",

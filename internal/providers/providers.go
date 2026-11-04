@@ -190,7 +190,8 @@ var modelsListURL = map[string]string{
 	// or `models`, and the dashboard falls back to the `model` field when `id`
 	// is absent, so the shape needs no special case here.
 	"ollama":     "https://ollama.com/api/tags",
-	"openrouter": "https://openrouter.ai/api/v1/models", // The catalog entries added alongside moonshot/qwen/zhipu all publish a
+	"openrouter": "https://openrouter.ai/api/v1/models",
+	"hcnsec":     "https://api.hcnsec.cn/v1/models", // The catalog entries added alongside moonshot/qwen/zhipu all publish a
 	// standard OpenAI /v1/models catalogue, so they belong here too: without an
 	// entry only "Sync Models" rendered for them, and sync has nothing to sync
 	// from when the provider ships no static rows and the user cannot import.
@@ -390,6 +391,12 @@ var KnownProviders = map[string]ProviderConfig{
 	// SumoPod — Indonesian AI gateway (ai.sumopod.com), OpenAI-compatible
 	// chat completions with 60+ models across Claude, Gemini, GPT, DeepSeek,
 	// Qwen, GLM, Kimi, MiniMax, Seed, Grok, Hy and Mimo.
+	"hcnsec": {
+		BaseURL:        "https://api.hcnsec.cn/v1/chat/completions",
+		AuthHeader:     "Authorization",
+		AuthScheme:     "bearer",
+		TTSURL:         "https://api.hcnsec.cn/v1/audio/speech",
+	},
 	"sumopod": {
 		BaseURL:    "https://ai.sumopod.com/v1/chat/completions",
 		AuthHeader: "Authorization",

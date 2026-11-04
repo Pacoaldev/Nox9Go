@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -107,6 +109,12 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		if isTransientGeminiTransportError(err) {
+			return nil, UpstreamFailure(http.StatusBadGateway, fmt.Sprintf("ForwardGemini antigravity transport: %v", err))
+		}
 		return nil, fmt.Errorf("upstream request: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -183,4 +191,35 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 		return nil, &UpstreamError{StatusCode: resp.StatusCode, Body: errBody, Header: resp.Header}
 	}
 	return resp, nil
+}
+
+// isTransientGeminiTransportError reports whether a client.Do failure is a
+// transient upstream fault (header timeout, HTTP/2 stream timeout, EOF)
+// that the combo layer should fail over on (upstream #922).
+func isTransientGeminiTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Timeout() {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, needle := range []string{
+		"http2: timeo",
+		"timeout awaiting response headers",
+		"awaiting response headers",
+		"server closed idle connection",
+		"eof",
+		"connection reset by peer",
+		"connection refused",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
 }

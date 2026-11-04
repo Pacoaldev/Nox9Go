@@ -19,6 +19,7 @@ export const PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "atria": "atria",
   "dahl": "dahl",
   "daoxe": "dx",
+  "hcnsec": "hc",
   "sumopod": "sp",
   "tokenharbor": "tokenharbor",
   "alicode": "alicode",

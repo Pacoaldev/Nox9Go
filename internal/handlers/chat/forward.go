@@ -53,14 +53,15 @@ func (h *ChatHandler) forwardRequest(
 			body = sanitized
 		}
 	}
-	// OpenRouter strict pattern validation (PR #3665): strip malformed regex patterns
-	if strings.Contains(cfg.BaseURL, "openrouter.ai") {
+	// Strict pattern validation: strip regex lookarounds and malformed patterns that
+	// OpenAI-compatible validators reject with HTTP 400 (openrouter PR #3665, widened).
+	{
 		var bodyMap map[string]any
 		if err := json.Unmarshal(body, &bodyMap); err == nil {
 			if tools, ok := bodyMap["tools"].([]any); ok && len(tools) > 0 {
-				if normalized, removed := translator.NormalizeToolSchemasForProvider("openrouter", tools); removed > 0 {
+				if normalized, removed := translator.NormalizeToolSchemasForProvider(provider, tools); removed > 0 {
 					bodyMap["tools"] = normalized
-					log.Debug("tool_schema", "openrouter stripped invalid patterns", "removed", removed)
+					log.Debug("tool_schema", "stripped invalid patterns", "provider", provider, "removed", removed)
 					if newBody, err := json.Marshal(bodyMap); err == nil {
 						body = newBody
 					}
@@ -269,7 +270,7 @@ func sseToClaudeJSON(raw []byte) ([]byte, bool) {
 		if c, ok := delta["content"].(string); ok && c != "" {
 			contentParts = append(contentParts, c)
 		}
-		if r, ok := delta["reasoning_content"].(string); ok && r != "" {
+		if r := deltaReasoning(delta); r != "" {
 			reasoningParts = append(reasoningParts, r)
 		}
 		if fr, ok := choice["finish_reason"].(string); ok {
@@ -490,4 +491,15 @@ func (h *ChatHandler) respondAsResponses(ctx context.Context, w http.ResponseWri
 	w.WriteHeader(http.StatusOK)
 	w.Write(body)
 	return nil
+}
+
+// deltaReasoning returns the streamed reasoning text of a chunk delta. Some
+// open-weights servers (SGLang, Qwen) emit "reasoning" instead of
+// "reasoning_content".
+func deltaReasoning(delta map[string]any) string {
+	if r, ok := delta["reasoning_content"].(string); ok && r != "" {
+		return r
+	}
+	r, _ := delta["reasoning"].(string)
+	return r
 }

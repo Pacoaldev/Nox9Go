@@ -116,6 +116,7 @@ func ProvideServer(p ServerParams) *http.Server {
 			// credential has to be pasted again every few minutes.
 			executor.StartGeminiWebRotation(shutdown.Context(), p.Repo)
 			startAutoPingScheduler(shutdown.Context(), p.Repo, p.ChatHandler)
+			startModelHealthLoop(shutdown.Context(), p.Repo, p.ChatHandler)
 
 			log.Printf("NOX9GO Proxy (%s) starting on port %d", updater.CurrentVersion, p.Config.Port)
 

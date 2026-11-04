@@ -5,6 +5,7 @@ import (
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/middleware"
+	"nox9go/proxy/internal/resilience"
 	"nox9go/proxy/internal/providers"
 	"nox9go/proxy/internal/proxy"
 	"nox9go/proxy/internal/proxy/executor"
@@ -58,6 +59,7 @@ func NewChatHandler(repo *db.Repo, ts ...*shared.TokenSaverConfig) *ChatHandler 
 		TokenSaver:  cfg,
 		SemanticCache: sc,
 		stickyState: make(map[string]*comboStickyState),
+		Breakers:    resilience.NewRegistry(),
 	}
 }
 

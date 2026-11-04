@@ -10,6 +10,7 @@ import (
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/middleware"
+	"nox9go/proxy/internal/resilience"
 	"nox9go/proxy/internal/models"
 	"nox9go/proxy/internal/proxy"
 	"nox9go/proxy/internal/semanticcache"
@@ -35,6 +36,9 @@ type ChatHandler struct {
 	// pre-dispatch, but only the response knows what the turn actually cost.
 	RateLimiter   *middleware.RateLimiter
 	SemanticCache *semanticcache.Cache
+	// Breakers holds the per-provider circuit breakers. Nil on a handler built
+	// without NewChatHandler, which disables the gate.
+	Breakers *resilience.Registry
 	stickyMu      sync.Mutex
 	stickyState   map[string]*comboStickyState
 	// oauthRefreshFlight collapses concurrent OAuth token refreshes for the

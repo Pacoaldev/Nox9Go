@@ -842,6 +842,9 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 	if providerSlot != nil {
 		defer providerSlot.Release()
 	}
+	if breakerRefusal := h.breakerGate(ctx, provider); breakerRefusal != nil {
+		return breakerRefusal
+	}
 
 	// Hand the usage meter a way to reconcile the limiter's TPM reservations —
 	// the caller's own and this provider's — against what the turn actually cost.
@@ -947,6 +950,8 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 			}
 		}
 	}
+
+	h.breakerReport(ctx, provider, fwdErr)
 
 	// Codex answers an exhausted 5h/7d window with a 429 carrying
 	// usage_limit_reached and the exact reset. Caching it lets the next

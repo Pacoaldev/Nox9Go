@@ -336,6 +336,7 @@ func IsZeroContentResponse(body []byte) bool {
 					ToolCalls        jsontext.Value `json:"tool_calls"`
 					FunctionCall     jsontext.Value `json:"function_call"`
 					ReasoningContent jsontext.Value `json:"reasoning_content"`
+					Reasoning        jsontext.Value `json:"reasoning"`
 				}
 				if len(bytes.TrimSpace(msgRaw)) > 0 {
 					_ = json.Unmarshal(msgRaw, &msg, handlerutil.UpstreamBody)
@@ -343,7 +344,7 @@ func IsZeroContentResponse(body []byte) bool {
 
 				hasContent := probeHasContent(msg.Content)
 				hasToolCalls := probeHasToolCalls(msg.ToolCalls, msg.FunctionCall)
-				hasReasoning := probeHasReasoning(msg.ReasoningContent)
+				hasReasoning := probeHasReasoning(msg.ReasoningContent) || probeHasReasoning(msg.Reasoning)
 
 				var finish string
 				trimmedFR := bytes.TrimSpace(c.FinishReason)

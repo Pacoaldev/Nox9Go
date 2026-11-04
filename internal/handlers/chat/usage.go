@@ -5,6 +5,7 @@ import (
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net/http"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 
 	"nox9go/proxy/internal/constants"
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/detection"
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/handlerutil"
 	"nox9go/proxy/internal/log"
@@ -112,7 +114,12 @@ func (h *ChatHandler) LogFailure(
 		startedAt = now.Add(-time.Duration(latencyMs) * time.Millisecond)
 	}
 
-	reqData, marshalErr := json.Marshal(map[string]any{
+	var openaiReq translator.OpenAIRequest
+	_ = json.Unmarshal(requestBody, &openaiReq)
+	tools := detection.ExtractToolCallsFromOpenAIMessages(openaiReq.Messages)
+	findings := detection.DetectLoops(tools, message)
+
+	failurePayload := map[string]any{
 		"id":             reqID,
 		"provider":       info.Provider,
 		"model":          info.Model,
@@ -134,9 +141,13 @@ func (h *ChatHandler) LogFailure(
 			"total": latencyMs,
 		},
 		"tokens":   tokens,
-		"request":  map[string]any{"messages": extractRequestMessages(requestBody)},
+		"request":  map[string]any{"messages": extractMessagesForLogging(openaiReq.Messages)},
 		"response": map[string]any{"error": message, "status": statusCode, "content": responseContent},
-	})
+	}
+	if len(findings) > 0 {
+		failurePayload["anomalies"] = findings
+	}
+	reqData, marshalErr := json.Marshal(failurePayload)
 	if marshalErr != nil {
 		return
 	}
@@ -324,7 +335,11 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 			SkipReason:             skipReason,
 		})
 	}
-	reqMsgs := extractRequestMessages(requestBody)
+	var openaiReq translator.OpenAIRequest
+	_ = json.Unmarshal(requestBody, &openaiReq)
+	tools := detection.ExtractToolCallsFromOpenAIMessages(openaiReq.Messages)
+	findings := detection.DetectLoops(tools, "")
+	reqMsgs := extractMessagesForLogging(openaiReq.Messages)
 
 	tokensMap := map[string]int{
 		"prompt_tokens":               usage.PromptTokens,
@@ -345,7 +360,7 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 		startedAtUsage = now.Add(-time.Duration(latencyMs) * time.Millisecond)
 	}
 
-	reqData, err := json.Marshal(map[string]any{
+	detailPayload := map[string]any{
 		"id":             reqID,
 		"provider":       info.Provider,
 		"model":          info.Model,
@@ -367,7 +382,11 @@ func (h *ChatHandler) logUsage(ctx context.Context, info *UsageLogInfo, usage *t
 		"cost":           cost,
 		"request":        map[string]any{"messages": reqMsgs},
 		"response":       map[string]any{"content": respContent},
-	})
+	}
+	if len(findings) > 0 {
+		detailPayload["anomalies"] = findings
+	}
+	reqData, err := json.Marshal(detailPayload)
 	if err != nil {
 		log.Error("usage", "marshal request detail failed", "error", err)
 		return
@@ -400,16 +419,34 @@ func extractRequestMessages(body []byte) []map[string]string {
 	if err := json.Unmarshal(body, &req); err != nil || len(req.Messages) == 0 {
 		return nil
 	}
-	msgs := make([]map[string]string, 0, len(req.Messages))
-	for _, m := range req.Messages {
+	return extractMessagesForLogging(req.Messages)
+}
+
+func extractMessagesForLogging(messages []translator.OpenAIMessage) []map[string]string {
+	var msgs []map[string]string
+	for _, m := range messages {
 		content := extractContent(m.Content)
 		content = truncateDetailText(content, constants.MaxMessageContentLen, "...")
-		msgs = append(msgs, map[string]string{"role": m.Role, "content": content})
+		entry := map[string]string{"role": m.Role, "content": content}
+		if len(m.ToolCalls) > 0 {
+			names := make([]string, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				names = append(names, toolCallSignature(tc.Function.Name, tc.Function.Arguments))
+			}
+			entry["tool_calls"] = strings.Join(names, ",")
+		}
+		msgs = append(msgs, entry)
 	}
 	if len(msgs) > constants.MaxLoggedMessages {
 		msgs = msgs[len(msgs)-constants.MaxLoggedMessages:]
 	}
 	return msgs
+}
+
+func toolCallSignature(name, args string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(strings.TrimSpace(args)))
+	return fmt.Sprintf("%s#%08x", name, h.Sum32())
 }
 
 // extractContent handles content that is either a string or array of content blocks.
