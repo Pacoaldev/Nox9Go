@@ -3,6 +3,8 @@
   import {
     api,
     normalizeLastError,
+    type CatalogSweepConfig,
+    type CatalogSweepEntry,
     type ConnectionUsageResponse,
     type CreateConnectionPayload,
     type FreebuffSessionStatusResponse,
@@ -38,6 +40,7 @@
   } from '../../lib/customModels'
   import { emailPrivacy, formatEmailLabel } from '../../lib/privacy'
   import { loadDeprecations, refreshDeprecations, subscribeDeprecations } from '../../lib/modelDeprecations.svelte'
+  import { formatCheckedAt, summarizeSweep } from '../../lib/catalogSweep'
   import DeprecatedBadge from '../../lib/ui/DeprecatedBadge.svelte'
   import Menu from '../../lib/ui/Menu.svelte'
   import MenuItem from '../../lib/ui/MenuItem.svelte'
@@ -2916,6 +2919,65 @@
     void reloadDeprecations()
     return unsubscribe
   })
+
+  // Catalogue sweep: what the upstream catalogue listed the last time it was
+  // read. Informational only. A model the provider no longer lists is NOT
+  // marked deprecated on that evidence, so nothing here touches the badges.
+  let sweepEntry = $state<CatalogSweepEntry | null>(null)
+  let sweepConfig = $state<CatalogSweepConfig | null>(null)
+  let isSweeping = $state(false)
+  let sweepError = $state('')
+  let sweepSummary = $derived(summarizeSweep(sweepEntry ?? undefined))
+  let sweepCheckedAt = $derived(formatCheckedAt(sweepEntry?.checkedAt))
+
+  /**
+   * Reads the last sweep result for this provider. A failure here is silent:
+   * the sweep is extra information, and a broken sweep must not hide the
+   * models the operator is looking at.
+   */
+  async function loadCatalogSweep() {
+    const pid = providerId
+    sweepEntry = null
+    sweepError = ''
+    // A sweep still running for the previous provider does not own this view
+    // any more: its result is dropped, so the button must not stay disabled.
+    isSweeping = false
+    try {
+      const res = await api.getCatalogSweep()
+      if (pid !== providerId) return
+      sweepConfig = res.config
+      sweepEntry = res.providers?.[pid] ?? null
+    } catch {
+      if (pid === providerId) sweepEntry = null
+    }
+  }
+
+  /**
+   * Runs the sweep now for this provider. The deprecation badges are reloaded
+   * afterwards because a sweep can revive a model the upstream still serves.
+   */
+  async function handleRunCatalogSweep() {
+    if (isSweeping) return
+    const pid = providerId
+    isSweeping = true
+    sweepError = ''
+    try {
+      const res = await api.runCatalogSweep(pid)
+      if (pid !== providerId) return
+      sweepConfig = res.config
+      sweepEntry = res.providers?.[pid] ?? null
+      await refreshDeprecations()
+      await reloadDeprecations()
+    } catch (err) {
+      if (pid === providerId) sweepError = err instanceof Error ? err.message : String(err)
+    } finally {
+      if (pid === providerId) isSweeping = false
+    }
+  }
+
+  $effect(() => {
+    void loadCatalogSweep()
+  })
 </script>
 
 <div class="flex min-w-0 flex-col gap-6 px-1 sm:gap-8 sm:px-0">
@@ -4305,6 +4367,75 @@
           {isSyncingModels ? 'Syncing...' : 'Sync Models'}
         </button>
       {/if}
+    </div>
+
+    <!-- Catalogue sweep: what the upstream catalogue lists, and what it no
+         longer lists. Informational only — a model missing from a catalogue is
+         not evidence of deprecation, so nothing here badges a model. -->
+    <div
+      class="w-full mt-2 rounded-lg border border-border bg-surface-2 p-3"
+      title={sweepConfig
+        ? `Catalogue sweep ${sweepConfig.enabled ? `runs every ${sweepConfig.intervalMin} min` : 'is disabled'}`
+        : 'Catalogue sweep status'}
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex flex-col gap-1">
+          <span class="font-code text-[10px] uppercase text-text-muted">Catalogue sweep</span>
+          {#if sweepSummary.state === 'ok'}
+            <div class="flex items-center gap-1.5 text-xs text-text-main">
+              <span>Models listed</span>
+              <span class="font-code text-text-muted">{sweepSummary.listed}</span>
+            </div>
+          {:else if sweepSummary.state === 'skipped'}
+            <span class="text-xs text-text-muted">No catalogue available</span>
+          {:else if sweepSummary.state === 'error'}
+            <span class="text-xs text-danger">{sweepEntry?.error}</span>
+          {:else}
+            <span class="text-xs text-text-muted">Never checked</span>
+          {/if}
+
+          {#if sweepSummary.state === 'ok' && sweepSummary.unlistedCount > 0}
+            <div
+              class="flex flex-col gap-1 text-xs text-warning"
+              title="The provider no longer lists these models. Absence from a catalogue is not proof of deprecation."
+            >
+              <div class="flex items-center gap-1.5">
+                <span>No longer listed</span>
+                <span class="font-code">{sweepSummary.unlistedCount}</span>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                {#each sweepEntry?.unlisted ?? [] as modelId (modelId)}
+                  <code class="rounded bg-sidebar px-1.5 py-0.5 font-mono text-[10px] text-text-muted">{modelId}</code>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if sweepCheckedAt}
+            <div class="flex items-center gap-1.5 text-xs text-text-muted">
+              <span>Last checked</span>
+              <span>{sweepCheckedAt}</span>
+            </div>
+          {/if}
+
+          {#if sweepError}
+            <span class="text-xs text-text-muted">{sweepError}</span>
+          {/if}
+        </div>
+
+        <button
+          type="button"
+          onclick={handleRunCatalogSweep}
+          disabled={isSweeping}
+          class="flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-3 hover:bg-surface-2 px-3 py-2 text-xs text-text-main transition-colors cursor-pointer disabled:opacity-50"
+          title="Read the provider's live catalog now and list the models it no longer publishes"
+        >
+          <span class="material-symbols-outlined text-sm {isSweeping ? 'animate-spin' : ''}">
+            {isSweeping ? 'progress_activity' : 'sync'}
+          </span>
+          {isSweeping ? 'Checking...' : 'Check now'}
+        </button>
+      </div>
     </div>
 
     {#if latestModels.length > 0 || latestError}

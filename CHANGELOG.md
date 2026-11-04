@@ -38,6 +38,23 @@ Mistral account stays out of rotation long enough for its burst limit to recover
   names no wait of its own; an announced `Retry-After` is still honoured exactly,
   and every other provider keeps the classifier's own reading.
 
+### Dashboard
+
+- **Periodic provider catalogue sweep.** A background loop re-reads the upstream
+  catalogue of every provider that publishes one (`modelSweep` settings key,
+  default on, `intervalMin` 720, clamped 15..10080) and records per provider what
+  the catalogue listed, how many recorded deprecations it disproved, and which of
+  the operator's configured models (custom models plus combo members) it no
+  longer lists. The provider detail view shows the last sweep with a `Check now`
+  action, and `GET`/`POST /api/models/sweep` expose the same state. A model the
+  catalogue omits is reported as *no longer listed* and never marked deprecated:
+  catalogue absence stays weak evidence, and only an explicit upstream 410 files
+  a deprecation. Providers without a queryable catalogue are reported as skipped.
+  `POST /api/models/sync` now runs the same sweep, so there is one implementation
+  of the catalogue pass. Its counters are now per provider rather than per
+  connection, and a catalogue read that listed no models counts as synced
+  instead of being dropped silently.
+
 ### Providers
 
 - **xKiro provider gateway.** Added xKiro (`xkiro`, alias `xk`) OpenAI-compatible gateway

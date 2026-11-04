@@ -321,6 +321,8 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	r.Get("/api/models/alias", dashH.HandleGetModelAliases)
 	r.Get("/api/models/deprecations", dashH.HandleGetModelDeprecations)
 	r.Post("/api/models/sync", dashH.HandleSyncProviderModels)
+	r.Get("/api/models/sweep", dashH.HandleGetCatalogSweep)
+	r.Post("/api/models/sweep", dashH.HandleRunCatalogSweep)
 	r.Put("/api/models/alias", dashH.HandleSetModelAlias)
 	r.Delete("/api/models/alias", dashH.HandleDeleteModelAlias)
 

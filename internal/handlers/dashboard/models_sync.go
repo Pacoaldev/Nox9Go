@@ -2,13 +2,13 @@ package dashboard
 
 import (
 	"bytes"
+	"context"
 	json "encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"nox9go/proxy/internal/handlerutil"
-	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/models"
 	"nox9go/proxy/internal/providers"
 )
@@ -27,55 +27,41 @@ import (
 //
 // The provider query parameter is optional: "" syncs every provider that can
 // list models.
+//
+// The sweep itself lives in catalog_sweep.go: this handler is the synchronous
+// view of the same pass, so there is exactly one implementation of it.
 func (h *DashboardHandler) HandleSyncProviderModels(w http.ResponseWriter, r *http.Request) {
 	provider := strings.TrimSpace(r.URL.Query().Get("provider"))
-	conns, err := h.Repo.GetProviderConnections(provider, true)
-	if err != nil {
-		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if len(conns) == 0 {
+	entries := h.RunCatalogSweep(r.Context(), provider)
+	if len(entries) == 0 {
+		// A sweep that produced no entry either had nothing to sweep or could
+		// not read the connections at all. The two answer differently: one is
+		// a 404, the other a 500 the operator can act on.
+		if _, err := h.Repo.GetProviderConnections(provider, true); err != nil {
+			handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		handlerutil.WriteJSONError(w, http.StatusNotFound, "no active connections to sync")
 		return
 	}
 
 	synced, failed, skipped, revived := 0, 0, 0, 0
-	var lastErr error
-	for _, conn := range conns {
-		if conn == nil {
-			continue
-		}
-		live, fetchErr, listable := h.fetchLiveModelIDs(r, conn)
-		if !listable {
-			// The provider has no catalogue endpoint at all. That is a
-			// property of the provider, not a failed sync, and reporting it as
-			// one would turn every Sync Models click on such a provider into a
-			// 502 the operator cannot act on.
+	var lastErr string
+	for _, entry := range entries {
+		switch {
+		case entry.Error != "":
+			failed++
+			lastErr = entry.Error
+		case entry.Skipped:
 			skipped++
-			continue
+		default:
+			synced++
+			revived += entry.Revived
 		}
-		if fetchErr != nil {
-			failed++
-			lastErr = fetchErr
-			log.Warn("models-sync", "catalogue unreachable", "provider", conn.Provider, "conn", conn.ID, "error", fetchErr)
-			continue
-		}
-		if len(live) == 0 {
-			continue
-		}
-		cleared, clearErr := h.Repo.RetainLiveModels(conn.Provider, live)
-		if clearErr != nil {
-			failed++
-			lastErr = clearErr
-			continue
-		}
-		synced++
-		revived += cleared
-		log.Info("models-sync", "catalogue refreshed", "provider", conn.Provider, "models", len(live), "revived", cleared)
 	}
 
 	if synced == 0 && skipped == 0 && failed > 0 {
-		handlerutil.WriteJSONError(w, http.StatusBadGateway, "model sync failed: "+lastErr.Error())
+		handlerutil.WriteJSONError(w, http.StatusBadGateway, "model sync failed: "+lastErr)
 		return
 	}
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
@@ -85,17 +71,9 @@ func (h *DashboardHandler) HandleSyncProviderModels(w http.ResponseWriter, r *ht
 		"failed":       failed,
 		"skipped":      skipped,
 		"revived":      revived,
-		"lastError":    errText(lastErr),
+		"lastError":    lastErr,
 		"catalogState": providers.GetCatalogState(),
 	})
-}
-
-// errText renders an optional error for a JSON field.
-func errText(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }
 
 // fetchLiveModelIDs returns the set of model ids a connection's upstream
@@ -105,9 +83,9 @@ func errText(err error) string {
 // property of the provider rather than a sync failure — the dashboard answers
 // 400 for those, and treating that as an error would make every provider
 // without a catalogue report a broken sync.
-func (h *DashboardHandler) fetchLiveModelIDs(r *http.Request, conn *models.ProviderConnection) (map[string]bool, error, bool) {
+func (h *DashboardHandler) fetchLiveModelIDs(ctx context.Context, conn *models.ProviderConnection) (map[string]bool, error, bool) {
 	capture := newModelsCapture()
-	h.writeConnectionModels(capture, r, conn.ID)
+	h.writeConnectionModels(ctx, capture, conn.ID)
 	if capture.status == http.StatusBadRequest {
 		return nil, nil, false
 	}

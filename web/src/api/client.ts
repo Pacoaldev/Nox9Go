@@ -115,6 +115,31 @@ export interface ModelDeprecation {
 /** Deprecations keyed "<provider>/<model>" — the same key a combo entry uses. */
 export type ModelDeprecationMap = Record<string, ModelDeprecation>
 
+/**
+ * One provider's last catalogue sweep.
+ *
+ * `unlisted` lists models the provider no longer publishes. Absence from a
+ * catalogue is not evidence of deprecation, so it stays informational.
+ */
+export interface CatalogSweepEntry {
+  provider: string
+  checkedAt: string
+  listed: number
+  revived: number
+  unlisted?: string[]
+  skipped?: boolean
+  error?: string
+}
+
+/** Configuration of the periodic catalogue sweep. */
+export interface CatalogSweepConfig {
+  enabled: boolean
+  intervalMin: number
+}
+
+/** Sweep results keyed by provider id. */
+export type CatalogSweepMap = Record<string, CatalogSweepEntry>
+
 export interface APIKey {
   id: string
   /**
@@ -1701,6 +1726,19 @@ export const api = {
   syncProviderModels: (provider?: string) =>
     request<{ success: boolean; provider: string; synced: number; failed: number; revived: number; lastError?: string }>(
       `/api/models/sync${provider ? `?provider=${encodeURIComponent(provider)}` : ''}`,
+      { method: 'POST' },
+    ),
+  /**
+   * Last catalogue sweep per provider: how many models the upstream lists and
+   * which ones it no longer lists. Informational only — a model missing from a
+   * catalogue is not marked deprecated on that evidence.
+   */
+  getCatalogSweep: () =>
+    request<{ config: CatalogSweepConfig; providers: CatalogSweepMap }>('/api/models/sweep'),
+  /** Runs the catalogue sweep now. Omitting the provider sweeps them all. */
+  runCatalogSweep: (provider?: string) =>
+    request<{ config: CatalogSweepConfig; providers: CatalogSweepMap }>(
+      `/api/models/sweep${provider ? `?provider=${encodeURIComponent(provider)}` : ''}`,
       { method: 'POST' },
     ),
   /**

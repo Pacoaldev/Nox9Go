@@ -117,6 +117,7 @@ func ProvideServer(p ServerParams) *http.Server {
 			executor.StartGeminiWebRotation(shutdown.Context(), p.Repo)
 			startAutoPingScheduler(shutdown.Context(), p.Repo, p.ChatHandler)
 			startModelHealthLoop(shutdown.Context(), p.Repo, p.ChatHandler)
+			startCatalogSweepLoop(shutdown.Context(), p.Repo)
 
 			log.Printf("NOX9GO Proxy (%s) starting on port %d", updater.CurrentVersion, p.Config.Port)
 

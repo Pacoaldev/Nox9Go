@@ -824,15 +824,20 @@ func (h *DashboardHandler) HandleGetConnectionModels(w http.ResponseWriter, r *h
 		handlerutil.WriteJSONError(w, http.StatusBadRequest, "missing connection id")
 		return
 	}
-	h.writeConnectionModels(w, r, id)
+	h.writeConnectionModels(r.Context(), w, id)
 }
 
 // writeConnectionModels is HandleGetConnectionModels with the connection id
-// already resolved. The split exists because model sync (POST
-// /api/models/sync) needs the same discovery for a connection it selected
-// itself, and a second copy of this provider-by-provider chain would be free
-// to drift from the one the dashboard imports models with (#179).
-func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.Request, id string) {
+// already resolved. The split exists because the model sweep (POST
+// /api/models/sync and the periodic catalogue sweep) needs the same discovery
+// for a connection it selected itself, and a second copy of this
+// provider-by-provider chain would be free to drift from the one the dashboard
+// imports models with (#179).
+//
+// The context is passed in rather than taken from the request so a background
+// sweep can carry its own deadline; the request was only ever a context
+// carrier here.
+func (h *DashboardHandler) writeConnectionModels(ctx context.Context, w http.ResponseWriter, id string) {
 	conn, err := h.Repo.GetProviderConnectionByID(id)
 	if err != nil || conn == nil {
 		handlerutil.WriteJSONError(w, http.StatusNotFound, "connection not found")
@@ -881,7 +886,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 			"Authorization": "Bearer " + token,
 			"User-Agent":    providers.AntigravityCLIUserAgent,
 		}
-		status, body, err := validateProbeDo(r.Context(), http.MethodPost, "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", headers, reqPayload)
+		status, body, err := validateProbeDo(ctx, http.MethodPost, "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", headers, reqPayload)
 		if err != nil {
 			statusCode, _, errMsg := ClassifyUpstreamNetworkError(err)
 			handlerutil.WriteJSONError(w, statusCode, "failed to fetch antigravity models: "+errMsg)
@@ -952,7 +957,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 			"Content-Type":  "application/json",
 			"Authorization": "Bearer " + token,
 		}
-		status, body, err := validateProbeDo(r.Context(), http.MethodPost, "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", headers, reqPayload)
+		status, body, err := validateProbeDo(ctx, http.MethodPost, "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", headers, reqPayload)
 		if err != nil {
 			statusCode, _, errMsg := ClassifyUpstreamNetworkError(err)
 			handlerutil.WriteJSONError(w, statusCode, "failed to fetch gemini-cli models: "+errMsg)
@@ -1020,7 +1025,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 			"Authorization": "Bearer " + authHeaderVal,
 			"User-Agent":    "Cline/3.0.0",
 		}
-		status, body, err := validateProbeDo(r.Context(), http.MethodGet, "https://api.cline.bot/api/v1/models", headers, nil)
+		status, body, err := validateProbeDo(ctx, http.MethodGet, "https://api.cline.bot/api/v1/models", headers, nil)
 		if err != nil {
 			statusCode, _, errMsg := ClassifyUpstreamNetworkError(err)
 			handlerutil.WriteJSONError(w, statusCode, "failed to fetch cline models: "+errMsg)
@@ -1044,7 +1049,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 		// no `cline-free/*` ids at all. The feed is additive and a dead feed must
 		// never take the catalogue down with it, so ids already present win —
 		// the same "first writer wins" rule upstream uses.
-		models = mergeClineFreeTier(models, clineFreeTierModels(r.Context()))
+		models = mergeClineFreeTier(models, clineFreeTierModels(ctx))
 		handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 			"provider":     conn.Provider,
 			"connectionId": conn.ID,
@@ -1059,7 +1064,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 		if token == "" {
 			token = connData.AccessToken
 		}
-		qoderModels, err := fetchQoderCatalogModels(r.Context(), conn.Provider, token, connData.ProviderSpecificData)
+		qoderModels, err := fetchQoderCatalogModels(ctx, conn.Provider, token, connData.ProviderSpecificData)
 		if err != nil {
 			handlerutil.WriteJSONError(w, http.StatusBadGateway, "failed to fetch Qoder models: "+err.Error())
 			return
@@ -1076,7 +1081,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 	// for a short-lived LLM token first, so it needs its own branch rather
 	// than the plain bearer /models fetch.
 	if conn.Provider == "zed" {
-		zedModels, err := fetchZedCatalogModels(r.Context(), conn, zedData)
+		zedModels, err := fetchZedCatalogModels(ctx, conn, zedData)
 		if err != nil {
 			handlerutil.WriteJSONError(w, http.StatusBadGateway, "failed to fetch Zed models: "+err.Error())
 			return
@@ -1104,7 +1109,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 		for k, v := range providers.ModelsListHeaders(conn.Provider) {
 			headers[k] = v
 		}
-		status, body, err := validateProbeDo(r.Context(), http.MethodGet, listURL, headers, nil)
+		status, body, err := validateProbeDo(ctx, http.MethodGet, listURL, headers, nil)
 		if err != nil {
 			statusCode, _, errMsg := ClassifyUpstreamNetworkError(err)
 			handlerutil.WriteJSONError(w, statusCode, "failed to fetch models: "+errMsg)
@@ -1170,7 +1175,7 @@ func (h *DashboardHandler) writeConnectionModels(w http.ResponseWriter, r *http.
 	} else {
 		headers["Authorization"] = "Bearer " + connData.APIKey
 	}
-	status, body, err := validateProbeDo(r.Context(), http.MethodGet, baseURL+"/models", headers, nil)
+	status, body, err := validateProbeDo(ctx, http.MethodGet, baseURL+"/models", headers, nil)
 	if err != nil {
 		statusCode, _, errMsg := ClassifyUpstreamNetworkError(err)
 		handlerutil.WriteJSONError(w, statusCode, "failed to fetch models: "+errMsg)
