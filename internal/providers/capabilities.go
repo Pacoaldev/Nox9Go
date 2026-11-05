@@ -309,6 +309,35 @@ var providerCapabilities = map[string]map[string]Capabilities{
 		"deepseek-ai/deepseek-v4-pro":   {Reasoning: true, Tools: true, ThinkingFormat: "openai"},
 		"deepseek-ai/deepseek-v4-flash": {Reasoning: true, Tools: true, ThinkingFormat: "openai"},
 	},
+	// Requesty AI router. Vendor-prefixed ids, so the substring tables and
+	// the bare-name lookup never match them; the numbers come straight from
+	// the live catalog and outrank the models.dev entry for the same weights.
+	"requesty": {
+		"fireworks/muse-glimmer-30b": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 131072, MaxOutput: 131072},
+		"nvidia/muse-glimmer-30b": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 131072, MaxOutput: 20480},
+		"nvidia/nemotron-3-ultra-550b-a55b": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 65536},
+		"nvidia/nemotron-3-super-120b-a12b": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 65536},
+		"nvidia/nemotron-3.5-lightning-30b-a3b": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 65536},
+		"meta/muse-spark-1.3": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 943718},
+		"meta/muse-wonder-1.0": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 943718},
+		"particle/particle-1": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 131072},
+		"google/gemma-4-31b-it": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 262144, MaxOutput: 8192},
+		"mistral/leanstral-1-5": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 262144, MaxOutput: 32768},
+		"novita/ling-3.1-flash": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 262144, MaxOutput: 32768},
+		"openai/gpt-6.1-sol": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1050000, MaxOutput: 128000},
+		"openai/gpt-6.1-terra": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1050000, MaxOutput: 128000},
+		"openai/gpt-6-luna": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1050000, MaxOutput: 128000},
+		"anthropic/claude-opus-5-5": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 128000},
+		"anthropic/claude-sonnet-5-5": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 128000},
+		"anthropic/claude-haiku-5-5": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 128000},
+		"vertex/gemini-4-argon": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 65536},
+		"moonshot/kimi-k3.1-pro": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 1048576},
+		"deepseek/deepseek-v4.1-flash-1017": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 384000},
+		"mistral/mistral-large-4": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 524288},
+		"xiaomi/mimo-v2.6-pro": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 131072},
+		"xiaomi/mimo-v2.6-flash": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 131072},
+		"minimaxi/minimax-m3.1-flash": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1000000, MaxOutput: 128000},
+	},
 	"codex": {
 		// Codex OAuth reports its own context windows (open-sse/providers/
 		// capabilities.js), which differ from both the OpenAI API's and the
@@ -670,6 +699,25 @@ func init() {
 	providerCapabilities["hc"] = providerCapabilities["hcnsec"]
 	providerCapabilities["xk"] = providerCapabilities["xkiro"]
 	providerCapabilities["oad"] = providerCapabilities["openadapter"]
+
+	// AMD Radeon Cloud Token Factory — context / vision / thinking from
+	// https://amd-aim.github.io/radeon-cloud-docs/models/overview/ (2026-11-03).
+	// Tools + json_object are documented for every chat model. OCR / TTS /
+	// systemone models use other endpoints and are not registered here.
+	providerCapabilities["amd-radeon"] = map[string]Capabilities{
+		"DeepSeek-V4-Flash":            {Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(true), ContextWindow: 1048576, MaxOutput: 65536},
+		"DeepSeek-V4-Flash-Vision-Exp": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(true), ContextWindow: 1048576, MaxOutput: 65536},
+		"DeepSeek-V4.1-Flash":          {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(true), ContextWindow: 1048576, MaxOutput: 65536},
+		"Qwen3.8-Flash-Next":           {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(false), ContextWindow: 262144, MaxOutput: 65536},
+		"Qwen3.8-27B":                  {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(false), ContextWindow: 262144, MaxOutput: 65536},
+		"GLM-5.3-Flash":                {Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(false), ContextWindow: 262144, MaxOutput: 65536},
+		"MiMo-V2.6-Flash":              {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ThinkingCanDisable: new(false), ContextWindow: 1048576, MaxOutput: 65536},
+		"MiniCPM5-2B":                  {Tools: true, ContextWindow: 131072, MaxOutput: 65536},
+		"MiniCPM-V-4.7-1B":             {Vision: true, Tools: true, ContextWindow: 262144, MaxOutput: 65536},
+		"MiniCPM-V-4.7-35B-A3B":        {Vision: true, Tools: true, ContextWindow: 262144, MaxOutput: 65536},
+		"Gemma-4-31B-IT":               {Vision: true, Tools: true, ContextWindow: 262144, MaxOutput: 65536},
+	}
+	providerCapabilities["amd"] = providerCapabilities["amd-radeon"]
 
 	initPatternIndex()
 }

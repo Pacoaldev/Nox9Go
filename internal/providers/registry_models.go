@@ -20,7 +20,11 @@ var ProviderModels = map[string][]string{
 	"alicode-intl":      {"qwen3.5-plus", "kimi-k2.5", "glm-5", "MiniMax-M2.5", "qwen3-coder-next", "qwen3-coder-plus", "glm-4.7"},
 	"alims-intl":        {"qwen3.5-plus", "kimi-k2.5", "glm-5", "MiniMax-M2.5", "qwen3-coder-next", "qwen3-coder-plus", "glm-4.7"},
 	"alitp-intl":        {"qwen3.8-max-preview", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash", "glm-5.2", "deepseek-v4-pro"},
-	"anthropic":         {"claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-3-5-sonnet-20241022"},
+	// AMD Radeon Cloud Token Factory chat models (wire ids from the docs
+	// catalog — card titles like DeepSeek-V4-Flash-0731 are NOT accepted).
+	// Live GET /v1/models remains the source of truth via modelsListURL.
+	"amd-radeon": {"DeepSeek-V4-Flash", "DeepSeek-V4-Flash-Vision-Exp", "DeepSeek-V4.1-Flash", "Qwen3.8-Flash-Next", "Qwen3.8-27B", "GLM-5.3-Flash", "MiMo-V2.6-Flash", "MiniCPM5-2B", "MiniCPM-V-4.7-1B", "MiniCPM-V-4.7-35B-A3B", "Gemma-4-31B-IT"},
+	"anthropic":  {"claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-3-5-sonnet-20241022"},
 	"antigravity":       {"gemini-4-argon-high", "gemini-4-argon-medium", "gemini-4-argon-low", "gemini-4-argon", "gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low", "gemini-3.8-flash", "gemini-3.7-flash-high", "gemini-3.7-flash-medium", "gemini-3.7-flash-low", "gemini-3.6-flash-high", "gemini-3.6-flash-medium", "gemini-3.6-flash-low", "gemini-3.1-pro-high", "gemini-pro-agent", "gemini-3.1-pro-low", "claude-sonnet-5-5-high", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-low", "claude-sonnet-5-5", "claude-opus-5-5-high", "claude-opus-5-5-medium", "claude-opus-5-5-low", "claude-opus-5-5", "claude-sonnet-4-6", "claude-opus-4-6-thinking", "gpt-oss-120b-medium", "gemini-3.1-flash-image"},
 	"api-airforce":      {"gpt-oss-120b", "gpt-oss-20b", "kimi-k2.7-code"},
 	"ark":               {"Doubao-Seed-2.0-Code", "Doubao-Seed-2.0-pro", "Doubao-Seed-2.0-lite", "Doubao-Seed-Code", "DeepSeek-V4-Flash", "DeepSeek-V4-Pro", "GLM-5.1", "MiniMax-M2.7", "Kimi-K2.6"},
@@ -226,6 +230,7 @@ var ProviderModels = map[string][]string{
 	"qoder":                {"ultimate", "auto", "performance", "efficient", "lite", "qmodel_38max", "qmodel_latest", "qmodel", "qfmodel", "kmodel_latest", "kmodel", "gmodel", "gfmodel", "dmodel", "dfmodel", "mmodel"},
 	"qoder-cn":             {"ultimate", "auto", "performance", "efficient", "lite", "qmodel_38max", "qmodel_latest", "qmodel", "qfmodel", "kmodel_latest", "kmodel", "gmodel", "gfmodel", "dmodel", "dfmodel", "mmodel"},
 	"recraft":              {"recraftv3", "recraftv2"},
+	"requesty":             {"fireworks/muse-glimmer-30b", "nvidia/muse-glimmer-30b", "nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b", "meta/muse-spark-1.3", "meta/muse-wonder-1.0", "particle/particle-1", "google/gemma-4-31b-it", "mistral/leanstral-1-5", "novita/ling-3.1-flash", "openai/gpt-6.1-sol", "openai/gpt-6.1-terra", "openai/gpt-6-luna", "anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5", "vertex/gemini-4-argon", "moonshot/kimi-k3.1-pro", "deepseek/deepseek-v4.1-flash-1017", "mistral/mistral-large-4", "xiaomi/mimo-v2.6-pro", "xiaomi/mimo-v2.6-flash", "minimaxi/minimax-m3.1-flash"},
 	"runway":               {"gen4_image", "gen4_image_turbo", "gen4_turbo", "gen3a_turbo"},
 	"runwayml":             {"gen4_image", "gen4_image_turbo", "gen4_turbo", "gen3a_turbo"},
 	"runcrate":             {"deepseek-ai/DeepSeek-V4.1-Flash", "zai-org/GLM-5.3", "Qwen/Qwen3.8-Flash", "openai/gpt-oss-120b"},

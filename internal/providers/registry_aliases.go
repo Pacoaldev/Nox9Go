@@ -9,6 +9,7 @@ package providers
 // stays the alias -> canonical id table used when resolving incoming model ids.
 var RegistryAliases = map[string]string{
 	"antigravity":       "ag",
+	"amd-radeon":        "amd",
 	"api-airforce":      "af",
 	"assemblyai":        "aai",
 	"aws-polly":         "polly",
@@ -76,6 +77,7 @@ var RegistryAliases = map[string]string{
 	"qoder":               "qd",
 	"qoder-cn":            "qdcn",
 	"runwayml":            "runway",
+	"requesty":            "rq",
 	"sambanova":           "samba",
 	"stability-ai":        "stability",
 	"tencent":             "hunyuan",

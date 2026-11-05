@@ -191,6 +191,20 @@ describe('providers & media separation', () => {
     assert.strictEqual(p.notice?.apiKeyUrl, 'https://sumopod.com/dashboard/api-services/keys')
   })
 
+  it('wires the Requesty AI router end-to-end', () => {
+    const p = PROVIDER_CATALOG.find((e) => e.id === 'requesty')
+    assert.ok(p, 'requesty missing from the dashboard catalog')
+    assert.strictEqual(p.category, 'apikey')
+    assert.strictEqual(p.alias, 'rq')
+    assert.ok(isChatProvider(p))
+    assert.strictEqual(p.modelsFetcher?.type, 'requesty-free')
+    assert.strictEqual(p.modelsFetcher?.url, 'https://router.requesty.ai/v1/models')
+    // The curated fallback must carry the model the operator pasted, and its
+    // vendor-prefixed wire id, not the bare card title.
+    const models = getModelsByProviderId('requesty').map((m) => m.id)
+    assert.ok(models.includes('nvidia/muse-glimmer-30b'), 'muse-glimmer fallback')
+  })
+
   it('resolves every provider alias to a catalog with an entry', () => {
     const missing = Object.keys(PROVIDER_ID_TO_ALIAS).filter(
       (id) => !PROVIDER_CATALOG.some((p) => p.id === id || p.alias === id)

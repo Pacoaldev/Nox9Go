@@ -5,6 +5,11 @@
 The failover walk no longer spends a whole account pool on one rate limit, and a
 Mistral account stays out of rotation long enough for its burst limit to recover.
 
+### Providers
+- **Requesty AI** (id `requesty`, alias `rq`). OpenAI-compatible router at `router.requesty.ai/v1`. Bearer keys; EU traffic can point `providerSpecificData.baseUrl` at `https://router.eu.requesty.ai/v1` to stay in-region. Its live catalogue answers **815** ids unauthenticated, so the static catalog is a curated fallback (`nvidia/muse-glimmer-30b`, `openai/gpt-6.1-sol`, `anthropic/claude-opus-5-5`, ...) and the full list comes from Import/Sync. Ids are vendor-prefixed (`nvidia/...`, `anthropic/...`), so capabilities are declared per id straight from the live payload. The dashboard also wires a `requesty-free` suggested-models filter (13 zero-priced models, top-level `input_price`/`output_price`).
+
+- **AMD Radeon Cloud** (id `amd-radeon`, alias `amd`). OpenAI-compatible Token Factory at `developer.amd.com.cn/radeon/api/v1` (China site). Bearer keys look like `rc-…`; alias is `amd` because `rc` already belongs to RunCrate. Static chat catalog covers the documented wire ids (`DeepSeek-V4-Flash`, `Qwen3.8-27B`, … — card titles like `DeepSeek-V4-Flash-0731` are not accepted upstream). Live `GET /v1/models` is wired for Import/Sync. OCR (`MinerU2.5-Pro`), TTS (`OmniVoice`) and systemone (`Clef`/`d3`) endpoints are not registered in this pass.
+
 ### Routing and quota
 
 - **Gemini transport timeout failover.** Classify transient transport faults

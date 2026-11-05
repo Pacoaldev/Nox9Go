@@ -184,6 +184,7 @@ var modelsListURL = map[string]string{
 	// so its "Check Latest Models" button never rendered.
 	"vercel-ai-gateway": "https://ai-gateway.vercel.sh/v1/models",
 	"chutes":            "https://llm.chutes.ai/v1/models",
+	"requesty":          "https://router.requesty.ai/v1/models",
 	"nvidia":            "https://integrate.api.nvidia.com/v1/models",
 	// Ollama's cloud library is not an OpenAI /v1/models endpoint: it answers
 	// {models:[{name, model, …}]}. writeConnectionModels accepts either `data`
@@ -206,6 +207,10 @@ var modelsListURL = map[string]string{
 	"onomeo":      "https://onomeo.com/v1/models",
 	"xkiro":       "https://api.xkiro.com/v1/models",
 	"xk":          "https://api.xkiro.com/v1/models",
+	// AMD Radeon Cloud Token Factory (China site). Auth required; catalogue
+	// is the source of truth and churns faster than the static snapshot.
+	"amd-radeon": "https://developer.amd.com.cn/radeon/api/v1/models",
+	"amd":        "https://developer.amd.com.cn/radeon/api/v1/models",
 }
 
 // modelsListHeaders carries the extra headers one live-catalogue endpoint
@@ -215,6 +220,7 @@ var modelsListURL = map[string]string{
 // the ones that actually differ.
 var modelsListHeaders = map[string]map[string]string{
 	"muse": {"x-api-version": "1.0.0", "Content-Type": "application/json"},
+	"requesty": {"Content-Type": "application/json"},
 }
 
 // ModelsListHeaders returns the extra headers the live catalogue endpoint of a
@@ -934,6 +940,14 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "api-key",
 		AuthScheme: "raw",
 	},
+	"requesty": {
+		// Requesty AI router. The base host is global; EU traffic can point
+		// providerSpecificData.baseUrl at https://router.eu.requesty.ai/v1
+		// so the request stays in-region.
+		BaseURL:    "https://router.requesty.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
 	"jina-reader": {
 		BaseURL:     "https://r.jina.ai",
 		AuthHeader:  "Authorization",
@@ -1232,6 +1246,13 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 		ImageURL:   "https://token.sensenova.ai/v1/images/generations",
+	},
+	"amd-radeon": {
+		// Token Factory API (China site only). Keys look like rc-…; alias is
+		// `amd` because `rc` already belongs to runcrate.
+		BaseURL:    "https://developer.amd.com.cn/radeon/api/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
 	},
 	"chatgpt-web": {
 		BaseURL:    "https://chatgpt.com",

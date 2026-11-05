@@ -120,6 +120,7 @@ export const PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "qoder": "qd",
   "qoder-cn": "qdcn",
   "recraft": "recraft",
+  "requesty": "rq",
   "runwayml": "runway",
   "sambanova": "samba",
   "sdwebui": "sdwebui",
@@ -1198,6 +1199,104 @@ export const BUILTIN_MODELS_BY_PROVIDER: Record<string, ProviderModel[]> = {
       "id": "tts_models/en/ljspeech/tacotron2-DDC",
       "name": "Tacotron2 DDC (LJSpeech)",
       "kind": "tts"
+    }
+  ],
+  "requesty": [
+    {
+      "id": "fireworks/muse-glimmer-30b",
+      "name": "fireworks/muse-glimmer-30b"
+    },
+    {
+      "id": "nvidia/muse-glimmer-30b",
+      "name": "nvidia/muse-glimmer-30b"
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "name": "nvidia/nemotron-3-ultra-550b-a55b"
+    },
+    {
+      "id": "nvidia/nemotron-3-super-120b-a12b",
+      "name": "nvidia/nemotron-3-super-120b-a12b"
+    },
+    {
+      "id": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "name": "nvidia/nemotron-3.5-lightning-30b-a3b"
+    },
+    {
+      "id": "meta/muse-spark-1.3",
+      "name": "meta/muse-spark-1.3"
+    },
+    {
+      "id": "meta/muse-wonder-1.0",
+      "name": "meta/muse-wonder-1.0"
+    },
+    {
+      "id": "particle/particle-1",
+      "name": "particle/particle-1"
+    },
+    {
+      "id": "google/gemma-4-31b-it",
+      "name": "google/gemma-4-31b-it"
+    },
+    {
+      "id": "mistral/leanstral-1-5",
+      "name": "mistral/leanstral-1-5"
+    },
+    {
+      "id": "novita/ling-3.1-flash",
+      "name": "novita/ling-3.1-flash"
+    },
+    {
+      "id": "openai/gpt-6.1-sol",
+      "name": "openai/gpt-6.1-sol"
+    },
+    {
+      "id": "openai/gpt-6.1-terra",
+      "name": "openai/gpt-6.1-terra"
+    },
+    {
+      "id": "openai/gpt-6-luna",
+      "name": "openai/gpt-6-luna"
+    },
+    {
+      "id": "anthropic/claude-opus-5-5",
+      "name": "anthropic/claude-opus-5-5"
+    },
+    {
+      "id": "anthropic/claude-sonnet-5-5",
+      "name": "anthropic/claude-sonnet-5-5"
+    },
+    {
+      "id": "anthropic/claude-haiku-5-5",
+      "name": "anthropic/claude-haiku-5-5"
+    },
+    {
+      "id": "vertex/gemini-4-argon",
+      "name": "vertex/gemini-4-argon"
+    },
+    {
+      "id": "moonshot/kimi-k3.1-pro",
+      "name": "moonshot/kimi-k3.1-pro"
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-1017",
+      "name": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+      "id": "mistral/mistral-large-4",
+      "name": "mistral/mistral-large-4"
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-pro",
+      "name": "xiaomi/mimo-v2.6-pro"
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-flash",
+      "name": "xiaomi/mimo-v2.6-flash"
+    },
+    {
+      "id": "minimaxi/minimax-m3.1-flash",
+      "name": "minimaxi/minimax-m3.1-flash"
     }
   ],
   "tokenharbor": [

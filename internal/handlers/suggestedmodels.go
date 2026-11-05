@@ -279,6 +279,34 @@ func filterVercelFree(models []map[string]any) []suggestedModel {
 	return out
 }
 
+// filterRequestyFree keeps Requesty's zero-priced chat models. Its catalog
+// states the rates as top-level numbers (input_price/output_price, dollars per
+// token) instead of openrouter's string pricing map, so the openrouter filter
+// cannot be reused. No context floor: the smallest zero-priced row is 32k and
+// it is a chat seat, not an evaluation-only endpoint.
+func filterRequestyFree(models []map[string]any) []suggestedModel {
+	out := []suggestedModel{}
+	for _, m := range models {
+		id := getString(m, "id")
+		if id == "" {
+			continue
+		}
+		in, okIn := getFloat(m, "input_price")
+		priceOut, okOut := getFloat(m, "output_price")
+		if !okIn || !okOut || in != 0 || priceOut != 0 {
+			continue
+		}
+		sm := suggestedModel{ID: id, Name: id}
+		if clen, ok := getFloat(m, "context_window"); ok && clen > 0 {
+			n := int64(clen)
+			sm.ContextLength = &n
+		}
+		out = append(out, sm)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
 // contextLengthOf reads an optional context window for sorting.
 func contextLengthOf(m suggestedModel) int64 {
 	if m.ContextLength == nil {
@@ -316,6 +344,8 @@ func HandleSuggestedModels(w http.ResponseWriter, r *http.Request) {
 		filter = filterCommandCodeFree
 	case "vercel-free":
 		filter = filterVercelFree
+	case "requesty-free":
+		filter = filterRequestyFree
 	default:
 		handlerutil.WriteJSONError(w, http.StatusBadRequest, "Unknown filter type")
 		return

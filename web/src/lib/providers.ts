@@ -2023,6 +2023,21 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     ]
   },
   {
+    "id": "requesty",
+    "name": "Requesty AI",
+    "category": "apikey",
+    "alias": "rq",
+    "color": "#6B4EFF",
+    "icon": "hub",
+    "website": "https://requesty.ai",
+    "notice": {"apiKeyUrl":"https://app.requesty.ai/api-keys","text":"OpenAI-compatible router (815+ models). EU traffic: set baseUrl to https://router.eu.requesty.ai/v1"},
+    "modelsFetcher": {"url": "https://router.requesty.ai/v1/models", "type": "requesty-free"},
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ]
+  },
+  {
     "id": "recraft",
     "name": "Recraft",
     "category": "apikey",
@@ -2076,6 +2091,25 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "color": "#1A2B79",
     "icon": "terminal",
     "website": "https://www.runcrate.ai",
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm",
+    ]
+  },
+  {
+    "id": "amd-radeon",
+    "name": "AMD Radeon Cloud",
+    "category": "apikey",
+    "alias": "amd",
+    "color": "#ED1C24",
+    "icon": "memory",
+    "website": "https://developer.amd.com.cn/radeon",
+    "notice": {
+      "text": "AMD Radeon Cloud Token Factory (China). OpenAI-compatible chat; keys start with rc-. Live model list from /v1/models.",
+      "apiKeyUrl": "https://developer.amd.com.cn/radeon"
+    },
+    "modelsFetcher": {"url": "https://developer.amd.com.cn/radeon/api/v1/models", "type": "openai"},
     "authType": "apikey",
     "noAuth": false,
     "serviceKinds": [

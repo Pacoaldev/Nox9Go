@@ -373,7 +373,7 @@ export function getIconPath(id?: string | null, apiType?: string): string {
  * fail at runtime: it is served from the app's own origin, so it costs no
  * cross-origin request and no CDN dependency.
  *
- * Then, measured against the catalog in `web/src/lib/providers.ts` (150 ids)
+ * Then, measured against the catalog in `web/src/lib/providers.ts` (152 ids)
  * rather than taken from what each source advertises:
  *
  * 1. LobeHub colour (`{id}-color.svg`): the AI-native set. Not every brand has
@@ -386,7 +386,7 @@ export function getIconPath(id?: string | null, apiType?: string): string {
  *
  * models.dev needs care. `models.dev/logos/{id}.svg` answers **200 with the
  * same generic mark** for an id it does not know — a made-up provider and
- * `gonkabroker` return byte-identical files (119 of 150 ids hit it). So a
+ * `gonkabroker` return byte-identical files (119 of 152 ids hit it). So a
  * models.dev candidate is only offered for an id the scan found a real logo
  * for; see `MODELS_DEV_IDS`. Without that list every unknown provider would
  * paint a wrong logo with confidence, which is worse than the generic glyph.
