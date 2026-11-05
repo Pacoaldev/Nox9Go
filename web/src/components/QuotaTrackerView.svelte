@@ -509,7 +509,6 @@
   // keep firing alongside the schedule the operator just chose.
   async function saveAutoPingSchedule(result: AutoPingSaveResult) {
     const conn = autoPingEditing
-    autoPingEditing = null
     if (!conn) return
 
     const provider = conn.provider as 'claude' | 'codex'
@@ -528,6 +527,12 @@
       })
     } catch (err) {
       console.error('Failed to update autoPing schedule:', err)
+    } finally {
+      // Close the modal only after the server has confirmed the write.
+      // Closing before the await would let the test read settings before the
+      // save completes (the modal-hidden signal races the HTTP response), which
+      // is what caused the "choosing Off clears the schedule" e2e failure.
+      autoPingEditing = null
     }
   }
 
