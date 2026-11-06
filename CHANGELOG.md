@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.7] - 2026-11-06
 
 The failover walk no longer spends a whole account pool on one rate limit, and a
 Mistral account stays out of rotation long enough for its burst limit to recover.

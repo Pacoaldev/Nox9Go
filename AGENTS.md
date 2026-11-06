@@ -527,7 +527,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 ### 7.4 Changelog & version (personal fork)
 
-- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the topmost version heading (`## [1.0.6]` today). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
+- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the topmost version heading (`## [1.0.7]` today). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
 - Bump `VERSION` (and `version.json` `latestVersion`) by hand when cutting a new personal version, then rebuild with the ldflags above.
 - `GET /api/changelog` serves that file.
 - **Publish the release so the dashboard's update button can install it.** The gateway reads the manifest at `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` and, when that manifest carries no `sha256`, falls back to the GitHub Releases API. Both channels are anonymous, so the repository has to be public. The installer refuses to replace the running binary without a digest (`internal/updater/updater.go`), so a release needs the binary **and** a `SHA256SUMS.txt` listing it, and `version.json` has to carry the asset's `downloadUrl` and `sha256` for the manifest channel to answer on its own:
@@ -554,7 +554,7 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 - **Everything lands on `main`.** There is no `dev` branch and no PR flow; changes are committed to `main` directly.
 - **Never commit unless asked.** When asked, inspect `git status` / `git diff`, stage only the intended files, write a Conventional Commit message, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
-- **Tags**: `v1.0.0` through `v1.0.6`. The 80 upstream tags were purged on purpose.
+- **Tags**: `v1.0.0` through `v1.0.7`. The 80 upstream tags were purged on purpose.
 
 ### 7.6 Syncing a feature from upstream
 
