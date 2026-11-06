@@ -23,7 +23,7 @@ func seedDetail(t *testing.T, repo *Repo, id string, at time.Time) {
 	}
 }
 
-func seedLedger(t *testing.T, repo *Repo, id string, at time.Time) {
+func seedLedger(t *testing.T, repo *Repo, at time.Time) {
 	t.Helper()
 	_, err := repo.RawDB().Exec(
 		`INSERT INTO usageHistory (timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, status, tokens)
@@ -89,6 +89,9 @@ func TestPruneRequestDetails_KeepsRecentDropsOld(t *testing.T) {
 		}
 		remaining = append(remaining, id)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read remaining rows: %v", err)
+	}
 	if len(remaining) != 2 || remaining[0] != "fresh" || remaining[1] != "edge" {
 		t.Errorf("survivors = %v, want [fresh edge]", remaining)
 	}
@@ -101,8 +104,8 @@ func TestPruneRequestDetails_NeverTouchesTheLedger(t *testing.T) {
 	repo := retentionTestRepo(t)
 
 	now := time.Now().UTC()
-	seedLedger(t, repo, "a", now.Add(-400*24*time.Hour))
-	seedLedger(t, repo, "b", now.Add(-1*time.Hour))
+	seedLedger(t, repo, now.Add(-400*24*time.Hour))
+	seedLedger(t, repo, now.Add(-1*time.Hour))
 	seedDetail(t, repo, "stale", now.Add(-400*24*time.Hour))
 
 	if _, err := repo.PruneRequestDetails(context.Background(), 30*24*time.Hour); err != nil {

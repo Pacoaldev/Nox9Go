@@ -304,6 +304,9 @@ func (r *Repo) queryActivePoolIDs() []string {
 			ids = append(ids, id)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
 	return ids
 }
 

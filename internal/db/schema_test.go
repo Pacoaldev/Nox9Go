@@ -177,6 +177,9 @@ func TestEnsureCoreSchema(t *testing.T) {
 			}
 			found[name] = true
 		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("rows err: %v", err)
+		}
 		for _, want := range []string{"data", "createdAt", "isActive", "lastUsedAt", "consecutiveUseCount"} {
 			if !found[want] {
 				t.Errorf("expected backfilled column %s", want)

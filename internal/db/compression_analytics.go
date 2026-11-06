@@ -334,6 +334,9 @@ GROUP BY mode`, whereClause)
 				}
 			}
 		}
+		if err := modeRows.Err(); err != nil {
+			return nil, fmt.Errorf("queryCompressionAnalyticsTable modeRows: %w", err)
+		}
 	}
 
 	// By Provider. The blank-provider filter is kept because a run with no
@@ -368,6 +371,9 @@ LIMIT %d`, provWhere, maxBreakdownGroups)
 					TokensSaved: saved.Int64,
 				}
 			}
+		}
+		if err := provRows.Err(); err != nil {
+			return nil, fmt.Errorf("queryCompressionAnalyticsTable provRows: %w", err)
 		}
 	}
 	summary.TruncatedProviders = droppedGroups(ctx, r.db, provQuery, args, len(summary.ByProvider))
@@ -404,6 +410,9 @@ LIMIT %d`, modelWhere, maxBreakdownGroups)
 				}
 			}
 		}
+		if err := modelRows.Err(); err != nil {
+			return nil, fmt.Errorf("queryCompressionAnalyticsTable modelRows: %w", err)
+		}
 	}
 	summary.TruncatedModels = droppedGroups(ctx, r.db, modelQuery, args, len(summary.ByModel))
 
@@ -438,6 +447,9 @@ ORDER BY hr ASC`
 						TokensSaved: saved.Int64,
 					})
 				}
+			}
+			if err := trendRows.Err(); err != nil {
+				return nil, fmt.Errorf("queryCompressionAnalyticsTable trendRows: %w", err)
 			}
 		}
 	}
@@ -495,6 +507,9 @@ LIMIT %d`, whereClause, maxBreakdownGroups)
 					dynamicUsd += (float64(saved) / 1_000_000.0) * rate
 				}
 			}
+			if err := pRows.Err(); err != nil {
+				return nil, fmt.Errorf("queryCompressionAnalyticsTable pRows: %w", err)
+			}
 		}
 		if dynamicUsd > 0 {
 			summary.RealUsage.EstimatedUsdSaved = math.Round(dynamicUsd*100) / 100
@@ -550,6 +565,9 @@ LIMIT 10`, whereClause)
 				saver.EstimatedUsd = math.Round(usd.Float64*100) / 100
 				summary.TopSavers = append(summary.TopSavers, saver)
 			}
+		}
+		if err := topRows.Err(); err != nil {
+			return nil, fmt.Errorf("queryCompressionAnalyticsTable topRows: %w", err)
 		}
 	}
 
@@ -619,6 +637,9 @@ LIMIT %d`, whereClause, maxBreakdownGroups)
 				}
 			}
 		}
+		if err := provRows.Err(); err != nil {
+			return nil, fmt.Errorf("queryUsageHistoryBackfill provRows: %w", err)
+		}
 	}
 	summary.TruncatedProviders = droppedGroups(ctx, r.db, provQuery, args, len(summary.ByProvider))
 
@@ -648,6 +669,9 @@ ORDER BY hr ASC`, whereClause)
 						TokensSaved: saved.Int64,
 					})
 				}
+			}
+			if err := trendRows.Err(); err != nil {
+				return nil, fmt.Errorf("queryUsageHistoryBackfill trendRows: %w", err)
 			}
 		}
 	}
@@ -705,6 +729,9 @@ LIMIT 10`, whereClause)
 				saver.EstimatedUsd = math.Round((float64(saver.TokensSaved)/1_000_000.0)*rate*100) / 100
 				summary.TopSavers = append(summary.TopSavers, saver)
 			}
+		}
+		if err := uhTopRows.Err(); err != nil {
+			return nil, fmt.Errorf("queryUsageHistoryBackfill uhTopRows: %w", err)
 		}
 	}
 
@@ -787,6 +814,9 @@ WHERE NOT EXISTS (SELECT 1 FROM compressionAnalytics ca WHERE ca.requestId = ?)`
 					)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("BackfillCompressionAnalytics rdQuery rows: %w", err)
+			}
 		}
 	}
 
@@ -849,6 +879,9 @@ WHERE NOT EXISTS (
 						ts, prov, savedTok,
 					)
 				}
+			}
+			if err := uhRows.Err(); err != nil {
+				return fmt.Errorf("BackfillCompressionAnalytics uhQuery rows: %w", err)
 			}
 		}
 	}

@@ -163,6 +163,9 @@ func TestUsageHistoryApiKeyIndexExists(t *testing.T) {
 		}
 		plan += detail + "\n"
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
 	if !strings.Contains(plan, "idx_uh_apikey") {
 		t.Errorf("query plan does not use idx_uh_apikey:\n%s", plan)
 	}

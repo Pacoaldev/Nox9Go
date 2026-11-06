@@ -10,6 +10,10 @@ Security fix release: two dependency vulnerabilities closed and a mandatory pre-
 - **GO-2026-6865 (klauspost/compress).** Bumped `github.com/klauspost/compress` from `v1.19.1` to `v1.20.2`. Panic on two-block frames (fse.Decompress / huff0.ReadTable) reachable from `internal/proxy/stream_peek.go` (zstdReader.Read). Fixed by upgrading the direct dependency.
 - **Release gate formalised.** `AGENTS.md` §7.4 now carries a mandatory public release checklist: `govulncheck` (0 vulns in your code), `go test ./...`, `go vet ./...`, portability (`CGO_ENABLED=0` for every `CROSS_TARGETS` entry when `go.mod` changed), frontend gates when `web/` changed, rebuild with the new `VERSION` embedded, generate and verify `version.json`/`SHA256SUMS.txt`, then tag/push/release and post-release sanity. A release is never published from stale binaries and never skips gates "because it's a small fix".
 
+### Database
+
+- **Static analysis and row iteration cleanup (`sqlrowserr`).** Verified `rows.Err()` across database querying loops in `internal/db/compression_analytics.go`, `internal/db/proxyPools.go`, and test suites. Removed unused test parameter in `usage_retention_test.go`.
+
 ## [1.0.7] - 2026-11-06
 
 The failover walk no longer spends a whole account pool on one rate limit, and a
