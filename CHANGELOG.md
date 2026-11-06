@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.8] - 2026-11-06
+
+Security fix release: two dependency vulnerabilities closed and a mandatory pre-release gate added so a vulnerable release is never published again.
+
+### Security
+
+- **GO-2026-6888 (brotli).** Bumped `github.com/andybalholm/brotli` from `v1.2.0` to `v1.2.7`. Excessive memory allocation when decompressing crafted brotli streams; reachable from `internal/proxy/stream_peek.go` (brReader.Read) and the windsurf executor. Fixed by upgrading the direct dependency.
+- **GO-2026-6865 (klauspost/compress).** Bumped `github.com/klauspost/compress` from `v1.19.1` to `v1.20.2`. Panic on two-block frames (fse.Decompress / huff0.ReadTable) reachable from `internal/proxy/stream_peek.go` (zstdReader.Read). Fixed by upgrading the direct dependency.
+- **Release gate formalised.** `AGENTS.md` §7.4 now carries a mandatory public release checklist: `govulncheck` (0 vulns in your code), `go test ./...`, `go vet ./...`, portability (`CGO_ENABLED=0` for every `CROSS_TARGETS` entry when `go.mod` changed), frontend gates when `web/` changed, rebuild with the new `VERSION` embedded, generate and verify `version.json`/`SHA256SUMS.txt`, then tag/push/release and post-release sanity. A release is never published from stale binaries and never skips gates "because it's a small fix".
+
 ## [1.0.7] - 2026-11-06
 
 The failover walk no longer spends a whole account pool on one rate limit, and a

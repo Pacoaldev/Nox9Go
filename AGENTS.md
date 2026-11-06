@@ -527,10 +527,29 @@ For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token
 
 ### 7.4 Changelog & version (personal fork)
 
-- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the topmost version heading (`## [1.0.7]` today). Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
-- Bump `VERSION` (and `version.json` `latestVersion`) by hand when cutting a new personal version, then rebuild with the ldflags above.
+- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the topmost version heading. Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
+- Bump `VERSION` and regenerate `version.json` (see the release checklist below) when cutting a new personal version.
 - `GET /api/changelog` serves that file.
-- **Publish the release so the dashboard's update button can install it.** The gateway reads the manifest at `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` and, when that manifest carries no `sha256`, falls back to the GitHub Releases API. Both channels are anonymous, so the repository has to be public. The installer refuses to replace the running binary without a digest (`internal/updater/updater.go`), so a release needs the binary **and** a `SHA256SUMS.txt` listing it, and `version.json` has to carry the asset's `downloadUrl` and `sha256` for the manifest channel to answer on its own:
+
+#### Public release checklist (MANDATORY — every public release, no exceptions)
+
+A public release publishes binaries that users download and run. A broken or vulnerable release cannot be "un-pushed" from machines that already installed it. The full gate runs **before** tagging or creating the GitHub release.
+
+1. **Bump `VERSION`** to the new version and add a `## [X.Y.Z] - YYYY-MM-DD` entry at the top of `CHANGELOG.md` describing every change in the release.
+2. **Security scan (blocking)**: `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` must report `0 vulnerabilities` in *your code*. Fix every finding before continuing — never ship a release with a known reachable vuln.
+3. **Unit tests and static analysis**: `go test ./...` and `go vet ./...` must pass.
+4. **Portability** (if `go.mod` changed): every target in `CROSS_TARGETS` must build with `CGO_ENABLED=0` (see §4.F). Run `make cross` to produce the release binaries.
+5. **Frontend gates** (if `web/` changed): `make vet-svelte`, `cd web && bun run build`, and the weight budget check. CI also runs the e2e suite; do not ignore a red e2e.
+6. **Rebuild the release binaries** with the new `VERSION` embedded (`make cross` + the tray: `go build -ldflags "-H=windowsgui -X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go-tray.exe ./cmd/nox9go-tray/`). Verify the built binary reports the new version (`./nox9go --version` or the startup banner).
+7. **Generate the manifest and checksums**: `bun scripts/gen-version-manifest.mjs --version $(cat VERSION) --repo Pacoaldev/Nox9Go --notes "<release notes>" nox9go-windows-amd64.exe nox9go-linux-amd64 nox9go-linux-arm64 nox9go-darwin-amd64 nox9go-darwin-arm64` (this writes `version.json` and `SHA256SUMS.txt`). Then append the tray digest to `SHA256SUMS.txt`.
+8. **Verify `version.json`**: `bun scripts/gen-version-manifest.mjs --check` must pass. Confirm `latestVersion`, every `downloadUrls` entry, and every `sha256` hash match the assets you are about to publish.
+9. **Commit, tag, push**: commit `VERSION`, `CHANGELOG.md`, `version.json`, `go.mod`/`go.sum` (if changed). Tag `v$(cat VERSION)`. Push the commit and the tag to `main`.
+10. **Create the GitHub release**: `gh release create "v$(cat VERSION)" <assets> SHA256SUMS.txt --title "v$(cat VERSION) — ..." --notes-file <notes>`. Attach every platform binary plus `SHA256SUMS.txt`. The asset names must carry OS and arch so the updater selects correctly.
+11. **Post-release sanity**: confirm the release page shows the new assets and digests, and that `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` (after the ~5 min CDN cache) reports the new `latestVersion` and hashes.
+
+Never publish a release from stale binaries. Never skip the `govulncheck` / test / vet gates "because it's a small fix". A "small fix" to a vulnerable dependency is exactly what justifies a release — and exactly what requires a clean, verified one.
+
+**Publish the release so the dashboard's update button can install it.** The gateway reads the manifest at `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` and, when that manifest carries no `sha256`, falls back to the GitHub Releases API. Both channels are anonymous, so the repository has to be public. The installer refuses to replace the running binary without a digest (`internal/updater/updater.go`), so a release needs the binary **and** a `SHA256SUMS.txt` listing it, and `version.json` has to carry the asset's `downloadUrl` and `sha256` for the manifest channel to answer on its own:
 
   ```powershell
   # 1. release build — the asset name must carry OS and arch, the updater selects by name
