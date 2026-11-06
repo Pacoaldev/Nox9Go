@@ -5,7 +5,7 @@
     "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.7/nox9go-windows-amd64.exe"
   },
   "sha256": {
-    "windows_amd64": "placeholder-build-and-replace"
+    "windows_amd64": "2116a60f834c57c5948cd1629aeea54c11d25a70d37eef6604fab638354fc3a7"
   },
   "releaseNotes": "NOX9GO 1.0.7 — Provider catalogue sweep, AMD Radeon Cloud, Requesty AI, circuit breaker, tool-call anomaly detection, and Mistral 429 pacing."
 }
