@@ -16,6 +16,7 @@
   - **Xiaomi MiMo** (`xiaomi-mimo`): `aistudio` weekly percent.
   - **Zed** (`zed`): `cloud.zed.dev/client/users/me`, edit-predictions and hosted-model-request rows with plan label.
 - Providers that still expose no metered endpoint keep the honest "no quota limits tracked" state; no percentages are fabricated.
+- **The model-health loop is now configurable from the dashboard.** The loop itself already existed (`internal/modelhealth`): it probes the custom models an operator configured, counts consecutive failures and switches a dead model off so it stops being routed to. But nothing ever wrote the settings key it reads — `modelHealth` was read-only — so the feature was unreachable without editing the database by hand. A new "Model Health Loop" card in System Settings backs that key with an enable toggle, a check interval, a failure threshold and an auto-enable toggle. `web/src/lib/modelHealth.ts` mirrors the server's clamp bounds (5–1440 minutes, 2–100 consecutive failures) so the form never shows a value the server would silently rewrite on the next read, and reads an unreadable row as off, the way `ParseConfig` does. The loop re-reads the key every cycle, so switching it on takes effect without a restart.
 
 ### Routing
 
