@@ -1,6 +1,11 @@
 package clientconfig
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+
+	"nox9go/proxy/internal/providers"
+)
 
 // Pi: ~/.pi/agent/models.json, JSONC.
 //
@@ -71,8 +76,7 @@ func (a piAdapter) applyEdits(file TargetFile, opts Options) []Edit {
 	state := piInspectModels(file, a.key, model)
 	if model != "" {
 		if !state.hasModelsKey {
-			entry := `[{"id": ` + jsonString(model) + `, "name": ` + jsonString(model) +
-				`, "reasoning": true, "contextWindow": 200000, "maxTokens": 64000}]`
+			entry := piModelEntryJSON(model)
 			edits = append(edits, Edit{
 				KeyPath:         []string{"providers", a.key, "models"},
 				ValueJSON:       entry,
@@ -95,6 +99,42 @@ func (a piAdapter) applyEdits(file TargetFile, opts Options) []Edit {
 	return edits
 }
 
+// piModelEntryJSON renders the single-model `models` array Pi expects.
+func piModelEntryJSON(model string) string {
+	return "[" + piModelEntry(model) + "]"
+}
+
+// piModelEntry builds one Pi model entry.
+//
+// contextWindow/maxTokens come from the model capability catalog, not a fixed
+// placeholder. The old entry claimed 200000/64000 for every model, which is what
+// made a Pi client ask a provider for a max_tokens it rejects: Groq answered
+// "`max_tokens` must be less than or equal to `16384`" for qwen3.8-27b precisely
+// because the client sent the invented 64000. When the catalog has no figure the
+// entry omits the field rather than guessing, so the client falls back to the
+// model's own default instead of a number we made up.
+func piModelEntry(model string) string {
+	caps := providers.GetCapabilitiesDetailForModel("", model)
+	var b strings.Builder
+	b.WriteString(`{"id": `)
+	b.WriteString(jsonString(model))
+	b.WriteString(`, "name": `)
+	b.WriteString(jsonString(model))
+	if caps.Reasoning {
+		b.WriteString(`, "reasoning": true`)
+	}
+	if caps.ContextWindow > 0 {
+		b.WriteString(`, "contextWindow": `)
+		b.WriteString(strconv.Itoa(caps.ContextWindow))
+	}
+	if caps.MaxOutput > 0 {
+		b.WriteString(`, "maxTokens": `)
+		b.WriteString(strconv.Itoa(caps.MaxOutput))
+	}
+	b.WriteString("}")
+	return b.String()
+}
+
 type piModelsState struct {
 	hasModelsKey   bool
 	elemCount      int
@@ -103,8 +143,7 @@ type piModelsState struct {
 }
 
 func piAppendModelToArray(b []byte, toks []jsonTok, arrayNode *jsonNode, model string) string {
-	newEntry := `{"id": ` + jsonString(model) + `, "name": ` + jsonString(model) +
-		`, "reasoning": true, "contextWindow": 200000, "maxTokens": 64000}`
+	newEntry := piModelEntry(model)
 	if len(arrayNode.elems) == 0 {
 		return "[" + newEntry + "]"
 	}
@@ -184,4 +223,3 @@ func piInspectModels(file TargetFile, providerKey, targetModel string) piModelsS
 	}
 	return out
 }
-

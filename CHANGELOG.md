@@ -17,6 +17,12 @@
   - **Zed** (`zed`): `cloud.zed.dev/client/users/me`, edit-predictions and hosted-model-request rows with plan label.
 - Providers that still expose no metered endpoint keep the honest "no quota limits tracked" state; no percentages are fabricated.
 
+### Routing
+
+- **Groq `max_tokens` over the model cap no longer fails the request.** Groq rejects a `max_tokens` above the model's output limit with a 400 that names the limit ("`max_tokens` must be less than or equal to `16384`"). The gateway forwarded the body verbatim, so every request asking for more — including one whose value came from a client-config placeholder — died at the first attempt. `executor.ForwardOpenAI` now parses the cap the upstream states (`translator.MaxTokensLimitFromError`), clamps `max_tokens`/`max_completion_tokens` to it (`translator.ClampMaxTokens`) and retries once. The upstream's own number is the source of truth: the model catalog describes the model, not each gateway's per-model cap. Any other 400 surfaces unchanged.
+- **The Pi client config no longer invents a 64000 output cap.** `internal/clientconfig/pi.go` wrote `contextWindow: 200000, maxTokens: 64000` for every model it registered, which is what made a Pi client request a `max_tokens` Groq rejects. It now derives both numbers from the capability catalog (`providers.GetCapabilitiesDetailForModel`) and omits a field the catalog cannot answer instead of guessing.
+- **Gemini's OpenAI-compatible endpoint gets its thought signature backfilled.** Gemini 3 refuses a current-turn `functionCall` with no `thought_signature` (400 INVALID_ARGUMENT "Function call is missing a thought_signature in functionCall parts"). Only the native/Antigravity path ran that fixup, so the `gemini` provider — which talks to `generativelanguage.googleapis.com/v1beta/openai/chat/completions` — reached upstream unsigned whenever a client dropped the field or a combo rebuilt the history. `translator.BackfillOpenAIToolCallSignatures` now injects `extra_content.google.thought_signature` into assistant `tool_calls` that lack one, using the cached signature for that id (session-scoped) or `DefaultThinkingSignature`; `translator.HarvestOpenAIToolCallSignatures` stores the signatures Gemini returns so later turns replay the real one. Applied only for `gemini-openai` providers.
+
 ## [1.0.8] - 2026-11-06
 
 Security fix release: two dependency vulnerabilities closed and a mandatory pre-release gate added so a vulnerable release is never published again.

@@ -726,6 +726,21 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 		pipedBody = stripped
 	}
 
+	// Gemini 3 requires a thought_signature on every functionCall in the turn
+	// being answered. The native/antigravity path backfills it, but the `gemini`
+	// provider talks to the OpenAI-compat endpoint, which never runs that fixup,
+	// so a client that dropped the field (or a combo that rebuilt the history)
+	// reached upstream unsigned and drew 400 INVALID_ARGUMENT "Function call is
+	// missing a thought_signature". Inject the cached signature (or the known
+	// default) into the tool_calls that lack one. Fail-open: a body that cannot
+	// be read is forwarded untouched.
+	if providerCfg.IsGeminiOpenAICompat() {
+		if signed := translator.BackfillOpenAIToolCallSignatures(pipedBody, handlerutil.GetSessionID(ctx), model); len(signed) != len(pipedBody) {
+			log.Debug("fallback", "backfilled Gemini thought signatures", "provider", provider, "model", model)
+			pipedBody = signed
+		}
+	}
+
 	start := time.Now()
 	metrics := &streamMetrics{}
 	var fwdErr error
@@ -909,6 +924,16 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 	// the dispatch succeeded as far as it knew, so a blocked stream would
 	// otherwise be logged, billed, and cooled down as a served turn.
 	fwdErr = guardrailStreamOutcome(gtap, fwdErr)
+
+	// Remember the thought signatures the Gemini OpenAI-compat response attached
+	// to its tool_calls, so the next turn replays the real signature instead of
+	// the known default. Best-effort: an empty or unreadable buffer stores
+	// nothing and the backfill above falls back to DefaultThinkingSignature.
+	if providerCfg.IsGeminiOpenAICompat() && metrics != nil && metrics.ResponseBuf.Len() > 0 {
+		if n := translator.HarvestOpenAIToolCallSignatures(metrics.ResponseBuf.Bytes(), sessionID, model); n > 0 {
+			log.Debug("fallback", "stored Gemini thought signatures", "provider", provider, "model", model, "count", n)
+		}
+	}
 
 	var ue *upstreamError
 	if errors.As(fwdErr, &ue) && ue.StatusCode == http.StatusUnauthorized && connectionID != "" {

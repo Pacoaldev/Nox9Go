@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,7 +19,36 @@ import (
 	"nox9go/proxy/internal/translator"
 )
 
-// ForwardOpenAI sends an OpenAI-format request and writes the response.
+// retryWithClampedMaxTokens handles a 400 whose body states a max_tokens cap.
+// When the upstream rejected the request for that reason, the body is clamped to
+// the named limit and sent once more. Returns ok=false for any other failure, so
+// the caller reports the original error untouched.
+func retryWithClampedMaxTokens(req *Request, forwardErr error) (*http.Response, bool) {
+	var upstreamErr *proxy.UpstreamError
+	if !errors.As(forwardErr, &upstreamErr) || upstreamErr == nil {
+		return nil, false
+	}
+	if upstreamErr.StatusCode != http.StatusBadRequest {
+		return nil, false
+	}
+	limit, ok := translator.MaxTokensLimitFromError(upstreamErr.Body)
+	if !ok {
+		return nil, false
+	}
+	clamped := translator.ClampMaxTokens(req.Body, limit)
+	if bytes.Equal(clamped, req.Body) {
+		return nil, false
+	}
+	log.Warn("executor", "clamping max_tokens to the upstream cap and retrying",
+		"provider", req.Provider, "limit", limit)
+	req.Body = clamped
+	resp, err := proxy.ForwardOpenAI(req.Ctx, req.Client, req.Config, req.APIKey, req.Body, req.IsStream)
+	if err != nil {
+		return nil, false
+	}
+	return resp, true
+}
+
 func stripUnsupportedPromptCacheKey(body []byte) []byte {
 	var request map[string]json.RawMessage
 	if err := json.Unmarshal(body, &request); err != nil {
@@ -41,7 +71,16 @@ func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
 	}
 	resp, err := proxy.ForwardOpenAI(req.Ctx, req.Client, req.Config, req.APIKey, req.Body, req.IsStream)
 	if err != nil {
-		return fmt.Errorf("ForwardOpenAI upstream: %w", err)
+		// A provider that rejects max_tokens above the model's output cap names
+		// the cap in its 400. Clamp the request to that cap and retry once: the
+		// upstream's own number is the only accurate source (our catalog
+		// describes the model, not the gateway's per-model limit), and without
+		// this every request that asks for more fails before it reaches a model.
+		if retried, ok := retryWithClampedMaxTokens(req, err); ok {
+			resp, err = retried, nil
+		} else {
+			return fmt.Errorf("ForwardOpenAI upstream: %w", err)
+		}
 	}
 
 	var bodyCloser io.Closer = resp.Body
