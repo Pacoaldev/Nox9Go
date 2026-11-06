@@ -6,6 +6,17 @@
 
 - **API Key Providers list starts expanded and is collapsible.** The "API Key Providers" section in Providers & Endpoints now renders all providers on first load instead of showing only the first 20 behind a "Show all X providers" button. A toggle button — "Show fewer providers" when expanded, "Show all X providers" when collapsed — appears at the bottom of the section whenever the total exceeds the 20-provider threshold and no search or status filter is active. Searching or filtering auto-expands the list as before.
 
+- **Quota tracker now shows real quotas for 10 more providers.** GitHub Copilot, GLM, GLM CN, Kimi, MiniMax, MiniMax CN, OpenCode Go, CodeBuddy CN, Xiaomi MiMo and Zed were listed in the tracker with no quota fetcher, so every connection read "Account active. No quota limits tracked." Ported their live usage handlers from upstream `open-sse/services/usage/*.js` in `internal/handlers/dashboard/usage_extra_providers.go` and wired them into `fetchProviderUsage`:
+  - **GitHub Copilot** (`github`): `GET copilot_internal/user`, paid `quota_snapshots` and free `monthly_quotas`/`limited_user_quotas` formats (chat, completions, premium interactions).
+  - **GLM / GLM CN** (`glm`, `glm-cn`): `monitor/usage/quota/limit`, `TOKENS_LIMIT`/`CREDIT_LIMIT` rows labelled by unit (session, weekly).
+  - **Kimi** (`kimi`): `coding/v1/usages`, dual auth (`x-api-key` or OAuth Bearer + `X-Msh-*`), weekly + rate-limit rows and plan level.
+  - **MiniMax / MiniMax CN** (`minimax`, `minimax-cn`): `coding_plan/remains` (with fallback hosts), 5h/7d windows from count or percent-only M-series buckets.
+  - **OpenCode Go** (`opencode-go`): `zen/go/v1/usage`, rolling/weekly/monthly percent rows.
+  - **CodeBuddy CN** (`codebuddy-cn`): Tencent billing meter, refill cadence + bonus packs.
+  - **Xiaomi MiMo** (`xiaomi-mimo`): `aistudio` weekly percent.
+  - **Zed** (`zed`): `cloud.zed.dev/client/users/me`, edit-predictions and hosted-model-request rows with plan label.
+- Providers that still expose no metered endpoint keep the honest "no quota limits tracked" state; no percentages are fabricated.
+
 ## [1.0.8] - 2026-11-06
 
 Security fix release: two dependency vulnerabilities closed and a mandatory pre-release gate added so a vulnerable release is never published again.

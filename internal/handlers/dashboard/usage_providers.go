@@ -111,6 +111,22 @@ func fetchProviderUsage(ctx context.Context, provider string, data map[string]an
 		return fetchXKiroUsage(ctx, apiKey), true
 	case "minimax-code", "minimax-code-global":
 		return fetchMiniMaxCodeUsage(ctx, provider, accessToken, psdStr(psd, "realUserID")), true
+	case "github":
+		return fetchGitHubUsage(ctx, firstNonEmptyStr(accessToken, apiKey)), true
+	case "glm", "glm-cn":
+		return fetchGlmUsage(ctx, provider, apiKey), true
+	case "kimi":
+		return fetchKimiUsage(ctx, accessToken, apiKey, psd), true
+	case "minimax", "minimax-cn":
+		return fetchMiniMaxUsage(ctx, provider, apiKey), true
+	case "opencode-go":
+		return fetchOpenCodeGoUsage(ctx, apiKey), true
+	case "codebuddy-cn":
+		return fetchCodeBuddyCnUsage(ctx, accessToken, apiKey), true
+	case "xiaomi-mimo":
+		return fetchXiaomiMimoUsage(ctx, firstNonEmptyStr(apiKey, accessToken)), true
+	case "zed":
+		return fetchZedUsage(ctx, accessToken, psd), true
 	default:
 		return usageResult{}, false
 	}
