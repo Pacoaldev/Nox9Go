@@ -62,6 +62,9 @@ func getRealUserDB(t *testing.T) (*db.Repo, func()) {
 				)
 			}
 		}
+		if rErr := rows.Err(); rErr != nil {
+			t.Fatalf("rows err: %v", rErr)
+		}
 	}
 	// Seed writable DB with real combos
 	cRows, err := roDB.Query("SELECT id, name, kind, models, createdAt, updatedAt FROM combos")
@@ -76,6 +79,9 @@ func getRealUserDB(t *testing.T) (*db.Repo, func()) {
 					id, name, kind, models, createdAt, updatedAt,
 				)
 			}
+		}
+		if crErr := cRows.Err(); crErr != nil {
+			t.Fatalf("cRows err: %v", crErr)
 		}
 	}
 

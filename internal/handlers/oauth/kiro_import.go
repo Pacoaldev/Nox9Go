@@ -98,7 +98,7 @@ func (h *OAuthHandler) HandleKiroImport(w http.ResponseWriter, r *http.Request) 
 		expiresIn = 3600
 	}
 	psdBlob := map[string]any{
-		"profileArn": firstNonEmpty(strings.TrimSpace(req.ProfileArn), ""),
+		"profileArn": normalizeKiroProfileArn(firstNonEmpty(strings.TrimSpace(req.ProfileArn), result.ProfileArn, readKiroProfileArn(), kiroProfileArn(result.AccessToken))),
 		"authMethod": resolvedAuthMethod,
 		"provider":   providerLabel,
 	}
@@ -200,7 +200,10 @@ func (h *OAuthHandler) HandleKiroAutoImport(w http.ResponseWriter, r *http.Reque
 			clientSecret, _ = reg["clientSecret"].(string)
 		}
 	}
-	profileArn := readKiroProfileArn()
+	profileArn, _ := tokenData["profileArn"].(string)
+	if strings.TrimSpace(profileArn) == "" {
+		profileArn = readKiroProfileArn()
+	}
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"found":        true,

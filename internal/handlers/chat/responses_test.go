@@ -55,7 +55,7 @@ func TestHandleResponses_ChatUpstreamIsBridged(t *testing.T) {
 	seedConnDB(t, database, "bn", "conn-responses-bridge", "sk-bridge", upstream.URL)
 	handler := NewChatHandler(db.NewRepo(database))
 
-	req := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader([]byte(fmt.Sprintf(responsesRequestBody, "bn/claude-sonnet-4.5"))))
+	req := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader(fmt.Appendf(nil, responsesRequestBody, "bn/claude-sonnet-4.5")))
 	rec := httptest.NewRecorder()
 	handler.HandleResponses(rec, req)
 
@@ -99,7 +99,7 @@ func TestHandleResponses_NativeUpstreamIsNotTranslated(t *testing.T) {
 	seedConnDB(t, database, "codex", "conn-responses-native", "sk-codex", upstream.URL+"/responses")
 	handler := NewChatHandler(db.NewRepo(database))
 
-	req := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader([]byte(fmt.Sprintf(responsesRequestBody, "codex/gpt-5.1"))))
+	req := httptest.NewRequest("POST", "/v1/responses", bytes.NewReader(fmt.Appendf(nil, responsesRequestBody, "codex/gpt-5.1")))
 	rec := httptest.NewRecorder()
 	handler.HandleResponses(rec, req)
 

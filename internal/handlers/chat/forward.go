@@ -45,13 +45,11 @@ func (h *ChatHandler) forwardRequest(
 	if httpClient == nil {
 		httpClient = h.Client
 	}
-	// OpenAI-compat Gemini endpoints validate tool schemas as strictly as the
-	// native one — sanitize tools so no unsupported JSON-Schema keyword reaches
-	// them ("Invalid tool parameters" fix).
-	if cfg.IsGeminiOpenAICompat() {
-		if sanitized, serr := translator.SanitizeOpenAITools(body); serr == nil && sanitized != nil {
-			body = sanitized
-		}
+	// Sanitize tool and response_format schemas so no unsupported JSON-Schema
+	// keyword (such as propertyNames on Cloudflare AI or strict Gemini validators)
+	// reaches OpenAI-compatible endpoints.
+	if sanitized, serr := translator.SanitizeOpenAITools(body); serr == nil && sanitized != nil {
+		body = sanitized
 	}
 	// Strict pattern validation: strip regex lookarounds and malformed patterns that
 	// OpenAI-compatible validators reject with HTTP 400 (openrouter PR #3665, widened).

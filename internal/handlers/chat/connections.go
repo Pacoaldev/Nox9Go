@@ -858,6 +858,15 @@ func resolveProviderAuthToken(provider string, connData *ConnectionData, current
 		}
 		return current
 	}
+	if provider == "github" {
+		if copilotTok, ok := connData.ProviderSpecificData["copilotToken"].(string); ok && strings.TrimSpace(copilotTok) != "" {
+			return strings.TrimSpace(copilotTok)
+		}
+		if connData.AccessToken != "" {
+			return connData.AccessToken
+		}
+		return current
+	}
 	if provider != "kiro" {
 		return current
 	}

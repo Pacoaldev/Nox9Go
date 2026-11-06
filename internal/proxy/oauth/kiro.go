@@ -105,6 +105,7 @@ func refreshKiroAWS(ctx context.Context, client *http.Client, refreshToken, clie
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
+		ProfileArn:   tokens.ProfileArn,
 	}
 	if out.RefreshToken == "" {
 		out.RefreshToken = refreshToken
@@ -146,6 +147,7 @@ func refreshKiroSocial(ctx context.Context, client *http.Client, refreshToken st
 		AccessToken  string `json:"accessToken"`
 		RefreshToken string `json:"refreshToken"`
 		ExpiresIn    int    `json:"expiresIn"`
+		ProfileArn   string `json:"profileArn"`
 	}
 	if err := json.Unmarshal(body, &tokens); err != nil {
 		return nil, fmt.Errorf("kiro: parse social refresh response: %w", err)
@@ -158,6 +160,7 @@ func refreshKiroSocial(ctx context.Context, client *http.Client, refreshToken st
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
+		ProfileArn:   tokens.ProfileArn,
 	}
 	if out.RefreshToken == "" {
 		out.RefreshToken = refreshToken

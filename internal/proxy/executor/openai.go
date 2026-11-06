@@ -23,30 +23,27 @@ import (
 // When the upstream rejected the request for that reason, the body is clamped to
 // the named limit and sent once more. Returns ok=false for any other failure, so
 // the caller reports the original error untouched.
-func retryWithClampedMaxTokens(req *Request, forwardErr error) (*http.Response, bool) {
+func retryWithClampedMaxTokens(req *Request, forwardErr error) (*http.Response, error, bool) {
 	var upstreamErr *proxy.UpstreamError
 	if !errors.As(forwardErr, &upstreamErr) || upstreamErr == nil {
-		return nil, false
+		return nil, nil, false
 	}
 	if upstreamErr.StatusCode != http.StatusBadRequest {
-		return nil, false
+		return nil, nil, false
 	}
 	limit, ok := translator.MaxTokensLimitFromError(upstreamErr.Body)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 	clamped := translator.ClampMaxTokens(req.Body, limit)
 	if bytes.Equal(clamped, req.Body) {
-		return nil, false
+		return nil, nil, false
 	}
 	log.Warn("executor", "clamping max_tokens to the upstream cap and retrying",
 		"provider", req.Provider, "limit", limit)
 	req.Body = clamped
 	resp, err := proxy.ForwardOpenAI(req.Ctx, req.Client, req.Config, req.APIKey, req.Body, req.IsStream)
-	if err != nil {
-		return nil, false
-	}
-	return resp, true
+	return resp, err, true
 }
 
 func stripUnsupportedPromptCacheKey(body []byte) []byte {
@@ -65,9 +62,60 @@ func stripUnsupportedPromptCacheKey(body []byte) []byte {
 	return cleaned
 }
 
+func flattenMessagesContent(body []byte) []byte {
+	var req map[string]any
+	if err := json.Unmarshal(body, &req); err != nil {
+		return body
+	}
+	msgs, ok := req["messages"].([]any)
+	if !ok || len(msgs) == 0 {
+		return body
+	}
+	changed := false
+	for _, raw := range msgs {
+		msg, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		parts, ok := msg["content"].([]any)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		for _, p := range parts {
+			if s, ok := p.(string); ok {
+				sb.WriteString(s)
+				continue
+			}
+			pm, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			if t, _ := pm["type"].(string); t == "text" {
+				if txt, ok := pm["text"].(string); ok {
+					sb.WriteString(txt)
+				}
+			}
+		}
+		msg["content"] = sb.String()
+		changed = true
+	}
+	if !changed {
+		return body
+	}
+	out, err := json.Marshal(req)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
 func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
 	if req.Provider == "groq" {
 		req.Body = stripUnsupportedPromptCacheKey(req.Body)
+	}
+	if req.Provider == "cloudflare-ai" {
+		req.Body = flattenMessagesContent(req.Body)
 	}
 	resp, err := proxy.ForwardOpenAI(req.Ctx, req.Client, req.Config, req.APIKey, req.Body, req.IsStream)
 	if err != nil {
@@ -76,9 +124,10 @@ func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
 		// upstream's own number is the only accurate source (our catalog
 		// describes the model, not the gateway's per-model limit), and without
 		// this every request that asks for more fails before it reaches a model.
-		if retried, ok := retryWithClampedMaxTokens(req, err); ok {
-			resp, err = retried, nil
-		} else {
+		if retried, retryErr, ok := retryWithClampedMaxTokens(req, err); ok {
+			resp, err = retried, retryErr
+		}
+		if err != nil {
 			return fmt.Errorf("ForwardOpenAI upstream: %w", err)
 		}
 	}

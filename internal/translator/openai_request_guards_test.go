@@ -153,3 +153,21 @@ func TestHarvestOpenAIToolCallSignatures(t *testing.T) {
 		t.Errorf("stored signature = %q, want HARVESTED_SIG", got)
 	}
 }
+
+func TestSanitizeOpenAITools_CleansResponseFormatJsonSchema(t *testing.T) {
+	body := []byte(`{"model":"@cf/meta/llama-3.1-8b-instruct-fp8-fast","messages":[{"role":"user","content":"hi"}],"response_format":{"type":"json_schema","json_schema":{"name":"response","strict":true,"schema":{"type":"object","additionalProperties":false,"properties":{"scores":{"type":"object","propertyNames":{"type":"string"},"additionalProperties":{"type":"number"}}},"required":["scores"]}}}}`)
+	out, err := SanitizeOpenAITools(body)
+	if err != nil {
+		t.Fatalf("SanitizeOpenAITools error = %v", err)
+	}
+	s := string(out)
+	if strings.Contains(s, `"propertyNames"`) {
+		t.Fatalf("expected propertyNames to be stripped from response_format.json_schema.schema, got %s", s)
+	}
+	if !strings.Contains(s, `"additionalProperties":false`) || !strings.Contains(s, `"additionalProperties":{"type":"number"}`) {
+		t.Fatalf("expected additionalProperties to be preserved in response_format.json_schema.schema, got %s", s)
+	}
+	if strings.Contains(s, `"reason"`) {
+		t.Fatalf("expected tool placeholder reason NOT to be injected into response_format.json_schema.schema, got %s", s)
+	}
+}

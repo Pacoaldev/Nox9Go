@@ -113,6 +113,25 @@ func ForwardKimchi(ctx context.Context, client *http.Client, cfg *providers.Prov
 	return DoRequest(ctx, client, "POST", cfg.BaseURL, headers, body)
 }
 
+// ResolveKiroProfileARN returns the connection's profileArn or the default
+// CodeWhisperer profile ARN for non-API-key Kiro connections.
+func ResolveKiroProfileARN(psd map[string]any) string {
+	if psd != nil {
+		if s, ok := psd["profileArn"].(string); ok && strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
+		}
+		if am, _ := psd["authMethod"].(string); strings.TrimSpace(am) == "api_key" {
+			return ""
+		}
+		am, _ := psd["authMethod"].(string)
+		switch strings.ToLower(strings.TrimSpace(am)) {
+		case "builder-id", "idc":
+			return "arn:aws:codewhisperer:us-east-1:638616132270:profile/AAAACCCCXXXX"
+		}
+	}
+	return "arn:aws:codewhisperer:us-east-1:699475941385:profile/EHGA3GRVQMUK"
+}
+
 // ForwardKiro forwards to kiro with AWS EventStream headers.
 // The caller must handle the EventStream binary response.
 //
@@ -142,7 +161,7 @@ func ForwardKiro(ctx context.Context, client *http.Client, cfg *providers.Provid
 		if apiKey != "" {
 			headers["x-amz-sso-bearer"] = apiKey
 		}
-		if profileArn, ok := psd["profileArn"].(string); ok && profileArn != "" {
+		if profileArn := ResolveKiroProfileARN(psd); profileArn != "" {
 			headers["x-amzn-codewhisperer-profile-arn"] = profileArn
 		}
 		if tokenType := kiroTokenType(psd); tokenType != "" {

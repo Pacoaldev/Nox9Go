@@ -98,7 +98,7 @@ type providerLimitError struct {
 // the existing write sites work with no changes at all.
 func (e *providerLimitError) Unwrap() error { return e.upstreamError }
 
-func (h *ChatHandler) providerLimitError(ctx context.Context, provider string, attempt providerLimitAttempt) error {
+func (h *ChatHandler) providerLimitError(ctx context.Context, _ string, attempt providerLimitAttempt) error {
 	state := providerLimitStateFrom(ctx)
 	attempts := state.recordRefusal(attempt)
 	return &providerLimitError{

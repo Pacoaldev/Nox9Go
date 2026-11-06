@@ -58,11 +58,6 @@ func ConnectionHasCredential(conn *models.ProviderConnection) bool {
 	return data.APIKey != "" || data.AccessToken != "" || data.AuthToken != "" || data.RefreshToken != ""
 }
 
-// connectionHasCredential is the package-local alias.
-func connectionHasCredential(conn *models.ProviderConnection) bool {
-	return ConnectionHasCredential(conn)
-}
-
 // Upstream kind hints for model ids with no per-model type metadata
 // (src/app/api/v1/models/route.js inferKindFromUnknownModelId). The default
 // /v1/models build uses kindFilter ["llm"], so anything these match is a

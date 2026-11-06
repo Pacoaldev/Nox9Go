@@ -9,31 +9,6 @@ import (
 	"nox9go/proxy/internal/constants"
 )
 
-// bypassResponse represents a fake response for bypassed requests.
-type bypassResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message *struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message,omitempty"`
-		Delta *struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"delta,omitempty"`
-		FinishReason *string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage,omitempty"`
-}
-
 const defaultBypassText = "CLI Command Execution: Clear Terminal"
 const namingBypassText = "{\"isNewTopic\":true,\"title\":\"Project Setup\"}"
 

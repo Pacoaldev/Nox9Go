@@ -36,7 +36,7 @@ func forceFallbackEnabled(settings *db.SettingsData) bool {
 // and forcing a request onto it would discard the very lock that removed it —
 // so those stay out and the caller keeps reporting the ordinary failure.
 func (h *ChatHandler) forceMinCooldownConnection(
-	provider string,
+	_ string,
 	conns []*models.ProviderConnection,
 	excludeSet map[string]bool,
 	model string,

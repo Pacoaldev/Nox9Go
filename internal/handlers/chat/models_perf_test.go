@@ -69,7 +69,7 @@ func BenchmarkHandleModels(b *testing.B) {
 	w := httptest.NewRecorder()
 	h.HandleModels(w, req)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		w := httptest.NewRecorder()
 		h.HandleModels(w, req)
 	}

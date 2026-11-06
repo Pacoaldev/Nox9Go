@@ -857,13 +857,15 @@ func normalizeTopLevelReasoning(reqMap map[string]any) bool {
 // Providers that *require* the field (DeepSeek, Kimi, opencode) are served by
 // InjectReasoningContent's injection path and must never be listed here.
 var strictReasoningMessageProviders = map[string]bool{
-	"cerebras":    true,
-	"groq":        true,
-	"mistral":     true,
-	"kiro":        true,
-	"kilocode":    true,
+	"cerebras":     true,
+	"groq":         true,
+	"mistral":      true,
+	"kiro":         true,
+	"kilocode":     true,
 	"kilo-gateway": true,
-	"kgw":         true,
+	"kgw":          true,
+	"github":       true,
+	"gh":           true,
 }
 
 // reasoningMessageFields are the vendor aliases for an assistant turn's

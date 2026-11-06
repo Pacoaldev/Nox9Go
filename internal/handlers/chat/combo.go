@@ -69,39 +69,6 @@ func contentHasText(content jsontext.Value) bool {
 	return false
 }
 
-// visionProviders lists providers known to support vision/image input.
-var visionProviders = map[string]bool{
-	"openai":      true,
-	"anthropic":   true,
-	"claude":      true,
-	"gemini":      true,
-	"antigravity": true,
-	"xai":         true,
-	"mistral":     true,
-	"groq":        true,
-	"openrouter":  true,
-}
-
-// pdfProviders lists providers known to support PDF/document input.
-var pdfProviders = map[string]bool{
-	"openai":      true,
-	"anthropic":   true,
-	"claude":      true,
-	"gemini":      true,
-	"antigravity": true,
-}
-
-// modelHasCapability checks if a model (from a "provider/model" entry) supports
-// the given capability. Returns true when uncertain (optimistic default).
-func modelHasCapability(modelEntry string, cap string) bool {
-	provider := modelEntry
-	if idx := strings.Index(modelEntry, "/"); idx >= 0 {
-		provider = modelEntry[:idx]
-	}
-
-	return capabilityFlag(providers.GetCapabilitiesForModel(provider, modelEntry), cap)
-}
-
 // DetectRequiredCapabilities extracts the capabilities a request needs.
 //
 // Modalities (vision/pdf/audioInput/videoInput) are scanned only on the current
@@ -801,6 +768,10 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 						// lockout is the wider scope.
 						if providers.RetryableStatusCodes[ue.StatusCode] {
 							h.comboLockRetryable(ctx, &excludeIDs, connID, modelInfo.Provider, modelInfo.Model, ue)
+						} else {
+							retry.note(ue)
+							lastErr = ue
+							break
 						}
 						if isProviderModelLockout(modelInfo.Provider, ue.StatusCode, ue.Body) {
 							h.recordProviderModelLockout(ctx, modelInfo.Provider, modelInfo.Model, connID, ue)
@@ -1132,6 +1103,10 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 						// lockout is the wider scope.
 						if providers.RetryableStatusCodes[ue.StatusCode] {
 							h.comboLockRetryable(ctx, &excludeIDs, connID, modelInfo.Provider, modelInfo.Model, ue)
+						} else {
+							retry.note(ue)
+							lastErr = ue
+							break
 						}
 						if isProviderModelLockout(modelInfo.Provider, ue.StatusCode, ue.Body) {
 							h.recordProviderModelLockout(ctx, modelInfo.Provider, modelInfo.Model, connID, ue)

@@ -79,7 +79,12 @@ var ModelFitErrorPatterns = []string{
 	"input is too long",
 	"too many tokens",
 	"context window",
+	"context_window",
 	"exceeds the maximum number of tokens",
+	"model_max_prompt_tokens_exceeded",
+	"prompt token count",
+	"exceeds the limit of",
+	"request too large",
 }
 
 // ModelFitStatusCodes are the statuses an upstream uses to reject an oversized

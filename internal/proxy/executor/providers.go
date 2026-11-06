@@ -272,12 +272,7 @@ func kiroUpstreamBody(req *Request) ([]byte, error) {
 		model = model[:idx]
 	}
 
-	profileArn := ""
-	if req.ConnData != nil {
-		if s, ok := req.ConnData["profileArn"].(string); ok {
-			profileArn = strings.TrimSpace(s)
-		}
-	}
+	profileArn := proxy.ResolveKiroProfileARN(req.ConnData)
 
 	out, err := translator.OpenAIToKiro(req.Body, translator.KiroTranslateOptions{
 		Model:      model,

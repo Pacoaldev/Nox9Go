@@ -248,7 +248,7 @@ func TestAntigravityQuota_StrikeReassert(t *testing.T) {
 	}
 
 	// Refresh should re-assert the block even though upstream says 90%
-	_, err := RefreshAntigravityQuota(nil, srv.Client(), connID, "token", "proj")
+	_, err := RefreshAntigravityQuota(t.Context(), srv.Client(), connID, "token", "proj")
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}

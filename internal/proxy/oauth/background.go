@@ -68,6 +68,24 @@ func SelectConnectionsNeedingRefresh(conns []*models.ProviderConnection, now tim
 		if !strings.EqualFold(strings.ReplaceAll(c.AuthType, "_", ""), "oauth") {
 			continue
 		}
+		if c.Provider == "github" {
+			if strings.TrimSpace(data.AccessToken) == "" && strings.TrimSpace(data.RefreshToken) == "" {
+				continue
+			}
+			if until, ok := db.ConnectionOAuthLockUntil(c.Data); ok && until.After(now) {
+				continue
+			}
+			if CopilotTokenNeedsRefresh(data.PSD) {
+				out = append(out, ConnectionNeedingRefresh{
+					ID:                   c.ID,
+					Provider:             c.Provider,
+					RefreshToken:         data.RefreshToken,
+					AccessToken:          data.AccessToken,
+					ProviderSpecificData: StringMap(data.PSD),
+				})
+				continue
+			}
+		}
 		if strings.TrimSpace(data.RefreshToken) == "" {
 			continue
 		}
@@ -211,9 +229,7 @@ func refreshBackgroundConnection(ctx context.Context, repo *db.Repo, c Connectio
 	for k, v := range BuildConnectionUpdate(refreshed) {
 		existing[k] = v
 	}
-	if result.ProjectID != "" {
-		existing["projectId"] = result.ProjectID
-	}
+	ApplyRefreshMetadata(existing, result)
 	merged, err := json.Marshal(existing)
 	if err != nil {
 		log.Printf("[BG_TOKEN_REFRESH] marshal failed conn=%s: %v", c.ID, err)

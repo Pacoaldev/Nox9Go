@@ -220,21 +220,36 @@ func (h *ChatHandler) refreshOAuthTokenIfExpired(connectionID, currentToken stri
 		// Same for Kiro: upstream (open-sse/executors/kiro.js buildHeaders) uses
 		// the apiKey for `authMethod: "api_key"` connections even when an
 		// accessToken is present, and sending the other one answers 403.
-		if oauthData == nil || oauthData.RefreshToken == "" || !oauthData.IsExpired() {
+		var connPSD map[string]any
+		if raw, ok := connMap["providerSpecificData"].(map[string]any); ok {
+			connPSD = raw
+		}
+		needsRefresh := oauthData != nil && oauthData.RefreshToken != "" && oauthData.IsExpired()
+		if provider == "github" && oauthData != nil && (oauthData.AccessToken != "" || oauthData.RefreshToken != "") {
+			if oauth.CopilotTokenNeedsRefresh(connPSD) {
+				needsRefresh = true
+			}
+		}
+		if !needsRefresh {
+			if provider == "github" && connPSD != nil {
+				if copilotTok, ok := connPSD["copilotToken"].(string); ok && strings.TrimSpace(copilotTok) != "" {
+					return oauthTokenResult{token: strings.TrimSpace(copilotTok), projectID: projectID, passthrough: true}, nil
+				}
+			}
 			return oauthTokenResult{token: currentToken, projectID: projectID, passthrough: true}, nil
 		}
 
 		// Use global OAuth refresh with deduplication and caching
 		log.Info("oauth", "token expired, refreshing via global dedup", "provider", provider, "project", projectID)
-		var connPSD map[string]any
-		if raw, ok := connMap["providerSpecificData"].(map[string]any); ok {
-			connPSD = raw
+		storedAccess := currentToken
+		if oauthData != nil && oauthData.AccessToken != "" {
+			storedAccess = oauthData.AccessToken
 		}
 		result, err := oauth.Refresh(context.Background(), &oauth.Params{
 			Client:               h.Client,
 			Provider:             provider,
 			RefreshToken:         oauthData.RefreshToken,
-			AccessToken:          currentToken,
+			AccessToken:          storedAccess,
 			ProviderSpecificData: oauth.StringMap(connPSD),
 		})
 		if err != nil {
@@ -258,9 +273,7 @@ func (h *ChatHandler) refreshOAuthTokenIfExpired(connectionID, currentToken stri
 		for k, v := range update {
 			existing[k] = v
 		}
-		if result.ProjectID != "" {
-			existing["projectId"] = result.ProjectID
-		}
+		oauth.ApplyRefreshMetadata(existing, result)
 		mergedJSON, err := json.Marshal(existing)
 		if err != nil {
 			log.Error("oauth", "marshal connection data failed", "conn", connectionID, "error", err)
@@ -274,7 +287,11 @@ func (h *ChatHandler) refreshOAuthTokenIfExpired(connectionID, currentToken stri
 		}
 		log.Info("oauth", "token refreshed", "provider", provider, "project", newPID)
 		h.clearOAuthAccountPark(connectionID)
-		return oauthTokenResult{token: result.AccessToken, projectID: newPID}, nil
+		outToken := result.AccessToken
+		if provider == "github" && result.APIKey != "" {
+			outToken = result.APIKey
+		}
+		return oauthTokenResult{token: outToken, projectID: newPID}, nil
 	})
 
 	// A shared flight must not hand one caller's token to another: when the
@@ -324,7 +341,7 @@ func (h *ChatHandler) forceRefreshOAuthToken(connectionID string) (string, strin
 		}
 
 		oauthData := providers.ParseOAuthConnection(connMap)
-		if oauthData == nil || oauthData.RefreshToken == "" {
+		if oauthData == nil || (oauthData.RefreshToken == "" && !(provider == "github" && oauthData.AccessToken != "")) {
 			return oauthTokenResult{}, fmt.Errorf("no refresh token available")
 		}
 
@@ -338,6 +355,7 @@ func (h *ChatHandler) forceRefreshOAuthToken(connectionID string) (string, strin
 			Client:               h.Client,
 			Provider:             provider,
 			RefreshToken:         oauthData.RefreshToken,
+			AccessToken:          oauthData.AccessToken,
 			Force:                true,
 			ProviderSpecificData: oauth.StringMap(forcePSD),
 		})
@@ -353,9 +371,7 @@ func (h *ChatHandler) forceRefreshOAuthToken(connectionID string) (string, strin
 			if result.RefreshToken != "" {
 				existing["refreshToken"] = result.RefreshToken
 			}
-			if result.ProjectID != "" {
-				existing["projectId"] = result.ProjectID
-			}
+			oauth.ApplyRefreshMetadata(existing, result)
 			existing["expiresAt"] = time.Now().Add(time.Duration(result.ExpiresIn) * time.Second).Format(time.RFC3339)
 			mergedJSON, err := json.Marshal(existing)
 			if err != nil {
@@ -369,7 +385,11 @@ func (h *ChatHandler) forceRefreshOAuthToken(connectionID string) (string, strin
 				newPID = result.ProjectID
 			}
 			h.clearOAuthAccountPark(connectionID)
-			return oauthTokenResult{token: result.AccessToken, projectID: newPID}, nil
+			outToken := result.AccessToken
+			if provider == "github" && result.APIKey != "" {
+				outToken = result.APIKey
+			}
+			return oauthTokenResult{token: outToken, projectID: newPID}, nil
 		}
 		if err != nil {
 			if h.parkRejectedOAuthAccount(connectionID, err) {

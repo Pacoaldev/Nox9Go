@@ -370,48 +370,109 @@ func CleanParametersSchema(raw jsontext.Value) jsontext.Value {
 	return cleaned
 }
 
-// SanitizeOpenAITools rewrites every tool's parameters schema through
-// CleanParametersSchema in an OpenAI-format request body. Used for OpenAI-compat
-// Gemini endpoints whose tool schema validation is as strict as the native
-// generateContent path (one unsupported keyword rejects the whole request).
-// Returns the body unchanged when there are no tools or nothing to clean.
+// SanitizeOpenAITools rewrites every tool's parameters schema and
+// response_format.json_schema.schema through CleanParametersSchema in an
+// OpenAI-format request body. Used for OpenAI-compat endpoints whose schema
+// validation rejects Draft 7/2020-12 keywords like propertyNames.
+// Returns the body unchanged when there are no schemas or nothing to clean.
 func SanitizeOpenAITools(body []byte) ([]byte, error) {
 	var m map[string]any
 	if err := json.Unmarshal(body, &m); err != nil {
 		return nil, err
 	}
-	tools, ok := m["tools"].([]any)
-	if !ok || len(tools) == 0 {
-		return body, nil
-	}
 	changed := false
-	for _, t := range tools {
-		tm, ok := t.(map[string]any)
-		if !ok {
-			continue
+	if tools, ok := m["tools"].([]any); ok && len(tools) > 0 {
+		for _, t := range tools {
+			tm, ok := t.(map[string]any)
+			if !ok {
+				continue
+			}
+			fn, ok := tm["function"].(map[string]any)
+			if !ok {
+				continue
+			}
+			params, ok := fn["parameters"]
+			if !ok {
+				continue
+			}
+			raw, err := json.Marshal(params)
+			if err != nil {
+				continue
+			}
+			cleaned := CleanParametersSchema(raw)
+			if string(cleaned) == string(raw) {
+				continue
+			}
+			var cleanedOut any
+			if err := json.Unmarshal(cleaned, &cleanedOut); err != nil {
+				continue
+			}
+			fn["parameters"] = cleanedOut
+			changed = true
 		}
-		fn, ok := tm["function"].(map[string]any)
-		if !ok {
-			continue
+	}
+	if rf, ok := m["response_format"].(map[string]any); ok {
+		if js, ok := rf["json_schema"].(map[string]any); ok {
+			if schemaMap, ok := js["schema"].(map[string]any); ok {
+				if cleanResponseFormatSchema(schemaMap) {
+					changed = true
+				}
+			}
 		}
-		params, ok := fn["parameters"]
-		if !ok {
-			continue
-		}
-		raw, err := json.Marshal(params)
-		if err != nil {
-			continue
-		}
-		cleaned := CleanParametersSchema(raw)
-		var cleanedOut any
-		if err := json.Unmarshal(cleaned, &cleanedOut); err != nil {
-			continue
-		}
-		fn["parameters"] = cleanedOut
-		changed = true
 	}
 	if !changed {
 		return body, nil
 	}
 	return json.Marshal(m)
+}
+
+// cleanResponseFormatSchema recursively removes JSON Schema keywords that
+// strict grammar compilers (such as Cloudflare Workers AI) reject as
+// unimplemented ("propertyNames", "$schema", "$comment"), while preserving
+// "additionalProperties", union keywords, and existing object shapes required
+// by OpenAI/GitHub structured outputs.
+func cleanResponseFormatSchema(schema map[string]any) bool {
+	if schema == nil {
+		return false
+	}
+	changed := false
+	for _, k := range []string{"propertyNames", "$schema", "$comment"} {
+		if _, exists := schema[k]; exists {
+			delete(schema, k)
+			changed = true
+		}
+	}
+	for _, propKey := range []string{"properties", "$defs", "definitions", "patternProperties", "dependentSchemas"} {
+		if m, ok := schema[propKey].(map[string]any); ok {
+			for _, v := range m {
+				if sub, ok := v.(map[string]any); ok && cleanResponseFormatSchema(sub) {
+					changed = true
+				}
+			}
+		}
+	}
+	for _, subKey := range []string{"items", "additionalProperties", "additionalItems", "not", "if", "then", "else", "contains"} {
+		switch v := schema[subKey].(type) {
+		case map[string]any:
+			if cleanResponseFormatSchema(v) {
+				changed = true
+			}
+		case []any:
+			for _, elem := range v {
+				if sub, ok := elem.(map[string]any); ok && cleanResponseFormatSchema(sub) {
+					changed = true
+				}
+			}
+		}
+	}
+	for _, unionKey := range []string{"anyOf", "oneOf", "allOf", "prefixItems"} {
+		if list, ok := schema[unionKey].([]any); ok {
+			for _, elem := range list {
+				if sub, ok := elem.(map[string]any); ok && cleanResponseFormatSchema(sub) {
+					changed = true
+				}
+			}
+		}
+	}
+	return changed
 }

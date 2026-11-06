@@ -61,6 +61,31 @@ func SyncMirroredAPIKey(existing map[string]any, provider, prevAccess, newAccess
 	}
 }
 
+// ApplyRefreshMetadata merges provider-specific metadata (e.g. Kiro profileArn,
+// GitHub copilotToken) from a refresh result into the connection's data map.
+func ApplyRefreshMetadata(existing map[string]any, result *TokenResult) {
+	if existing == nil || result == nil {
+		return
+	}
+	if result.ProjectID != "" {
+		existing["projectId"] = result.ProjectID
+	}
+	if result.ProfileArn == "" && len(result.ExtraPSD) == 0 {
+		return
+	}
+	psd, ok := existing["providerSpecificData"].(map[string]any)
+	if !ok || psd == nil {
+		psd = make(map[string]any)
+		existing["providerSpecificData"] = psd
+	}
+	if result.ProfileArn != "" {
+		psd["profileArn"] = result.ProfileArn
+	}
+	for k, v := range result.ExtraPSD {
+		psd[k] = v
+	}
+}
+
 // BuildConnectionUpdate builds a DB update map from a refresh result.
 func BuildConnectionUpdate(result *TokenResult) map[string]any {
 	m := map[string]any{

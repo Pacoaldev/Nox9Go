@@ -61,3 +61,45 @@ func TestClassifyError_RequestScoped4xxNoFallback(t *testing.T) {
 		t.Errorf("expected fallback for 404, got %+v", cls)
 	}
 }
+
+func TestIsModelFitError_GitHubAndGroqPatterns(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{
+			name:   "github copilot model_max_prompt_tokens_exceeded",
+			status: http.StatusBadRequest,
+			body:   `{"error":{"message":"prompt token count of 265857 exceeds the limit of 128000","code":"model_max_prompt_tokens_exceeded"}}`,
+			want:   true,
+		},
+		{
+			name:   "groq context_window in max_tokens error",
+			status: http.StatusBadRequest,
+			body:   `{"error":{"message":"` + "`max_tokens`" + ` must be less than or equal to ` + "`16384`" + `, the maximum value for ` + "`max_tokens`" + ` is less than the ` + "`context_window`" + ` for this model","type":"invalid_request_error","param":"max_tokens"}}`,
+			want:   true,
+		},
+		{
+			name:   "request too large 413",
+			status: http.StatusRequestEntityTooLarge,
+			body:   `{"error":{"message":"Request too large for model"}}`,
+			want:   true,
+		},
+		{
+			name:   "unrelated 400",
+			status: http.StatusBadRequest,
+			body:   `{"error":{"message":"invalid tool use format"}}`,
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsModelFitError(tt.status, []byte(tt.body)); got != tt.want {
+				t.Errorf("IsModelFitError(%d, %q) = %v, want %v", tt.status, tt.body, got, tt.want)
+			}
+		})
+	}
+}

@@ -17,6 +17,8 @@ type TokenResult struct {
 	Scope        string
 	ProjectID    string // provider-specific extra field
 	APIKey       string
+	ProfileArn   string
+	ExtraPSD     map[string]any
 }
 
 // Params holds all inputs for a refresh call.
@@ -69,7 +71,11 @@ func Refresh(ctx context.Context, p *Params) (*TokenResult, error) {
 	if fn == nil {
 		return nil, fmt.Errorf("no OAuth refresher for: %s", p.Provider)
 	}
-	return DedupRefresh(ctx, p.Provider, p.RefreshToken, p.Force, func(ctx context.Context) (*TokenResult, error) {
+	dedupToken := p.RefreshToken
+	if dedupToken == "" {
+		dedupToken = p.AccessToken
+	}
+	return DedupRefresh(ctx, p.Provider, dedupToken, p.Force, func(ctx context.Context) (*TokenResult, error) {
 		return fn(ctx, p)
 	})
 }

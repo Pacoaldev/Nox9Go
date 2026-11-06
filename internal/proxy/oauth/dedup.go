@@ -72,6 +72,13 @@ func CopyTokenResult(result *TokenResult) *TokenResult {
 	if result == nil {
 		return nil
 	}
+	var extra map[string]any
+	if len(result.ExtraPSD) > 0 {
+		extra = make(map[string]any, len(result.ExtraPSD))
+		for k, v := range result.ExtraPSD {
+			extra[k] = v
+		}
+	}
 	return &TokenResult{
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
@@ -79,6 +86,8 @@ func CopyTokenResult(result *TokenResult) *TokenResult {
 		Scope:        result.Scope,
 		ProjectID:    result.ProjectID,
 		APIKey:       result.APIKey,
+		ProfileArn:   result.ProfileArn,
+		ExtraPSD:     extra,
 	}
 }
 

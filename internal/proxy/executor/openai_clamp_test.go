@@ -85,3 +85,69 @@ func TestForwardOpenAI_DoesNotRetryUnrelated400(t *testing.T) {
 		t.Errorf("upstream calls = %d, want 1 (no retry for an unrelated 400)", got)
 	}
 }
+
+func TestForwardOpenAI_ReturnsClampedRetryErrorInsteadOfStaleMaxTokensError(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if n == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"` + "`max_tokens`" + ` must be less than or equal to ` + "`16384`" + `","type":"invalid_request_error","param":"max_tokens"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		_, _ = w.Write([]byte(`{"error":{"message":"Request too large for model qwen/qwen3.8-27b: context_length_exceeded"}}`))
+	}))
+	defer srv.Close()
+
+	req := &Request{
+		Ctx:      t.Context(),
+		Provider: "groq",
+		Client:   srv.Client(),
+		Config:   &providers.ProviderConfig{BaseURL: srv.URL, AuthHeader: "Authorization", AuthScheme: "bearer"},
+		APIKey:   "k",
+		Body:     []byte(`{"model":"qwen/qwen3.8-27b","messages":[{"role":"user","content":"hi"}],"max_tokens":64000}`),
+	}
+	rec := httptest.NewRecorder()
+	err := ForwardOpenAI(rec, req)
+	if err == nil {
+		t.Fatal("expected error from retry")
+	}
+	if !strings.Contains(err.Error(), "context_length_exceeded") {
+		t.Fatalf("ForwardOpenAI error = %v, want retry error containing context_length_exceeded", err)
+	}
+	if strings.Contains(err.Error(), "must be less than or equal to") {
+		t.Fatalf("ForwardOpenAI error = %v, should not return stale pre-clamp max_tokens error", err)
+	}
+}
+
+func TestForwardOpenAI_CloudflareFlattensMessageContentArray(t *testing.T) {
+	var receivedBody atomic.Value
+	receivedBody.Store("")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := make([]byte, r.ContentLength)
+		_, _ = r.Body.Read(body)
+		receivedBody.Store(string(body))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	req := &Request{
+		Ctx:      t.Context(),
+		Provider: "cloudflare-ai",
+		Client:   srv.Client(),
+		Config:   &providers.ProviderConfig{BaseURL: srv.URL, AuthHeader: "Authorization", AuthScheme: "bearer"},
+		APIKey:   "k",
+		Body:     []byte(`{"model":"@cf/meta/llama-3.1-8b-instruct-fp8-fast","messages":[{"role":"user","content":[{"type":"text","text":"hello "},{"type":"text","text":"world"}]}]}`),
+	}
+	rec := httptest.NewRecorder()
+	if err := ForwardOpenAI(rec, req); err != nil {
+		t.Fatalf("ForwardOpenAI error = %v", err)
+	}
+	got, _ := receivedBody.Load().(string)
+	if !strings.Contains(got, `"content":"hello world"`) {
+		t.Fatalf("expected flattened content string, got %s", got)
+	}
+}

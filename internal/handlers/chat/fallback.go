@@ -221,6 +221,15 @@ func (h *ChatHandler) handleAccountFallback(
 		if errors.As(lastErr, &ue) && providers.RetryableStatusCodes[ue.StatusCode] {
 			if handlerutil.IsProbeContext(ctx) {
 				excludeIDs = append(excludeIDs, connObj.ID)
+				if ue.StatusCode == http.StatusTooManyRequests {
+					consecutive429++
+					if consecutive429 >= maxConsecutive429PerTurn {
+						lastErr = ue
+						break
+					}
+				} else {
+					consecutive429 = 0
+				}
 				continue
 			}
 			// A free-tier refusal says nothing about the account or the model:
@@ -438,9 +447,6 @@ func isAnthropicUpstream(provider string, cfg *providers.ProviderConfig) bool {
 	if provider != "claude" && provider != "anthropic" {
 		return false
 	}
-	if cfg == nil {
-		return false
-	}
 	targetURL := cfg.BaseURL
 	if cfg.StaticHeaders != nil {
 		if relayTarget, ok := cfg.StaticHeaders["x-relay-target"]; ok && relayTarget != "" {
@@ -460,7 +466,7 @@ func isAnthropicUpstream(provider string, cfg *providers.ProviderConfig) bool {
 // merge below, none of which a third-party Messages endpoint wants. A provider
 // declares the wire format on its registry entry (Format: "claude"), which is
 // the same field the /v1/models metadata publishes.
-func servesClaudeMessages(provider string, cfg *providers.ProviderConfig) bool {
+func servesClaudeMessages(_ string, cfg *providers.ProviderConfig) bool {
 	return cfg != nil && cfg.Format == providers.FormatClaude
 }
 
@@ -929,7 +935,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 	// to its tool_calls, so the next turn replays the real signature instead of
 	// the known default. Best-effort: an empty or unreadable buffer stores
 	// nothing and the backfill above falls back to DefaultThinkingSignature.
-	if providerCfg.IsGeminiOpenAICompat() && metrics != nil && metrics.ResponseBuf.Len() > 0 {
+	if providerCfg.IsGeminiOpenAICompat() && metrics.ResponseBuf.Len() > 0 {
 		if n := translator.HarvestOpenAIToolCallSignatures(metrics.ResponseBuf.Bytes(), sessionID, model); n > 0 {
 			log.Debug("fallback", "stored Gemini thought signatures", "provider", provider, "model", model, "count", n)
 		}
@@ -1001,7 +1007,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 
 	// Lightweight request trace for /debug/traces (provider/model latency).
 	completed := fwdErr == nil
-	if !completed && isClientCanceled(ctx, fwdErr) && metrics != nil && metrics.ResponseBuf.Len() > 0 {
+	if !completed && isClientCanceled(ctx, fwdErr) && metrics.ResponseBuf.Len() > 0 {
 		completed = true
 	}
 
