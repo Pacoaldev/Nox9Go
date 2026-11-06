@@ -253,6 +253,22 @@ export interface ProviderStrategyConfig {
   [key: string]: unknown
 }
 
+/**
+ * The model-health loop's configuration, stored under the "modelHealth"
+ * settings key. The server clamps the numbers to its own bounds
+ * (internal/modelhealth/modelhealth.go), so the UI mirrors them rather than
+ * trusting its own copy.
+ */
+export interface ModelHealthConfig {
+  enabled?: boolean
+  /** Minutes between passes. Server bounds: 5..1440. */
+  intervalMin?: number
+  /** Consecutive failures before a model is switched off. Server bounds: 2..100. */
+  threshold?: number
+  /** Whether the loop may re-enable the models it switched off itself. */
+  autoEnable?: boolean
+}
+
 export interface Settings {
   requireApiKey?: boolean
   tunnelDashboardAccess?: boolean
@@ -332,6 +348,8 @@ export interface Settings {
     showBoth?: boolean
     updatedAt?: string
   }
+  /** The model-health loop: probes custom models and switches dead ones off. */
+  modelHealth?: ModelHealthConfig
   [key: string]: unknown
 }
 

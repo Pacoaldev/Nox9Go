@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import {
+    Activity,
     Check,
     Download,
     Key,
@@ -71,6 +72,16 @@
     type DisplayCurrency
   } from '../lib/currency'
   import { setDisplayCurrency } from '../lib/currency.svelte'
+  import {
+    MODEL_HEALTH_DEFAULT_INTERVAL_MIN,
+    MODEL_HEALTH_DEFAULT_THRESHOLD,
+    MODEL_HEALTH_MAX_INTERVAL_MIN,
+    MODEL_HEALTH_MIN_INTERVAL_MIN,
+    MODEL_HEALTH_MIN_THRESHOLD,
+    modelHealthSetting,
+    normalizeModelHealth,
+    type ModelHealthSettings,
+  } from '../lib/modelHealth'
 
   interface Props {
     settings?: Settings
@@ -99,6 +110,15 @@
   let enableSystemPrompt = $state(false)
   let systemPromptPrefix = $state('')
   let systemPromptSuffix = $state('')
+
+  // Model-health loop. The loop itself lives in the server
+  // (internal/modelhealth); this panel only edits the settings row it reads.
+  let modelHealth = $state<ModelHealthSettings>({
+    enabled: false,
+    intervalMin: MODEL_HEALTH_DEFAULT_INTERVAL_MIN,
+    threshold: MODEL_HEALTH_DEFAULT_THRESHOLD,
+    autoEnable: false,
+  })
 
   const ANTI_POISONING_PRESET =
     '[CRITICAL CODE INTEGRITY & ANTI-POISONING RULE]\n' +
@@ -312,6 +332,8 @@
       navOrder = normalizeNavOrder(settings.navVisibility)
       // Currency
       applyCurrency(settings.displayCurrency)
+      // Model-health loop
+      modelHealth = normalizeModelHealth(settings.modelHealth)
     }
   })
 
@@ -344,6 +366,7 @@
         if (s.samlCert) samlCert = String(s.samlCert)
         if (s.samlLoginLabel) samlLoginLabel = String(s.samlLoginLabel)
         applyCurrency(s.displayCurrency)
+        modelHealth = normalizeModelHealth(s.modelHealth)
       }
     } catch {
       // silent
@@ -489,6 +512,7 @@
         samlCert,
         samlLoginLabel,
         displayCurrency: currencySetting(),
+        modelHealth: modelHealthSetting(modelHealth),
       })
       // The arrangement is a localStorage preference, so it is written only once
       // the settings it was edited alongside have been kept.
@@ -1248,7 +1272,95 @@
       </div>
     </Card>
 
-    <!-- SECTION 6: Global System Prompt & Anti-Poisoning -->
+    <!-- SECTION 6: Model Health Loop. The loop runs in the server; this card only
+         edits the settings row it reads. It is off by default, and the server
+         re-reads the row every cycle, so a change here needs no restart. -->
+    <Card padding="md" class="space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-border">
+        <div class="flex items-center gap-2">
+          <Activity class="w-4 h-4 text-brand-500" />
+          <h2 class="text-sm font-bold text-text-main">Model Health Loop</h2>
+        </div>
+        <Toggle
+          checked={modelHealth.enabled}
+          size="sm"
+          label="Enable Model Health Loop"
+          onChange={(val: boolean) => (modelHealth = { ...modelHealth, enabled: val })}
+        />
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- Each translatable literal stays on ONE source line: the runtime
+             translator looks up the text node verbatim, and a source-wrapped
+             literal keeps internal newlines that never match the es.json key. -->
+        <p class="text-text-muted leading-relaxed">
+          Probes your custom models on a schedule and switches off the ones that keep failing, so a dead model stops being routed to. A model you disabled by hand is never probed, and a parked account (quota or rate limit) is not counted as a failure.
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label class="text-[11px] font-medium text-text-muted" for="model-health-interval">
+              Check Interval (minutes)
+            </label>
+            <input
+              id="model-health-interval"
+              type="number"
+              min={MODEL_HEALTH_MIN_INTERVAL_MIN}
+              max={MODEL_HEALTH_MAX_INTERVAL_MIN}
+              step="5"
+              bind:value={modelHealth.intervalMin}
+              class="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
+            />
+            <p class="text-[10px] text-text-subtle">
+              How often the loop runs, between 5 and 1440 minutes.
+            </p>
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-[11px] font-medium text-text-muted" for="model-health-threshold">
+              Failure Threshold
+            </label>
+            <input
+              id="model-health-threshold"
+              type="number"
+              min={MODEL_HEALTH_MIN_THRESHOLD}
+              max="100"
+              step="1"
+              bind:value={modelHealth.threshold}
+              class="w-full rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-text-main focus:border-brand-500 focus:outline-none"
+            />
+            <p class="text-[10px] text-text-subtle">
+              Consecutive failures before a model is switched off, between 2 and 100.
+            </p>
+          </div>
+        </div>
+
+        <div
+          class="flex items-center justify-between gap-3 p-3 rounded-lg bg-bg border border-border"
+        >
+          <div>
+            <div class="font-bold text-text-main">Auto-Enable Recovered Models</div>
+            <div class="text-[11px] text-text-muted">
+              Re-enable a model the loop switched off once it answers again. Models you disabled by hand are never touched.
+            </div>
+          </div>
+          <Toggle
+            checked={modelHealth.autoEnable}
+            size="sm"
+            label="Auto-Enable Recovered Models"
+            onChange={(val: boolean) => (modelHealth = { ...modelHealth, autoEnable: val })}
+          />
+        </div>
+
+        {#if !modelHealth.enabled}
+          <p class="text-[11px] text-text-subtle italic">
+            The loop is off. While it is off it only checks this setting every 30 seconds, so switching it on takes effect without a restart.
+          </p>
+        {/if}
+      </div>
+    </Card>
+
+    <!-- SECTION 7: Global System Prompt & Anti-Poisoning -->
     <Card padding="md" class="space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-border">
         <div class="flex items-center gap-2">
