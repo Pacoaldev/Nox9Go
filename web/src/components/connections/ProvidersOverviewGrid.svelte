@@ -28,7 +28,7 @@
 
   let searchQuery = $state('')
   let statusFilter = $state<'all' | 'connected' | 'error' | 'disabled' | 'not_connected'>('all')
-  let showAllApikey = $state(false)
+  let showAllApikey = $state(true)
   // The "Mover a Catálogo" dialog needs a concrete node; with more than one
   // custom provider the header button has no obvious target, so it asks.
   let promotePickerOpen = $state(false)
@@ -219,13 +219,17 @@
           />
         {/each}
       </div>
-      {#if !showAllApikey && !searchQuery.trim() && statusFilter === 'all' && apikeyProviders.length > visibleApikeyProviders.length}
+      {#if !searchQuery.trim() && statusFilter === 'all' && apikeyProviders.length > APIKEY_INITIAL_VISIBLE}
         <button
           type="button"
-          onclick={() => (showAllApikey = true)}
+          onclick={() => (showAllApikey = !showAllApikey)}
           class="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-text-muted hover:text-brand-500 hover:border-brand-500/40 transition-colors cursor-pointer"
         >
-          Show all {apikeyProviders.length} providers
+          {#if showAllApikey}
+            Show fewer providers
+          {:else}
+            Show all {apikeyProviders.length} providers
+          {/if}
         </button>
       {/if}
     </div>

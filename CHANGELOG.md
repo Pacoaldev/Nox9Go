@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] — 1.0.9
+
+### Dashboard
+
+- **API Key Providers list starts expanded and is collapsible.** The "API Key Providers" section in Providers & Endpoints now renders all providers on first load instead of showing only the first 20 behind a "Show all X providers" button. A toggle button — "Show fewer providers" when expanded, "Show all X providers" when collapsed — appears at the bottom of the section whenever the total exceeds the 20-provider threshold and no search or status filter is active. Searching or filtering auto-expands the list as before.
+
 ## [1.0.8] - 2026-11-06
 
 Security fix release: two dependency vulnerabilities closed and a mandatory pre-release gate added so a vulnerable release is never published again.
