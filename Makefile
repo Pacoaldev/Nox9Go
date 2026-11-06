@@ -42,7 +42,7 @@ AUTO_UPDATE ?= false
 # single-quoted form passed a quoted symbol name straight to the linker.
 LDFLAGS := -s -w -X "nox9go/proxy/internal/updater.CurrentVersion=$(VERSION)"
 
-.PHONY: build run dev version update test test-short test-live test-integration vet vet-integration cross mitm-enable mitm-disable mitm-status clean help web-build web-dev
+.PHONY: build run dev version update test test-short test-live test-integration vet vet-integration cross mitm-enable mitm-disable mitm-status clean help web-build web-dev quota-table
 
 ## web-build — build frontend static assets (Svelte/Vite) into web/dist
 #
@@ -236,6 +236,15 @@ mitm-status: build
 clean:
 	rm -f $(BINARY_NAME) $(BINARY_NAME)-*
 	rm -rf web/dist
+
+## quota-table — regenerate docs/tabla_saldos.md from the live SQLite database
+#
+# The quota numbers live in the database, not in the source tree: provider node
+# capacity in providerNodes, per-key token budgets in apiKeys. The generator
+# reads them with the modernc.org/sqlite driver the project already ships, so
+# it needs no external sqlite3 binary.
+quota-table:
+	@go run ./cmd/quota-table/main.go
 
 ## help — show targets
 help:

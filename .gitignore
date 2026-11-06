@@ -90,6 +90,7 @@ stitch-screenshots/
 /docs/proximo.md
 /docs/auditoriaUnificada.md
 /docs/report.md
+/docs/tabla_saldos.md
 *.code-workspace
 # Per-machine tooling: a prompt-filter list that belongs to whoever installed it.
 /.rtk/
