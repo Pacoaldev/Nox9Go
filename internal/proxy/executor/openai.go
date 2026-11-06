@@ -113,6 +113,7 @@ func flattenMessagesContent(body []byte) []byte {
 func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
 	if req.Provider == "groq" {
 		req.Body = stripUnsupportedPromptCacheKey(req.Body)
+		req.Body = flattenMessagesContent(req.Body)
 	}
 	if req.Provider == "cloudflare-ai" {
 		req.Body = flattenMessagesContent(req.Body)

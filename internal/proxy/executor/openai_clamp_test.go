@@ -121,6 +121,37 @@ func TestForwardOpenAI_ReturnsClampedRetryErrorInsteadOfStaleMaxTokensError(t *t
 	}
 }
 
+func TestForwardOpenAI_GroqFlattensMessageContentArray(t *testing.T) {
+	var receivedBody atomic.Value
+	receivedBody.Store("")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := make([]byte, r.ContentLength)
+		_, _ = r.Body.Read(body)
+		receivedBody.Store(string(body))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	req := &Request{
+		Ctx:      t.Context(),
+		Provider: "groq",
+		Client:   srv.Client(),
+		Config:   &providers.ProviderConfig{BaseURL: srv.URL, AuthHeader: "Authorization", AuthScheme: "bearer"},
+		APIKey:   "k",
+		Body:     []byte(`{"model":"openai/gpt-oss-120b","messages":[{"role":"user","content":[{"type":"text","text":"hello "},{"type":"text","text":"world"}]}]}`),
+	}
+	rec := httptest.NewRecorder()
+	if err := ForwardOpenAI(rec, req); err != nil {
+		t.Fatalf("ForwardOpenAI error = %v", err)
+	}
+	got, _ := receivedBody.Load().(string)
+	if !strings.Contains(got, `"content":"hello world"`) {
+		t.Fatalf("expected flattened content string, got %s", got)
+	}
+}
+
 func TestForwardOpenAI_CloudflareFlattensMessageContentArray(t *testing.T) {
 	var receivedBody atomic.Value
 	receivedBody.Store("")
