@@ -26,7 +26,7 @@ const antigravityIDEUserAgent = providers.AntigravityCLIUserAgent
 
 var lcaMetadata = map[string]any{
 	"ideType":    9, // ANTIGRAVITY
-	"platform":   2, // DARWIN_ARM64
+	"platform":   5, // WINDOWS_AMD64 (matches AntigravityCLIUserAgent os_type=windows; arch=amd64)
 	"pluginType": 2, // GEMINI
 }
 

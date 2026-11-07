@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0] - unreleased
+
+### Routing & Executors
+
+- **Qoder identity unmasking.** Injected base AI model identity unmasking directive into the first user turn when requests arrive without a system prompt, preventing Qoder's underlying models from assuming the Qoder persona (`internal/proxy/executor/qoder_request.go`).
+- **Antigravity CLI fingerprint 1.5.1 and session scoping.** Bumped `AntigravityCLIVersion` to `1.5.1` and `AntigravityCLIUserAgent` to `cl=1014269460`. Fixed metadata platform enum to `5` (`WINDOWS_AMD64`) matching the Windows amd64 identity in User-Agent. Scoped request IDs and trajectories by session and connection ID to prevent cross-account UUID collisions in pooled setups. Unified Antigravity User-Agents across chat, quota, and probe endpoints. Added `Accept` headers (`text/event-stream` / `application/json`).
+- **MiniMax Code Claude-to-OpenAI reply translation.** Routed `req.UpstreamClaude` responses through `handleClaudeMessagesStream`/`handleClaudeMessagesNonStream` when callers use Chat Completions format, ensuring proper `chat.completion.chunk` and `finish_reason: "stop"` emission. Defaulted `X-Mavis-Agent-Id` to `main`.
+- **Cloudflare AI image endpoint routing and FLUX.2 multipart support.** Dedicated image lane routing `cloudflare-ai`/`cf` image generation requests to `/accounts/<accountId>/ai/run/<model>`. Handled FLUX.2 models (`flux-2-dev`, `-klein-4b`, `-klein-9b`) as `multipart/form-data`, stripped dimensions for `flux-1-schnell`, and resolved reference images through SSRF guard to OpenAI image response envelopes.
+- **GitHub Copilot native `/v1/messages` for Claude models.** Routed Claude models (`claude-*`) on `github` directly to Copilot's `/v1/messages` endpoint using Claude Messages format, falling back to OpenAI format with context-length-exceeded normalization for all other models.
+- **Groq reasoning effort clamping and strict reasoning parity.** Clamped `reasoning_effort` on Groq `gpt-oss` models (`gpt-oss-120b`, `gpt-oss-20b`) to valid enum values (`low`, `medium`, `high`) and pinned `reasoning_format="parsed"` for structured JSON modes. Narrowed `groq/gpt-oss` thinking levels in the capability table.
+- **Per-request Token Saver bypass.** Added support for `X-9Router-Token-Saver: false|0|off|bypass` request header to skip the prompt compression (RTK / token-saver) pipeline per request across chat completions, messages, and responses handlers.
+
 ## [1.0.9] - 2026-11-07
 
 ### Dashboard

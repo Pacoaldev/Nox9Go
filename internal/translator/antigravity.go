@@ -733,7 +733,8 @@ func fixAntigravityContents(req *GeminiRequest, model string) bool {
 }
 
 // WrapForAntigravity wraps a standard Gemini request in Antigravity API envelope.
-func WrapForAntigravity(geminiBody []byte, projectID, modelName string) ([]byte, error) {
+// sessionID scopes conversation and trajectory UUIDs per connection or client session.
+func WrapForAntigravity(geminiBody []byte, projectID, modelName string, sessionID ...string) ([]byte, error) {
 	// The wire id is the registry's upstreamModelId with NOX9GO's own effort
 	// notation stripped, not the bare synonym the lock and quota paths share.
 	// proxy.ForwardGemini normalises the model before calling this, so the
@@ -757,6 +758,11 @@ func WrapForAntigravity(geminiBody []byte, projectID, modelName string) ([]byte,
 	}
 	geminiBody = hardenAntigravityRequest(geminiBody)
 
+	sess := projectID
+	if len(sessionID) > 0 && sessionID[0] != "" {
+		sess = sessionID[0]
+	}
+
 	wrapper := AntigravityRequest{
 		Project:   projectID,
 		Model:     modelName,
@@ -764,7 +770,7 @@ func WrapForAntigravity(geminiBody []byte, projectID, modelName string) ([]byte,
 		// Omit RequestType (was "agent"): parity with decolua/9router#3986.
 		// Google rejects agent-bucketed requests with false 429s; requestId
 		// keeps its existing agent/<...>/<...>/<...>/<step> shape.
-		RequestID: antigravityBuildRequestID(projectID, modelName, "agent", contentCount),
+		RequestID: antigravityBuildRequestID(sess, modelName, "agent", contentCount),
 		Request:   geminiBody,
 	}
 	out, err := json.Marshal(wrapper)
@@ -828,7 +834,8 @@ func ParseImageConfig(model string) (cleanModel, aspectRatio string) {
 }
 
 // WrapAntigravityImageRequest builds an Antigravity request envelope for image generation.
-func WrapAntigravityImageRequest(prompt, base64Input, projectID, cleanModel, aspectRatio string) ([]byte, error) {
+// sessionID scopes conversation and trajectory UUIDs per connection or client session.
+func WrapAntigravityImageRequest(prompt, base64Input, projectID, cleanModel, aspectRatio string, sessionID ...string) ([]byte, error) {
 	parts := []GeminiPart{}
 	if base64Input != "" {
 		parts = append(parts, GeminiPart{
@@ -851,7 +858,11 @@ func WrapAntigravityImageRequest(prompt, base64Input, projectID, cleanModel, asp
 		},
 	}
 
-	sessionID := fmt.Sprintf("img-%d", time.Now().UnixNano())
+	sess := projectID
+	if len(sessionID) > 0 && sessionID[0] != "" {
+		sess = sessionID[0]
+	}
+
 	genConfig := map[string]any{
 		"temperature":     1.0,
 		"topP":            0.95,
@@ -865,7 +876,7 @@ func WrapAntigravityImageRequest(prompt, base64Input, projectID, cleanModel, asp
 	reqPayload := map[string]any{
 		"contents":         contents,
 		"generationConfig": genConfig,
-		"sessionId":        sessionID,
+		"sessionId":        sess,
 	}
 
 	reqJSON, err := json.Marshal(reqPayload)
@@ -878,7 +889,7 @@ func WrapAntigravityImageRequest(prompt, base64Input, projectID, cleanModel, asp
 		Model:       cleanModel,
 		UserAgent:   "antigravity",
 		RequestType: "image_gen",
-		RequestID:   antigravityBuildRequestID(projectID, cleanModel, "image_gen", 1),
+		RequestID:   antigravityBuildRequestID(sess, cleanModel, "image_gen", 1),
 		Request:     reqJSON,
 	}
 

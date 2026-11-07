@@ -51,7 +51,8 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 			}
 		}
 
-		wrapped, err := translator.WrapAntigravityImageRequest(prompt, "", projectID, cleanModel, aspectRatio)
+		sessID := handlerutil.GetSessionID(ctx)
+		wrapped, err := translator.WrapAntigravityImageRequest(prompt, "", projectID, cleanModel, aspectRatio, sessID)
 		if err != nil {
 			return nil, fmt.Errorf("wrap antigravity image: %w", err)
 		}
@@ -66,7 +67,8 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 		// Wrap for antigravity if needed
 		sendBody = geminiBody
 		if projectID != "" {
-			wrapped, err := translator.WrapForAntigravity(geminiBody, projectID, modelName)
+			sessID := handlerutil.GetSessionID(ctx)
+			wrapped, err := translator.WrapForAntigravity(geminiBody, projectID, modelName, sessID)
 			if err != nil {
 				return nil, fmt.Errorf("wrap for antigravity: %w", err)
 			}
@@ -93,10 +95,16 @@ func ForwardGemini(ctx context.Context, client *http.Client, cfg *providers.Prov
 		requestURL = fmt.Sprintf("%s/v1beta/models/%s:%s", baseURL, modelName, action)
 	}
 
+	accept := "application/json"
+	if isStream {
+		accept = "text/event-stream"
+	}
+
 	headers := map[string]string{
 		"Content-Type":  "application/json",
 		"Authorization": "Bearer " + apiKey,
 		"User-Agent":    providers.AntigravityCLIUserAgent,
+		"Accept":        accept,
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", requestURL, bytes.NewReader(sendBody))

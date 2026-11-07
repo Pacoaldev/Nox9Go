@@ -102,6 +102,11 @@ func (h *ChatHandler) HandleResponses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := h.newResponsesContext(r, reqBody.Model, modelInfo, &body)
+	// X-9Router-Token-Saver: off|0|false|bypass opts the whole request out of
+	// every token saver; the flag travels on ctx to applyTokenSavers.
+	if isTokenSaverBypassValue(r.Header.Get("X-9Router-Token-Saver")) {
+		ctx = WithTokenSaverBypass(ctx)
+	}
 
 	var workingBody map[string]any
 	if err := json.Unmarshal(body, &workingBody); err != nil {

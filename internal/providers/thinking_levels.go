@@ -83,6 +83,10 @@ var patternThinking = []thinkingPattern{
 	{Provider: "codex", Pattern: "*gpt-5.6-terra*", Levels: codexGPT56UltraLevels()},
 	{Provider: "codex", Pattern: "*gpt-5.6-luna*", Levels: codexGPT56Levels()},
 	{Pattern: "*codex*", Levels: []string{"low", "medium", "high", "xhigh"}}, // codex cannot disable thinking
+	// Groq gpt-oss accepts only low|medium|high (probed live: minimal/xhigh/auto/none/max
+	// all answer 400). The openai format default [none..xhigh] would let the
+	// picker and the writer emit levels Groq rejects.
+	{Provider: "groq", Pattern: "*gpt-oss*", Levels: []string{"low", "medium", "high"}},
 	{Pattern: "*mimo*v2.6*", Levels: []string{"none", "low", "medium", "high", "xhigh"}},
 	// mimo-v2.5-pro on opencode-go rejects reasoning_effort "max" (probed live);
 	// v2.5 accepts it.

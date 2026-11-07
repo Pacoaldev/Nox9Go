@@ -346,3 +346,76 @@ func TestForwardQoder_MissingUserIDIsA401NamingTheFix(t *testing.T) {
 		t.Errorf("error %q must say the userId is missing", err)
 	}
 }
+
+func TestBuildQoderChatRequest_WithoutSystemPrompt_InjectsUnmaskDirective(t *testing.T) {
+	creds := qoderFixture(t)
+	config := qoderCachedModelConfig(creds, QoderRegionIntl, "qfmodel")
+	if config == nil {
+		t.Fatal("missing qfmodel config in fixture")
+	}
+
+	body := []byte(`{"model":"qd/qfmodel","messages":[{"role":"user","content":"Who are you?"}]}`)
+	built, err := buildQoderChatRequest(body, config, creds, 1700000000000)
+	if err != nil {
+		t.Fatalf("buildQoderChatRequest: %v", err)
+	}
+
+	if sys, _ := built.Payload["system"].(string); sys != "" {
+		t.Errorf("payload.system = %q, want empty string", sys)
+	}
+
+	messages, ok := built.Payload["messages"].([]any)
+	if !ok || len(messages) == 0 {
+		t.Fatalf("expected non-empty messages array, got %v", built.Payload["messages"])
+	}
+
+	firstUser, ok := messages[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map message, got %T", messages[0])
+	}
+
+	content, _ := firstUser["content"].(string)
+	if !strings.Contains(content, qoderUnmaskDirective) {
+		t.Errorf("content %q does not contain unmask directive %q", content, qoderUnmaskDirective)
+	}
+	if !strings.HasSuffix(content, "Who are you?") {
+		t.Errorf("content %q must end with original user query", content)
+	}
+}
+
+func TestBuildQoderChatRequest_WithSystemPrompt_LeavesUserTurnUntouched(t *testing.T) {
+	creds := qoderFixture(t)
+	config := qoderCachedModelConfig(creds, QoderRegionIntl, "qfmodel")
+	if config == nil {
+		t.Fatal("missing qfmodel config in fixture")
+	}
+
+	body := []byte(`{"model":"qd/qfmodel","messages":[{"role":"system","content":"You are Jarvis."},{"role":"user","content":"Who are you?"}]}`)
+	built, err := buildQoderChatRequest(body, config, creds, 1700000000000)
+	if err != nil {
+		t.Fatalf("buildQoderChatRequest: %v", err)
+	}
+
+	if sys, _ := built.Payload["system"].(string); sys != "You are Jarvis." {
+		t.Errorf("payload.system = %q, want 'You are Jarvis.'", sys)
+	}
+
+	messages, ok := built.Payload["messages"].([]any)
+	if !ok || len(messages) == 0 {
+		t.Fatalf("expected non-empty messages array, got %v", built.Payload["messages"])
+	}
+
+	firstUser, ok := messages[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected map message, got %T", messages[0])
+	}
+
+	content, _ := firstUser["content"].(string)
+	if strings.Contains(content, "[System Note:") {
+		t.Errorf("user content %q must not contain unmask directive when system prompt is provided", content)
+	}
+	if content != "Who are you?" {
+		t.Errorf("user content = %q, want 'Who are you?'", content)
+	}
+}
+

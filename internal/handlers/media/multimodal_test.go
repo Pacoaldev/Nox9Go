@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"nox9go/proxy/internal/db"
@@ -479,3 +480,52 @@ func seedXaiConn(t *testing.T, database *sql.DB, baseURL string) {
 		t.Fatalf("seed xai connection: %v", err)
 	}
 }
+
+func TestHandleImages_CloudflareFlux2DevKeepsDimensions(t *testing.T) {
+	// Negative check: flux-2-dev must NOT have width/height/size stripped,
+	// only flux-1-schnell is subject to Cloudflare's closed schema (upstream #5373).
+	var mu sync.Mutex
+	var captured map[string]string
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		captured = multipartFields(t, r)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"created":1,"data":[{"url":"https://example.com/flux2.png"}]}`))
+	}))
+	defer upstream.Close()
+
+	database, cleanup := setupMultimodalTestDB(t)
+	defer cleanup()
+	seedCloudflareConn(t, database, upstream.URL)
+
+	repo := db.NewRepo(database)
+	handler := newTestMediaHandler(repo)
+
+	body := `{"model":"cf/@cf/black-forest-labs/flux-2-dev","prompt":"a red fox","size":"1024x1024","width":1024,"height":1024}`
+	req := httptest.NewRequest("POST", "/v1/images/generations", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.HandleImages(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if v, ok := captured["width"]; !ok || v != "1024" {
+		t.Errorf("expected width preserved for flux-2-dev (multipart), got %v", captured["width"])
+	}
+	if v, ok := captured["height"]; !ok || v != "1024" {
+		t.Errorf("expected height preserved for flux-2-dev (multipart), got %v", captured["height"])
+	}
+	if prompt := captured["prompt"]; prompt != "a red fox" {
+		t.Errorf("expected prompt preserved, got %q", prompt)
+	}
+}
+
