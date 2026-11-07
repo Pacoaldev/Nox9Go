@@ -20,8 +20,8 @@
 
 ### Routing
 
-- **Kiro tool-call IDs use UUIDs.** `OpenAIToKiro` maps non-UUID tool-call IDs to per-request UUIDs and reuses that mapping for matching tool results; valid UUIDs remain unchanged. This keeps Kiro tool-use/result references paired when clients send OpenAI-style IDs.
-- **Groq tool history is flattened for model templates.** Requests convert assistant tool calls and tool results into prose before forwarding, avoiding templates that reject the `tool` role. Tool-call structure is not sent to Groq; history remains as text.
+- **Kiro tool-call IDs use UUIDs.** `OpenAIToKiro` maps non-UUID tool-call IDs to per-request UUIDs and reuses that mapping for matching tool results; valid UUIDs remain unchanged. Resolves upstream `400 REQUEST_BODY_INVALID` ("Invalid tool use format.") seen on tool-assisted turns (e.g. `kr/glm-5`).
+- **Groq tool history is flattened for model templates.** Requests convert assistant tool calls and tool results into prose before forwarding, avoiding upstream minijinja template failures ("Unexpected message role") when using models that reject the `tool` role (e.g. `groq/qwen/qwen3.8-27b`). Native tool structure is omitted; conversational context is preserved as plain text.
 
 - **Kiro profileArn fallback.** Non-API-key Kiro connections (social, SSO, builder-id, idc) require `x-amzn-codewhisperer-profile-arn` and a top-level `profileArn` in request payloads. `ResolveKiroProfileARN` now supplies the proper fallback profile ARN, and `refreshKiroSocial` and `HandleKiroAutoImport` preserve it in connection data to avoid upstream HTTP 400 `profileArn is required for this request`.
 - **GitHub Copilot OAuth token refresh and error handling.** Added `internal/proxy/oauth/github.go` exchanging GitHub OAuth access tokens at `https://api.github.com/copilot_internal/v2/token` for fresh short-lived Copilot bearer tokens (`tid=...`). Added `github`/`gh` to `strictReasoningMessageProviders` to strip unsupported reasoning fields. Extended `ModelFitErrorPatterns` with `model_max_prompt_tokens_exceeded` and prompt token limit patterns so oversized prompts trigger model fallback instead of aborting the request.
