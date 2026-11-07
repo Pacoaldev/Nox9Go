@@ -17,6 +17,15 @@ import (
 // so the dashboard can tell a quota lockout from any other reason.
 const providerModelLockoutReason = "quota_exhausted"
 
+// providerModelRunLockoutReason is the machine text stored when a run of 429s
+// across different credentials parks the pair.
+const providerModelRunLockoutReason = "rate_limit_cascade"
+
+// providerModelRunCooldownMin is the short end of the window a 429 run parks
+// the pair for. An announced Retry-After is used exactly instead, because the
+// upstream named that window itself.
+const providerModelRunCooldownMin = 30 * time.Second
+
 // providerModelQuotaMarkers are the phrases that turn an upstream failure into
 // a provider+model lockout.
 //
@@ -146,6 +155,50 @@ func (h *ChatHandler) recordProviderModelLockout(ctx context.Context, provider, 
 	}
 	log.Warn("provider-model", "pair parked", "provider", provider, "model", key,
 		"status", ue.StatusCode, "until", until.Format(time.RFC3339))
+}
+
+// recordProviderModelRunLockout parks the (provider, model) pair after a run of
+// consecutive 429s across different credentials.
+//
+// The single-failure path deliberately does not park the pair: one 429 names a
+// per-account or per-IP limit that the operator's other keys may still serve,
+// and providerModelQuotaMarkers excludes "rate limit" for exactly that reason.
+// A run is the evidence that path lacks. Five different credentials answered
+// 429 for the same model inside one client turn, so the walk has become the
+// limit: without parking, the next turn dials the accounts this one never
+// reached and earns the same answer, and a free-tier pool of many keys ends up
+// entirely on its own cooldown within a couple of minutes — the operator then
+// reads "rate limited" on the whole pool while the router spent it.
+//
+// Stopping the walk alone is not enough for that reason: it bounds one turn,
+// not the next one. The window is the last failure's own cooldown, floored so
+// that a two-second classifier base cannot put the pair back inside the burst
+// that answered all five. The pair is released the moment any account serves
+// it again, so a recovered provider costs one request, not the whole window.
+func (h *ChatHandler) recordProviderModelRunLockout(ctx context.Context, provider, model string, ue *upstreamError) {
+	if handlerutil.IsProbeContext(ctx) {
+		return
+	}
+	if h.Repo == nil || provider == "" || model == "" || ue == nil {
+		return
+	}
+	key := canonicalLockModel(provider, model)
+	cls := providers.ClassifyError(ue.StatusCode, extractErrorText(ue.Body), 0)
+	base := time.Duration(cls.CooldownMs) * time.Millisecond
+	if base <= 0 {
+		base = time.Duration(providers.GetQuotaCooldown(0)) * time.Millisecond
+	}
+	sec := retryableCooldownSec(provider, ue.StatusCode, base, ue)
+	if _, announced := retryAfterWait(ue); !announced && time.Duration(sec)*time.Second < providerModelRunCooldownMin {
+		sec = int(providerModelRunCooldownMin / time.Second)
+	}
+	until := time.Now().UTC().Add(time.Duration(sec) * time.Second)
+	if err := h.Repo.LockProviderModel(provider, key, until, providerModelRunLockoutReason, ue.StatusCode); err != nil {
+		log.Warn("provider-model", "run lock failed", "provider", provider, "model", key, "error", err)
+		return
+	}
+	log.Warn("provider-model", "pair parked after 429 run", "provider", provider, "model", key,
+		"status", ue.StatusCode, "cooldown_s", sec, "until", until.Format(time.RFC3339))
 }
 
 // providerModelLocked reports whether the pair is parked, and until when.

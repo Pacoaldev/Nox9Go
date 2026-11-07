@@ -70,6 +70,47 @@ func TestHandleAccountFallback_StopsWalkingAfterConsecutive429(t *testing.T) {
 	}
 }
 
+func TestHandleAccountFallback_Consecutive429ParksProviderModel(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"rate limited"}`))
+	}))
+	defer srv.Close()
+
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	if _, err := database.Exec(`DELETE FROM providerConnections WHERE id IN ('conn-1', 'conn-2')`); err != nil {
+		t.Fatalf("clear seeded connections: %v", err)
+	}
+	for i := 0; i < maxConsecutive429PerTurn+2; i++ {
+		seedConnDB(t, database, "mistral", "conn-run-"+string(rune('a'+i)), "sk-run-"+string(rune('a'+i)), srv.URL)
+	}
+
+	repo := db.NewRepo(database)
+	h := NewChatHandler(repo)
+	body := []byte(`{"model":"codestral-latest","messages":[{"role":"user","content":"hi"}]}`)
+	first := httptest.NewRecorder()
+	if err := h.handleAccountFallback(context.Background(), first, "mistral", "codestral-latest", "", body, false, false, "/v1/chat/completions"); err == nil {
+		t.Fatal("expected the first request to fail after the 429 cap")
+	}
+	if _, locked, err := repo.ProviderModelLockedUntil("mistral", "codestral-latest"); err != nil {
+		t.Fatalf("ProviderModelLockedUntil: %v", err)
+	} else if !locked {
+		t.Fatal("expected consecutive 429s to park the provider-model pair")
+	}
+
+	before := hits.Load()
+	second := httptest.NewRecorder()
+	if err := h.handleAccountFallback(context.Background(), second, "mistral", "codestral-latest", "", body, false, false, "/v1/chat/completions"); err == nil {
+		t.Fatal("expected the second request to be rejected by provider-model lockout")
+	}
+	if got := hits.Load(); got != before {
+		t.Errorf("second request made %d upstream calls, want none", got-before)
+	}
+}
+
 // A 500 in the middle of the walk says the provider is not refusing the whole
 // pool, so the run of 429s is broken and the cap must not fire: the accounts
 // after it were never rate limited and are still worth dialling.

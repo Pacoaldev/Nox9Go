@@ -308,6 +308,7 @@ func (h *ChatHandler) handleAccountFallback(
 				if consecutive429 >= maxConsecutive429PerTurn {
 					log.Warn("fallback", "429 on consecutive accounts, stopping the failover walk",
 						"provider", provider, "model", model, "accounts", consecutive429)
+					h.recordProviderModelRunLockout(ctx, provider, model, ue)
 					lastErr = ue
 					break
 				}

@@ -792,6 +792,7 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 							if entry429 >= maxConsecutive429PerTurn {
 								log.Warn("combo", "429 on consecutive connections, stopping entry walk",
 									"provider", modelInfo.Provider, "model", modelInfo.Model, "accounts", entry429)
+								h.recordProviderModelRunLockout(ctx, modelInfo.Provider, modelInfo.Model, ue)
 								retry.note(ue)
 								lastErr = ue
 								break
@@ -1127,6 +1128,7 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 							if entry429 >= maxConsecutive429PerTurn {
 								log.Warn("combo", "429 on consecutive connections, stopping entry walk",
 									"provider", modelInfo.Provider, "model", modelInfo.Model, "accounts", entry429)
+								h.recordProviderModelRunLockout(ctx, modelInfo.Provider, modelInfo.Model, ue)
 								retry.note(ue)
 								lastErr = ue
 								break
