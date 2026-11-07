@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — 1.0.9
+## [1.0.9] - 2026-11-07
 
 ### Dashboard
 

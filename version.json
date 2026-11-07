@@ -1,19 +1,19 @@
 {
-  "latestVersion": "1.0.8",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.8/nox9go-windows-amd64.exe",
+  "latestVersion": "1.0.9",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.9/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.8/nox9go-windows-amd64.exe",
-    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.8/nox9go-linux-amd64",
-    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.8/nox9go-linux-arm64",
-    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.8/nox9go-darwin-amd64",
-    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.8/nox9go-darwin-arm64"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.9/nox9go-windows-amd64.exe",
+    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.9/nox9go-linux-amd64",
+    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.9/nox9go-linux-arm64",
+    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.9/nox9go-darwin-amd64",
+    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.0.9/nox9go-darwin-arm64"
   },
   "sha256": {
-    "windows_amd64": "81fcb20735d0c0124db8269577f12fd8da2b7fe289121d66fdc43bb291134d7c",
-    "linux_amd64": "81c7bab9f780959fac6355b18247ab0be87f85cfe5a692b5996017b566af77d5",
-    "linux_arm64": "b8ef25d2a0021689c483f7eae89fa1162fbee72e2951b6935117a137f5fb1429",
-    "darwin_amd64": "fadfe4cf6458d8c5577b20ad6099d2459ac4c5dcda8662677462663050f071eb",
-    "darwin_arm64": "d2da744816b782564438136bf0e1c7e4a76a5b2666409a7a077a83587a6b9dd1"
+    "windows_amd64": "4bbc2a51bba5ba9d042bbc6b14d211df3732d7877ce307ba87e506518c3f65e9",
+    "linux_amd64": "6ec5d8805a1bf3f0c741858723baeaa11822360d8957f9152e29b852cd771a8f",
+    "linux_arm64": "13b3bfe34566419c0e979ed031c0d03eec6d770e9b9ae52c4f014fc6eddf3f96",
+    "darwin_amd64": "eb41d7ede1066f0d80ac6dddbd332c894ec0e1b1de7ca8de2dfbe102e315a365",
+    "darwin_arm64": "3379e05d1d357d0cc60d420174f88c66dfc236b628cd5fd122e741006d116e9b"
   },
-  "releaseNotes": "NOX9GO 1.0.8 — Security fixes for GO-2026-6888 (brotli) and GO-2026-6865 (klauspost/compress). Mandatory pre-release checklist added to AGENTS.md."
+  "releaseNotes": "NOX9GO 1.0.9 — Quota tracker live fetchers for 10 providers, configurable Model Health Loop in settings, Kiro UUID tool IDs, Groq template flattening and max_tokens clamping, Gemini thought signature backfill, combo 429 lockout parking."
 }

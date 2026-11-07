@@ -573,7 +573,7 @@ Never publish a release from stale binaries. Never skip the `govulncheck` / test
 
 - **Everything lands on `main`.** There is no `dev` branch and no PR flow; changes are committed to `main` directly.
 - **Never commit unless asked.** When asked, inspect `git status` / `git diff`, stage only the intended files, write a Conventional Commit message, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
-- **Tags**: `v1.0.0` through `v1.0.7`. The 80 upstream tags were purged on purpose.
+- **Tags**: `v1.0.0` through `v1.0.9`. The 80 upstream tags were purged on purpose.
 
 ### 7.6 Syncing a feature from upstream
 
