@@ -110,10 +110,74 @@ func flattenMessagesContent(body []byte) []byte {
 	return out
 }
 
+func flattenGroqToolHistory(body []byte) []byte {
+	var req map[string]any
+	if err := json.Unmarshal(body, &req); err != nil {
+		return body
+	}
+	msgs, ok := req["messages"].([]any)
+	if !ok || len(msgs) == 0 {
+		return body
+	}
+	changed := false
+	flattened := make([]any, 0, len(msgs))
+	for _, raw := range msgs {
+		msg, ok := raw.(map[string]any)
+		if !ok {
+			flattened = append(flattened, raw)
+			continue
+		}
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+		if role == "tool" {
+			flattened = append(flattened, map[string]any{"role": "user", "content": "[Tool result]\n" + content})
+			changed = true
+			continue
+		}
+		if role == "assistant" {
+			if calls, ok := msg["tool_calls"].([]any); ok && len(calls) > 0 {
+				var sb strings.Builder
+				if content != "" {
+					sb.WriteString(content)
+					sb.WriteString("\n")
+				}
+				for _, call := range calls {
+					callMap, _ := call.(map[string]any)
+					fn, _ := callMap["function"].(map[string]any)
+					name, _ := fn["name"].(string)
+					args, _ := fn["arguments"].(string)
+					sb.WriteString(fmt.Sprintf("[Call tool %s(%s)]", name, args))
+				}
+				copy := make(map[string]any, len(msg))
+				for key, value := range msg {
+					if key != "tool_calls" && key != "function_call" {
+						copy[key] = value
+					}
+				}
+				copy["content"] = strings.TrimSpace(sb.String())
+				flattened = append(flattened, copy)
+				changed = true
+				continue
+			}
+		}
+		flattened = append(flattened, msg)
+	}
+	if !changed {
+		return body
+	}
+	req["messages"] = flattened
+	out, err := json.Marshal(req)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
 func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
 	if req.Provider == "groq" {
 		req.Body = stripUnsupportedPromptCacheKey(req.Body)
 		req.Body = flattenMessagesContent(req.Body)
+		req.Body = flattenGroqToolHistory(req.Body)
 	}
 	if req.Provider == "cloudflare-ai" {
 		req.Body = flattenMessagesContent(req.Body)

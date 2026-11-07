@@ -135,6 +135,7 @@ func OpenAIToKiro(body []byte, opts KiroTranslateOptions) ([]byte, error) {
 // returned separately as the current message.
 func kiroConvertMessages(messages []map[string]any, model string) ([]map[string]any, map[string]any, error) {
 	var history []map[string]any
+	idMap := make(map[string]string)
 	currentRole := ""
 	var pendingUser, pendingAssistant []string
 	var pendingToolResults, pendingImages []any
@@ -197,7 +198,7 @@ func kiroConvertMessages(messages []map[string]any, model string) ([]map[string]
 
 		switch role {
 		case "user":
-			content, images, toolResults := kiroUserContent(msg)
+			content, images, toolResults := kiroUserContent(msg, idMap)
 			pendingImages = append(pendingImages, images...)
 			pendingToolResults = append(pendingToolResults, toolResults...)
 			if content != "" {
@@ -208,7 +209,7 @@ func kiroConvertMessages(messages []map[string]any, model string) ([]map[string]
 			}
 		case "assistant":
 			text := kiroAssistantText(msg)
-			toolUses := kiroAssistantToolUses(msg)
+			toolUses := kiroAssistantToolUses(msg, idMap)
 			if text != "" {
 				pendingAssistant = append(pendingAssistant, text)
 			}
@@ -245,7 +246,7 @@ func kiroConvertMessages(messages []map[string]any, model string) ([]map[string]
 
 // kiroUserContent flattens one user/tool message into text, Kiro image blocks
 // and tool-result blocks.
-func kiroUserContent(msg map[string]any) (string, []any, []any) {
+func kiroUserContent(msg map[string]any, idMap map[string]string) (string, []any, []any) {
 	var textParts []string
 	var images, toolResults []any
 
@@ -253,6 +254,7 @@ func kiroUserContent(msg map[string]any) (string, []any, []any) {
 		if id == "" {
 			return
 		}
+		id = normalizeKiroToolID(id, idMap)
 		status := "success"
 		if isErr {
 			status = "error"
@@ -357,7 +359,7 @@ func kiroAssistantText(msg map[string]any) string {
 
 // kiroAssistantToolUses normalizes OpenAI tool_calls (and Claude tool_use
 // blocks) into Kiro toolUses.
-func kiroAssistantToolUses(msg map[string]any) []any {
+func kiroAssistantToolUses(msg map[string]any, remap map[string]string) []any {
 	var out []any
 	add := func(id, name string, input any) {
 		if name == "" {
@@ -366,6 +368,7 @@ func kiroAssistantToolUses(msg map[string]any) []any {
 		if id == "" {
 			id = newKiroUUID()
 		}
+		id = normalizeKiroToolID(id, remap)
 		if input == nil {
 			input = map[string]any{}
 		}
@@ -410,6 +413,29 @@ func kiroAssistantToolUses(msg map[string]any) []any {
 
 // kiroParseToolInput decodes a JSON-encoded arguments string, tolerating the
 // malformed payloads real clients emit.
+func normalizeKiroToolID(id string, remap map[string]string) string {
+	if id == "" {
+		return newKiroUUID()
+	}
+	if normalized, ok := remap[id]; ok {
+		return normalized
+	}
+	if isKiroUUID(id) {
+		return id
+	}
+	normalized := newKiroUUID()
+	remap[id] = normalized
+	return normalized
+}
+
+func isKiroUUID(id string) bool {
+	if len(id) != 36 || id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' {
+		return false
+	}
+	_, err := hex.DecodeString(strings.ReplaceAll(id, "-", ""))
+	return err == nil
+}
+
 func kiroParseToolInput(raw any) any {
 	s, ok := raw.(string)
 	if !ok {

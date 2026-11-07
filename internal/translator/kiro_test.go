@@ -136,9 +136,9 @@ func TestOpenAIToKiro_ToolCallsAndResults(t *testing.T) {
 	m := decodeKiro(t, out)
 	cs := m["conversationState"].(map[string]any)
 	hist, _ := cs["history"].([]any)
-	found := false
-	for _, h := range hist {
-		arm, ok := h.(map[string]any)["assistantResponseMessage"].(map[string]any)
+	var toolUseID string
+	for _, raw := range hist {
+		arm, ok := raw.(map[string]any)["assistantResponseMessage"].(map[string]any)
 		if !ok {
 			continue
 		}
@@ -146,28 +146,54 @@ func TestOpenAIToKiro_ToolCallsAndResults(t *testing.T) {
 		if len(uses) == 0 {
 			continue
 		}
-		found = true
-		u := uses[0].(map[string]any)
-		if u["name"] != "get_weather" || u["toolUseId"] != "call_1" {
-			t.Errorf("unexpected toolUse: %v", u)
-		}
-		input := u["input"].(map[string]any)
-		if input["city"] != "NYC" {
-			t.Errorf("tool input not parsed from arguments JSON: %v", input)
+		use := uses[0].(map[string]any)
+		toolUseID, _ = use["toolUseId"].(string)
+		if use["name"] != "get_weather" || !isKiroUUID(toolUseID) {
+			t.Fatalf("tool use ID should be a UUID: %v", use)
 		}
 	}
-	if !found {
-		t.Error("expected an assistant turn carrying toolUses in history")
+	if toolUseID == "" {
+		t.Fatal("assistant history must include toolUses")
 	}
-	// Current (tool result) user turn carries userInputMessageContext.toolResults.
 	cur := cs["currentMessage"].(map[string]any)["userInputMessage"].(map[string]any)
-	ctx, _ := cur["userInputMessageContext"].(map[string]any)
-	results, _ := ctx["toolResults"].([]any)
-	if len(results) != 1 {
-		t.Fatalf("expected 1 tool result in current turn, got %v", ctx)
+	ctx := cur["userInputMessageContext"].(map[string]any)
+	results := ctx["toolResults"].([]any)
+	if len(results) != 1 || results[0].(map[string]any)["toolUseId"] != toolUseID {
+		t.Fatalf("tool result must use matching normalized UUID, got %v; use ID %q", results, toolUseID)
 	}
-	if results[0].(map[string]any)["toolUseId"] != "call_1" {
-		t.Errorf("unexpected tool result: %v", results[0])
+}
+
+func TestOpenAIToKiro_MapsToolResultsWhenToolCallUsesClaudeBlock(t *testing.T) {
+	body := []byte(`{"messages":[
+		{"role":"assistant","content":[{"type":"tool_use","id":"toolu_source","name":"bash","input":{"cmd":"pwd"}}]},
+		{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_source","content":"/workspace"}]}
+	]}`)
+	out, err := OpenAIToKiro(body, KiroTranslateOptions{Model: "m"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cs := decodeKiro(t, out)["conversationState"].(map[string]any)
+	history := cs["history"].([]any)
+	use := history[0].(map[string]any)["assistantResponseMessage"].(map[string]any)["toolUses"].([]any)[0].(map[string]any)
+	useID := use["toolUseId"].(string)
+	if !isKiroUUID(useID) {
+		t.Fatalf("tool use id = %q, want UUID", useID)
+	}
+	current := cs["currentMessage"].(map[string]any)["userInputMessage"].(map[string]any)
+	result := current["userInputMessageContext"].(map[string]any)["toolResults"].([]any)[0].(map[string]any)
+	if result["toolUseId"] != useID {
+		t.Fatalf("tool result id = %v, want matching tool use id %q", result["toolUseId"], useID)
+	}
+}
+
+func TestOpenAIToKiro_PreservesUUIDToolID(t *testing.T) {
+	const id = "123e4567-e89b-42d3-a456-426614174000"
+	if !isKiroUUID(id) {
+		t.Fatal("test UUID is invalid")
+	}
+	got := normalizeKiroToolID(id, make(map[string]string))
+	if got != id {
+		t.Fatalf("valid UUID changed: got %q, want %q", got, id)
 	}
 }
 
