@@ -82,6 +82,7 @@
   import EditCompatibleNodeModal from './EditCompatibleNodeModal.svelte'
   import FreebuffSessionBanner from './FreebuffSessionBanner.svelte'
   import ProviderIcon from './ProviderIcon.svelte'
+  import ProviderCapacityPanel from './ProviderCapacityPanel.svelte'
 
   interface Props {
     providerId: string
@@ -3055,6 +3056,13 @@
         </a>
       {/if}
     </div>
+  {/if}
+
+  <!-- 1c. Capacity limits for an integrated (catalog) provider. A custom node keeps
+       its editor inside the node dialog; a catalog provider has no node row, so this
+       is where its capacity policy lives. -->
+  {#if !selectedNode && selectedCatalogItem}
+    <ProviderCapacityPanel providerId={providerId} providerName={providerName} />
   {/if}
 
   <!-- 2. Compatible Node details (if custom node) — upstream parity: endpoint line + Add API Key / Edit / Delete -->

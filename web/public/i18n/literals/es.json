@@ -1421,5 +1421,20 @@
   "Zoom Out": "Alejar",
   "文 Full": "文 Completo",
   "文 Lite": "文 Lite",
-  "文 Ultra": "文 Ultra"
+  "文 Ultra": "文 Ultra",
+  "Save limits": "Guardar límites",
+  "Apply observed values": "Aplicar valores observados",
+  "Limits saved.": "Límites guardados.",
+  "Observed from this provider": "Observado de este proveedor",
+  "Rate limit": "Límite de tasa",
+  "Quota exhausted": "Cuota agotada",
+  "At capacity": "Sin capacidad",
+  "Timeout": "Tiempo de espera agotado",
+  "Auth": "Autenticación",
+  "Server error": "Error del servidor",
+  "Use": "Usar",
+  "How long a request waits for a slot before the provider counts as full.": "Cuánto espera una solicitud por un cupo antes de que el proveedor cuente como lleno.",
+  "Prompt + completion tokens for this provider. Once spent, requests to it answer 403.": "Tokens de prompt + completion para este proveedor. Una vez agotados, las solicitudes responden 403.",
+  "Last day the subscription is valid. Empty means no expiry.": "Último día válido de la suscripción. Vacío significa sin vencimiento.",
+  "0 means unlimited. A request that cannot get a slot is served by another candidate; 429 only appears once no candidate is left.": "0 significa ilimitado. Una solicitud que no consigue un cupo la atiende otro candidato; 429 solo aparece cuando no queda ningún candidato."
 }

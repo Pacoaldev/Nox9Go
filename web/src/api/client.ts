@@ -625,6 +625,50 @@ export interface ProviderNodeLimitsPatch {
 }
 
 /**
+ * ProviderCapacity mirrors the Go side ProviderCapacityResponse: the capacity
+ * editor for an INTEGRATED (catalog) provider, which has no providerNodes row, plus
+ * the capacity facts that provider has reported at runtime.
+ */
+export interface ProviderCapacity {
+  provider: string
+  limits: ProviderCapacityLimits
+  observations: ProviderObservation[]
+  /** Values derived from the observations, for prefilling the editor. */
+  suggestions: ProviderCapacitySuggestions
+}
+
+export interface ProviderCapacityLimits {
+  rpm: number
+  tpm: number
+  concurrency: number
+  queueTimeoutMs: number
+  tokenQuota: number
+  contractExpiresAt?: string
+  updatedAt?: string
+}
+
+export interface ProviderCapacitySuggestions {
+  rpm: number
+  tpm: number
+  concurrency: number
+  tokenQuota: number
+}
+
+/** One capacity fact a provider reported. Shape mirrors db.ProviderObservation. */
+export interface ProviderObservation {
+  provider: string
+  model?: string
+  signal: string
+  statusCode?: number
+  limitValue?: number
+  limitUnit?: string
+  evidence?: string
+  sampleCount: number
+  firstSeen: string
+  lastSeen: string
+}
+
+/**
  * CustomModelBatchEntry is one line of a bulk save. Capabilities travel per entry
  * even though the dashboard sends them uniformly for the whole paste (D10): the
  * endpoint stays general, and a caller that already holds per-entry values is not
@@ -1501,6 +1545,18 @@ export const api = {
       `/api/provider-nodes/${encodeURIComponent(id)}/quota/reset`,
       { method: 'POST' }
     ),
+  /**
+   * Read an integrated provider's capacity policy plus what has been observed
+   * about it. Mirrors the custom node editor, for catalog providers.
+   */
+  getProviderCapacity: (id: string) =>
+    request<ProviderCapacity>(`/api/providers/${encodeURIComponent(id)}/capacity`),
+  /** Save an integrated provider's capacity policy (same tri-state merge as nodes). */
+  setProviderCapacity: (id: string, patch: ProviderNodeLimitsPatch) =>
+    request<ProviderCapacity>(`/api/providers/${encodeURIComponent(id)}/capacity`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
   /** List models from a connection's upstream (compatible nodes; upstream GET /api/providers/[id]/models). */
   getConnectionModels: (connectionId: string) =>
     request<{ provider: string; connectionId: string; models: Array<{ id?: string; name?: string; model?: string } | string> }>(
