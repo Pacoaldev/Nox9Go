@@ -66,6 +66,12 @@ func setupNodeTestDB(t *testing.T) (*db.Repo, func()) {
 			t.Fatalf("failed to create history table: %v", err)
 		}
 	}
+	// The integrated-provider capacity tables are Go-only: a fixture without them
+	// fails on a missing table instead of on the behavior under test.
+	if err := db.EnsureProviderCapacityTables(repo.RawDB()); err != nil {
+		cleanup()
+		t.Fatalf("failed to create provider capacity tables: %v", err)
+	}
 	return repo, cleanup
 }
 

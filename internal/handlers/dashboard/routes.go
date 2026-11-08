@@ -89,6 +89,10 @@ func RegisterRoutes(r chi.Router, h *DashboardHandler) {
 		// token quota without touching the history the analytics reads.
 		r.Put("/provider-nodes/{id}/limits", h.HandleUpdateProviderNodeLimits)
 		r.Post("/provider-nodes/{id}/quota/reset", h.HandleResetProviderNodeQuota)
+		// Integrated-provider capacity: the same editor for a catalog provider
+		// that has no providerNodes row.
+		r.Get("/providers/{id}/capacity", h.HandleGetProviderCapacity)
+		r.Put("/providers/{id}/capacity", h.HandleUpdateProviderCapacity)
 
 		// Combos
 		r.Get("/combos", h.HandleGetCombos)

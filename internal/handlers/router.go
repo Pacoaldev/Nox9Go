@@ -239,6 +239,12 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	// real server, which is how this pair was nearly shipped.
 	r.Put("/api/provider-nodes/{id}/limits", dashH.HandleUpdateProviderNodeLimits)
 	r.Post("/api/provider-nodes/{id}/quota/reset", dashH.HandleResetProviderNodeQuota)
+	// Integrated-provider capacity (docs/provider-capacity-learning). The custom
+	// node editor's twin, for catalog providers that have no providerNodes row.
+	// Registered here as well as in dashboard.RegisterRoutes for the same reason
+	// the node-limit pair is: that table is mounted by tests only.
+	r.Get("/api/providers/{id}/capacity", dashH.HandleGetProviderCapacity)
+	r.Put("/api/providers/{id}/capacity", dashH.HandleUpdateProviderCapacity)
 	r.Get("/api/providers/{id}/models", dashH.HandleGetConnectionModels)
 	// Bulk removal of a node's imported models; the single-row form stays at
 	// DELETE /api/models/custom/{key}.
