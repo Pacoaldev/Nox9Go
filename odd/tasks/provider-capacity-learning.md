@@ -21,6 +21,10 @@ S6. Suggestions prefill the editor but are never applied automatically: an obser
 
 S7. Recording must not affect request latency materially and must never fail the request: a storage error during recording is logged and ignored (fail-open), same rule as the existing provider-limit policy read.
 
+S8. The capacity editor offers a fixed daily request budget (`Requests / day`), distinct from the per-minute window: it resets at 00:00 UTC (the boundary a provider that publishes a daily allowance names), it is not queueable, and an exhausted day refuses the attempt (429, `provider_daily_limit_exhausted`) so the failover moves on. A request the provider never saw (a TPM refusal or a queue timeout) does not spend it. The field is available for integrated providers and custom nodes, and an observed "daily ... requests" figure prefills it.
+
+S9. Saving the editor must not crash on an untouched or cleared count field: an empty `<input type="number">` binds to `null`, and a `null` count reads as unlimited (0), never as a client-side exception.
+
 ## Tasks
 
 - [x] T1. DB + repo: `providerCapacity` and `providerObservations` tables + reader/writer methods + tests. Route: inline. Commit 2b41fd50. Evidence: `go test ./internal/db/` green.
@@ -29,6 +33,8 @@ S7. Recording must not affect request latency materially and must never fail the
 - [x] T4. Enforcement: extend providerLimitsFor/acquire path to read integrated capacity + tests. Route: inline. Commit ef5f6e31.
 - [x] T5. Dashboard endpoints: GET/PUT `/api/providers/{id}/capacity` + routes + tests. Route: inline. Commit c332362d. Evidence: `go test ./internal/handlers/dashboard/` green.
 - [x] T6. Frontend: capacity editor for integrated providers in ProviderDetailView + component + api client + i18n. Route: inline. Commit 3de9b8ee. Evidence: `bun run ratchet:svelte` (0 unresolved, baseline 76), `cd web; bun run build` OK.
+- [x] T7. Daily request budget (`Requests / day`): limiter fixed UTC-day window + DB columns on both tables + chat/dashboard wiring + extractor `rpd` + both editors + tests. Route: inline. Evidence: `go test ./...` green; `internal/middleware/ratelimit_provider_daily_test.go`; live GET returns `dailyRequests`/`dailyUsedWindow`.
+- [x] T8. Fix: saving the editor crashed on a `null` count (empty number input) — `countOf` null-safe, draft type + `Input` accept `null`, regression test. Route: inline. Evidence: `bun test src/lib/node-limits.test.ts` 22 pass; `bun run ratchet:svelte` baseline 76.
 
 ## Verification (observed)
 
@@ -46,3 +52,10 @@ L1 (user, verbatim): "Me refiero a tener acceso desde el dashboard a como cuando
 L2 (user, verbatim): "No lo quiero para los custom, lo quiero para LOS INTEGRADOS. Adelante con la implementacion."
 
 L3 (decision): scope is INTEGRATED (catalog) providers only. Custom nodes already have this. Auto-fill prefills the editor; it does not silently auto-apply/enforce (accepted from the earlier design: "Autorrellenar sugerencias, nunca cambiar límites activos automáticamente").
+
+L4 (user, verbatim): "Aparece asi, pero como añado por ejemplo: 60 request al DIA?" — the editor had no daily field; a per-minute window cannot express a provider's fixed daily allowance.
+
+L5 (feature change, from L4): added `Requests / day`, a fixed UTC-day budget. `middleware.Limits.DailyRequests` + `dailyWindow` (resets at 00:00 UTC, not queueable, refunded when the attempt never left); stored on `providerCapacity` and `providerNodes`; exposed in both editors and responses with `dailyUsedWindow`; the extractor upgrades a "daily ... requests" figure to unit `rpd`. Spec S8 below. Tests: `internal/middleware/ratelimit_provider_daily_test.go`, `TestAcquireProviderAttempt_EnforcesIntegratedDailyBudget`, `TestProviderCapacity_PutThenGet` (dailyRequests), `node-limits.test.ts`.
+
+L6 (user, verbatim): "ahora ya aparece lo de request/day pero sale este error al salvar [Image 1]" — "Cannot read properties of null (reading 'trim')". Root cause: Svelte binds a cleared `<input type="number">` to `null`, and `countOf` called `.trim()` on it, so the save died client-side before the request left. Fix: `countOf` treats null/undefined as 0; draft type and `Input` accept `null`. Regression test added in `node-limits.test.ts`.
+
