@@ -27,9 +27,10 @@
     /**
      * The field's value. A number is legitimate: Svelte binds `<input
      * type="number">` as a number, so declaring only `string` described the seed
-     * and not what the field actually holds after a keystroke.
+     * and not what the field actually holds after a keystroke. `null` is what an
+     * empty number input binds to, so it has to be accepted too.
      */
-    value?: string | number
+    value?: string | number | null
     error?: string
     hint?: string
     icon?: string

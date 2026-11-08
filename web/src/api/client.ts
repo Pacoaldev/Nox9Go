@@ -599,6 +599,8 @@ export interface ProviderNodeLimits {
   rpm: number
   tpm: number
   concurrency: number
+  /** Fixed UTC-day request budget. 0 = unlimited. */
+  dailyRequests: number
   tokenQuota: number
   queueTimeoutMs: number
   quotaResetId: number
@@ -607,6 +609,8 @@ export interface ProviderNodeLimits {
   expired: boolean
   rpmUsedWindow: number
   activeConcurrency: number
+  /** Requests spent today against the daily budget. */
+  dailyUsedWindow: number
 }
 
 /**
@@ -618,6 +622,8 @@ export interface ProviderNodeLimitsPatch {
   rpm?: number
   tpm?: number
   concurrency?: number
+  /** Fixed UTC-day request budget. 0 clears it. */
+  dailyRequests?: number
   tokenQuota?: number
   queueTimeoutMs?: number
   /** RFC3339 or a date (YYYY-MM-DD); "" clears the expiry. */
@@ -635,12 +641,16 @@ export interface ProviderCapacity {
   observations: ProviderObservation[]
   /** Values derived from the observations, for prefilling the editor. */
   suggestions: ProviderCapacitySuggestions
+  /** Requests spent today against the daily budget. */
+  dailyUsedWindow: number
 }
 
 export interface ProviderCapacityLimits {
   rpm: number
   tpm: number
   concurrency: number
+  /** Fixed UTC-day request budget. 0 = unlimited. */
+  dailyRequests: number
   queueTimeoutMs: number
   tokenQuota: number
   contractExpiresAt?: string
@@ -651,6 +661,7 @@ export interface ProviderCapacitySuggestions {
   rpm: number
   tpm: number
   concurrency: number
+  dailyRequests: number
   tokenQuota: number
 }
 

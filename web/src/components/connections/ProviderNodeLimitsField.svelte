@@ -104,6 +104,15 @@
           placeholder="0"
         />
         <Input
+          id="node-limits-daily"
+          label="Requests / day"
+          type="number"
+          min="0"
+          bind:value={draft.dailyRequests}
+          placeholder="0"
+          hint="A fixed daily budget. It resets at 00:00 UTC, not one minute after the first request."
+        />
+        <Input
           id="node-limits-queue"
           label="Queue wait (ms)"
           type="number"

@@ -24,6 +24,7 @@ describe('nodeLimitsPatchOf', () => {
       rpm: 60,
       tpm: 90000,
       concurrency: 4,
+      dailyRequests: 0,
       tokenQuota: 5000000,
       queueTimeoutMs: 15000,
       contractExpiresAt: '',
@@ -34,6 +35,26 @@ describe('nodeLimitsPatchOf', () => {
     for (const value of ['', '0', '-5', 'abc', '1.5.2']) {
       assert.strictEqual(nodeLimitsPatchOf(draft({ rpm: value })).rpm, 0, `rpm "${value}"`)
     }
+  })
+
+  // Svelte binds a cleared `<input type="number">` to null, and the save path used
+  // to call `.trim()` on it: every save with an untouched number field died with
+  // "Cannot read properties of null (reading 'trim')" and the request never left.
+  it('treats a null count (an empty number input) as unlimited instead of crashing', () => {
+    const patch = nodeLimitsPatchOf(draft({ rpm: null, tpm: null, concurrency: null, dailyRequests: null, tokenQuota: null, queueTimeoutMs: null }))
+    assert.deepStrictEqual(patch, {
+      rpm: 0,
+      tpm: 0,
+      concurrency: 0,
+      dailyRequests: 0,
+      tokenQuota: 0,
+      queueTimeoutMs: 0,
+      contractExpiresAt: '',
+    })
+  })
+
+  it('sends the daily budget as a number', () => {
+    assert.strictEqual(nodeLimitsPatchOf(draft({ dailyRequests: '60' })).dailyRequests, 60)
   })
 
   it('stores the chosen day as that day\'s end in UTC, because the date is inclusive', () => {
@@ -66,6 +87,7 @@ describe('a draft holding numbers from number inputs', () => {
       rpm: 60,
       tpm: 90000,
       concurrency: 4,
+      dailyRequests: 0,
       tokenQuota: 5000000,
       queueTimeoutMs: 15000,
       contractExpiresAt: '',
@@ -89,6 +111,7 @@ describe('nodeLimitsDraftOf', () => {
     rpm: 0,
     tpm: 0,
     concurrency: 0,
+    dailyRequests: 0,
     tokenQuota: 0,
     queueTimeoutMs: 0,
     quotaResetId: 0,
@@ -96,6 +119,7 @@ describe('nodeLimitsDraftOf', () => {
     expired: false,
     rpmUsedWindow: 0,
     activeConcurrency: 0,
+    dailyUsedWindow: 0,
     ...overrides,
   })
 
@@ -159,22 +183,31 @@ describe('nodeLimitsUsageSummary', () => {
     rpm: 0,
     tpm: 0,
     concurrency: 0,
+    dailyRequests: 0,
     tokenQuota: 0,
     quotaResetId: 0,
     usedTokens: 0,
     expired: false,
     rpmUsedWindow: 0,
     activeConcurrency: 0,
+    dailyUsedWindow: 0,
   }
 
   it('shows a bare count when the matching ceiling is unlimited', () => {
-    assert.strictEqual(nodeLimitsUsageSummary({ ...base, usedTokens: 620000 }), '620k tok · 0 this minute · 0 in flight')
+    assert.strictEqual(nodeLimitsUsageSummary({ ...base, usedTokens: 620000 }), '620k tok · 0 this minute · 0 today · 0 in flight')
   })
 
   it('shows spend against the ceiling when there is one', () => {
     assert.strictEqual(
       nodeLimitsUsageSummary({ ...base, usedTokens: 620000, tokenQuota: 5000000, rpm: 60, rpmUsedWindow: 3, concurrency: 4, activeConcurrency: 1 }),
-      '620k / 5M tok · 3/60 this minute · 1/4 in flight',
+      '620k / 5M tok · 3/60 this minute · 0 today · 1/4 in flight',
+    )
+  })
+
+  it('shows today against the daily budget when one is set', () => {
+    assert.strictEqual(
+      nodeLimitsUsageSummary({ ...base, dailyRequests: 60, dailyUsedWindow: 12 }),
+      '0 tok · 0 this minute · 12/60 today · 0 in flight',
     )
   })
 })

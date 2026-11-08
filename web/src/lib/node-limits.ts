@@ -17,11 +17,12 @@ import type { ProviderNodeLimits, ProviderNodeLimitsPatch } from '../api/client'
  * threw, the request never left, and the dialog closed showing nothing.
  */
 export interface NodeLimitsDraft {
-  rpm: string | number
-  tpm: string | number
-  concurrency: string | number
-  tokenQuota: string | number
-  queueTimeoutMs: string | number
+  rpm: string | number | null
+  tpm: string | number | null
+  concurrency: string | number | null
+  dailyRequests: string | number | null
+  tokenQuota: string | number | null
+  queueTimeoutMs: string | number | null
   contractExpiresAt: string
 }
 
@@ -30,6 +31,7 @@ export const EMPTY_NODE_LIMITS: NodeLimitsDraft = {
   rpm: '',
   tpm: '',
   concurrency: '',
+  dailyRequests: '',
   tokenQuota: '',
   queueTimeoutMs: '',
   contractExpiresAt: '',
@@ -48,6 +50,7 @@ export function nodeLimitsDraftOf(limits?: ProviderNodeLimits | null): NodeLimit
     rpm: count(limits.rpm),
     tpm: count(limits.tpm),
     concurrency: count(limits.concurrency),
+    dailyRequests: count(limits.dailyRequests),
     tokenQuota: count(limits.tokenQuota),
     queueTimeoutMs: count(limits.queueTimeoutMs),
     contractExpiresAt: expires,
@@ -70,6 +73,7 @@ export function nodeLimitsPatchOf(draft: NodeLimitsDraft): ProviderNodeLimitsPat
     rpm: countOf(draft.rpm),
     tpm: countOf(draft.tpm),
     concurrency: countOf(draft.concurrency),
+    dailyRequests: countOf(draft.dailyRequests),
     tokenQuota: countOf(draft.tokenQuota),
     queueTimeoutMs: countOf(draft.queueTimeoutMs),
     contractExpiresAt: draft.contractExpiresAt ? `${draft.contractExpiresAt}T23:59:59Z` : '',
@@ -86,6 +90,7 @@ export function hasAnyNodeLimit(draft: NodeLimitsDraft): boolean {
     countOf(draft.rpm) > 0 ||
     countOf(draft.tpm) > 0 ||
     countOf(draft.concurrency) > 0 ||
+    countOf(draft.dailyRequests) > 0 ||
     countOf(draft.tokenQuota) > 0 ||
     countOf(draft.queueTimeoutMs) > 0 ||
     draft.contractExpiresAt !== ''
@@ -102,6 +107,7 @@ export function hasAnyNodeLimitPatch(patch: ProviderNodeLimitsPatch): boolean {
     (patch.rpm ?? 0) > 0 ||
     (patch.tpm ?? 0) > 0 ||
     (patch.concurrency ?? 0) > 0 ||
+    (patch.dailyRequests ?? 0) > 0 ||
     (patch.tokenQuota ?? 0) > 0 ||
     (patch.queueTimeoutMs ?? 0) > 0 ||
     (patch.contractExpiresAt ?? '') !== ''
@@ -115,39 +121,49 @@ export function nodeLimitsSummary(draft: NodeLimitsDraft): string {
   const rpm = countOf(draft.rpm)
   const tpm = countOf(draft.tpm)
   const concurrency = countOf(draft.concurrency)
+  const dailyRequests = countOf(draft.dailyRequests)
   const queueTimeoutMs = countOf(draft.queueTimeoutMs)
   const tokenQuota = countOf(draft.tokenQuota)
   if (rpm > 0) parts.push(`${rpm} rpm`)
   if (tpm > 0) parts.push(`${compactCount(tpm)} tpm`)
   if (concurrency > 0) parts.push(`${concurrency} conc`)
+  if (dailyRequests > 0) parts.push(`${dailyRequests} rpd`)
   if (queueTimeoutMs > 0) parts.push(`${queueTimeoutMs} ms queue`)
   if (tokenQuota > 0) parts.push(`${compactCount(tokenQuota)} tok`)
   if (draft.contractExpiresAt) parts.push(`ends ${shortDate(draft.contractExpiresAt)}`)
   return parts.join(' · ')
 }
 
-/** `620k / 5M tok · 3/60 this minute · 1/4 in flight`. */
+/** `620k / 5M tok · 3/60 this minute · 12/60 today · 1/4 in flight`. */
 export function nodeLimitsUsageSummary(limits: ProviderNodeLimits): string {
   const tokens =
     limits.tokenQuota > 0
       ? `${compactCount(limits.usedTokens)} / ${compactCount(limits.tokenQuota)} tok`
       : `${compactCount(limits.usedTokens)} tok`
   const minute = limits.rpm > 0 ? `${limits.rpmUsedWindow}/${limits.rpm} this minute` : `${limits.rpmUsedWindow} this minute`
+  const daily =
+    limits.dailyRequests > 0
+      ? `${limits.dailyUsedWindow}/${limits.dailyRequests} today`
+      : `${limits.dailyUsedWindow} today`
   const flight =
     limits.concurrency > 0
       ? `${limits.activeConcurrency}/${limits.concurrency} in flight`
       : `${limits.activeConcurrency} in flight`
-  return `${tokens} · ${minute} · ${flight}`
+  return `${tokens} · ${minute} · ${daily} · ${flight}`
 }
 // A count field as a number: anything that is not a whole positive number means
 // unlimited. Number() rather than parseInt(), because parseInt('1.5.2') reads 1 —
 // a typo would quietly throttle the node to one request a minute instead of
 // leaving it unlimited.
 //
-// Both shapes are accepted because both reach here: a number from an
-// `<input type="number">` binding and a string from the seed or a cleared field.
-function countOf(field: string | number): number {
-  const value = typeof field === 'number' ? field : Number(field.trim())
+// Three shapes are accepted because all three reach here: a number from an
+// `<input type="number">` binding, a string from the seed or a cleared field, and
+// `null` — which is what Svelte binds a number input to once the operator clears
+// it (or leaves it empty), and which used to crash the save with
+// "Cannot read properties of null (reading 'trim')".
+function countOf(field: string | number | null | undefined): number {
+  if (field === null || field === undefined) return 0
+  const value = typeof field === 'number' ? field : Number(String(field).trim())
   return Number.isInteger(value) && value > 0 ? value : 0
 }
 

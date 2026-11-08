@@ -45,6 +45,7 @@
       rpm: count(limits.rpm),
       tpm: count(limits.tpm),
       concurrency: count(limits.concurrency),
+      dailyRequests: count(limits.dailyRequests),
       tokenQuota: count(limits.tokenQuota),
       queueTimeoutMs: count(limits.queueTimeoutMs),
       contractExpiresAt: expires,
@@ -104,6 +105,7 @@
     if (s.rpm > 0) draft.rpm = String(s.rpm)
     if (s.tpm > 0) draft.tpm = String(s.tpm)
     if (s.concurrency > 0) draft.concurrency = String(s.concurrency)
+    if (s.dailyRequests > 0) draft.dailyRequests = String(s.dailyRequests)
     if (s.tokenQuota > 0) draft.tokenQuota = String(s.tokenQuota)
   }
 
@@ -119,6 +121,9 @@
         break
       case 'concurrent':
         draft.concurrency = String(v)
+        break
+      case 'rpd':
+        draft.dailyRequests = String(v)
         break
     }
   }
@@ -136,6 +141,19 @@
     return signalLabels[signal] ?? signal
   }
 
+  const unitLabels: Record<string, string> = {
+    rpm: 'req/min',
+    tpm: 'tok/min',
+    rpd: 'req/day',
+    concurrent: 'in flight',
+    requests: 'requests',
+    tokens: 'tokens',
+  }
+
+  function unitLabel(unit: string): string {
+    return unitLabels[unit] ?? unit
+  }
+
   function shortTime(value: string): string {
     const at = new Date(value)
     if (Number.isNaN(at.getTime())) return value
@@ -146,6 +164,7 @@
     (capacity?.suggestions.rpm ?? 0) > 0 ||
       (capacity?.suggestions.tpm ?? 0) > 0 ||
       (capacity?.suggestions.concurrency ?? 0) > 0 ||
+      (capacity?.suggestions.dailyRequests ?? 0) > 0 ||
       (capacity?.suggestions.tokenQuota ?? 0) > 0,
   )
 </script>
@@ -176,6 +195,15 @@
           <Input id="provider-capacity-rpm" label="Requests / minute" type="number" min="0" bind:value={draft.rpm} placeholder="0" />
           <Input id="provider-capacity-tpm" label="Prompt tokens / minute" type="number" min="0" bind:value={draft.tpm} placeholder="0" />
           <Input id="provider-capacity-concurrency" label="Concurrent requests" type="number" min="0" bind:value={draft.concurrency} placeholder="0" />
+          <Input
+            id="provider-capacity-daily"
+            label="Requests / day"
+            type="number"
+            min="0"
+            bind:value={draft.dailyRequests}
+            placeholder="0"
+            hint="A fixed daily budget. It resets at 00:00 UTC, not one minute after the first request."
+          />
           <Input
             id="provider-capacity-queue"
             label="Queue wait (ms)"
@@ -255,9 +283,9 @@
                   </div>
                   <div class="flex shrink-0 items-center gap-2">
                     {#if obs.limitValue && obs.limitUnit}
-                      <span class="text-xs font-mono text-text-main">{obs.limitValue} {obs.limitUnit}</span>
+                      <span class="text-xs font-mono text-text-main">{obs.limitValue} {unitLabel(obs.limitUnit)}</span>
                     {/if}
-                    {#if obs.limitUnit === 'rpm' || obs.limitUnit === 'tpm' || obs.limitUnit === 'concurrent'}
+                    {#if obs.limitUnit === 'rpm' || obs.limitUnit === 'tpm' || obs.limitUnit === 'concurrent' || obs.limitUnit === 'rpd'}
                       <Button variant="ghost" size="sm" onclick={() => applyObservation(obs)}>Use</Button>
                     {/if}
                   </div>
