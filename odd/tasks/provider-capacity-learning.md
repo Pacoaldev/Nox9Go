@@ -23,12 +23,21 @@ S7. Recording must not affect request latency materially and must never fail the
 
 ## Tasks
 
-T1. DB + repo: `providerCapacity` and `providerObservations` tables + reader/writer methods + tests. Route: inline.
-T2. Extractor: `internal/providers/observation.go` ClassifyObservation + table tests. Route: inline.
-T3. Recording hook: record observations for integrated providers in the chat failure path + tests. Route: inline.
-T4. Enforcement: extend providerLimitsFor/acquire path to read integrated capacity + tests. Route: inline.
-T5. Dashboard endpoints: GET/PUT `/api/providers/{id}/capacity` + routes + tests. Route: inline.
-T6. Frontend: capacity editor for integrated providers in ProviderDetailView + api client + i18n. Route: inline (large file).
+- [x] T1. DB + repo: `providerCapacity` and `providerObservations` tables + reader/writer methods + tests. Route: inline. Commit 2b41fd50. Evidence: `go test ./internal/db/` green.
+- [x] T2. Extractor: `internal/providers/observation.go` ClassifyObservation + table tests. Route: inline. Commit (providers observation). Evidence: `go test ./internal/providers/` green.
+- [x] T3. Recording hook: record observations for integrated providers in the chat failure path + tests. Route: inline. Commit ef5f6e31. Evidence: `go test ./internal/handlers/chat/` green.
+- [x] T4. Enforcement: extend providerLimitsFor/acquire path to read integrated capacity + tests. Route: inline. Commit ef5f6e31.
+- [x] T5. Dashboard endpoints: GET/PUT `/api/providers/{id}/capacity` + routes + tests. Route: inline. Commit c332362d. Evidence: `go test ./internal/handlers/dashboard/` green.
+- [x] T6. Frontend: capacity editor for integrated providers in ProviderDetailView + component + api client + i18n. Route: inline. Commit 3de9b8ee. Evidence: `bun run ratchet:svelte` (0 unresolved, baseline 76), `cd web; bun run build` OK.
+
+## Verification (observed)
+
+- `go vet ./...` → clean.
+- `go test ./...` → all packages ok (chat 35s, dashboard 16s, db 12s).
+- `go test -tags=integration ./internal/integration/...` → ok (87s), provider limits included.
+- `cd web; bun run ratchet:svelte` → 0 unresolved identifiers, 76 errors (baseline 76).
+- `cd web; bun run build` → built; precompressed 2683 KB → 567 KB brotli.
+- `go build ./...` → clean.
 
 ## Log
 
