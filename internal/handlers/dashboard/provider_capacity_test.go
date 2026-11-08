@@ -26,7 +26,7 @@ func TestProviderCapacity_PutThenGet(t *testing.T) {
 	router := setupTestRouter(repo)
 
 	rec := nodeLimitsRequest(t, router, http.MethodPut, "/api/providers/bazaarlink/capacity",
-		`{"rpm":60,"tpm":10000,"concurrency":2,"tokenQuota":5000,"queueTimeoutMs":1500,"contractExpiresAt":"2027-01-31"}`)
+		`{"rpm":60,"tpm":10000,"concurrency":2,"dailyRequests":60,"tokenQuota":5000,"queueTimeoutMs":1500,"contractExpiresAt":"2027-01-31"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
 	}
@@ -41,6 +41,9 @@ func TestProviderCapacity_PutThenGet(t *testing.T) {
 	}
 	if res.Limits.RPM != 60 || res.Limits.TPM != 10000 || res.Limits.Concurrency != 2 {
 		t.Errorf("limits = %+v, want rpm 60 tpm 10000 concurrency 2", res.Limits)
+	}
+	if res.Limits.DailyRequests != 60 {
+		t.Errorf("dailyRequests = %d, want 60", res.Limits.DailyRequests)
 	}
 	if res.Limits.ContractExpiresAt != "2027-01-31T00:00:00Z" {
 		t.Errorf("contractExpiresAt = %q, want the normalised UTC instant", res.Limits.ContractExpiresAt)
@@ -86,6 +89,8 @@ func TestProviderCapacity_GetReportsSuggestionsFromObservations(t *testing.T) {
 		{Provider: "bazaarlink", Signal: "rate_limit", LimitUnit: "rpm", LimitValue: 60},
 		{Provider: "bazaarlink", Signal: "rate_limit", LimitUnit: "rpm", LimitValue: 120},
 		{Provider: "bazaarlink", Signal: "rate_limit", LimitUnit: "tpm", LimitValue: 90000},
+		// A daily allowance maps onto the daily budget field.
+		{Provider: "bazaarlink", Signal: "quota_exceeded", LimitUnit: "rpd", LimitValue: 60},
 		// A bare window count must not prefill a per-minute field.
 		{Provider: "bazaarlink", Signal: "quota_exceeded", LimitUnit: "requests", LimitValue: 500},
 	} {
@@ -108,7 +113,10 @@ func TestProviderCapacity_GetReportsSuggestionsFromObservations(t *testing.T) {
 	if res.Suggestions.TPM != 90000 {
 		t.Errorf("suggested tpm = %d, want 90000", res.Suggestions.TPM)
 	}
-	if len(res.Observations) != 4 {
-		t.Errorf("observations = %d rows, want 4", len(res.Observations))
+	if res.Suggestions.DailyRequests != 60 {
+		t.Errorf("suggested dailyRequests = %d, want 60", res.Suggestions.DailyRequests)
+	}
+	if len(res.Observations) != 5 {
+		t.Errorf("observations = %d rows, want 5", len(res.Observations))
 	}
 }
