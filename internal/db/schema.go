@@ -492,6 +492,66 @@ var usageLedgerTables = []tableDef{
 	},
 }
 
+// providerCapacityTables back the integrated-provider capacity feature
+// (provider_capacity.go). providerCapacity holds the operator's configured policy
+// for a catalog provider (which has no providerNodes row), and providerObservations
+// is the small knowledge base of capacity facts the upstream reports at runtime.
+// Both are Go-only and additive: upstream declares neither and ignores them.
+var providerCapacityTables = []tableDef{
+	{
+		name: "providerCapacity",
+		columns: [][2]string{
+			{"provider", "TEXT PRIMARY KEY"},
+			{"rpm", "INTEGER DEFAULT 0"},
+			{"tpm", "INTEGER DEFAULT 0"},
+			{"concurrency", "INTEGER DEFAULT 0"},
+			{"queueTimeoutMs", "INTEGER DEFAULT 0"},
+			{"tokenQuota", "INTEGER DEFAULT 0"},
+			{"contractExpiresAt", "TEXT DEFAULT ''"},
+			{"updatedAt", "TEXT DEFAULT ''"},
+		},
+	},
+	{
+		name: "providerObservations",
+		columns: [][2]string{
+			{"id", "INTEGER PRIMARY KEY AUTOINCREMENT"},
+			{"provider", "TEXT NOT NULL"},
+			{"model", "TEXT NOT NULL DEFAULT ''"},
+			{"signal", "TEXT NOT NULL"},
+			{"statusCode", "INTEGER DEFAULT 0"},
+			{"limitValue", "INTEGER DEFAULT 0"},
+			{"limitUnit", "TEXT NOT NULL DEFAULT ''"},
+			{"evidence", "TEXT NOT NULL DEFAULT ''"},
+			{"sampleCount", "INTEGER NOT NULL DEFAULT 1"},
+			{"firstSeen", "TEXT NOT NULL"},
+			{"lastSeen", "TEXT NOT NULL"},
+		},
+		indexes: []string{
+			"CREATE INDEX IF NOT EXISTS idx_po_provider ON providerObservations(provider)",
+			"CREATE INDEX IF NOT EXISTS idx_po_provider_seen ON providerObservations(provider, lastSeen DESC)",
+			// The upsert key: a repeated fact of the same shape is one row whose
+			// SampleCount grows, not a new row per observation.
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_po_key ON providerObservations(provider, model, signal, limitUnit, limitValue)",
+		},
+	},
+}
+
+// EnsureProviderCapacityTables creates the Go-only tables the integrated-provider
+// capacity feature needs. Exported for the same reason as EnsureKeiRouterTables: a
+// test fixture that builds only the upstream core tables still gets the shape the
+// runtime queries.
+func EnsureProviderCapacityTables(db *sql.DB) error {
+	if db == nil {
+		return fmt.Errorf("provider capacity tables: nil db")
+	}
+	for _, t := range providerCapacityTables {
+		if err := ensureTable(db, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // EnsureLedgerTables creates the Go-only tables the ledger retention needs.
 // Exported for the same reason as EnsureKeiRouterTables: a test fixture that
 // builds only the upstream core schema still gets the shape the runtime queries.
@@ -560,6 +620,9 @@ func EnsureCoreSchema(db *sql.DB) error {
 		return err
 	}
 	if err := EnsureLedgerTables(db); err != nil {
+		return err
+	}
+	if err := EnsureProviderCapacityTables(db); err != nil {
 		return err
 	}
 	if err := EnsureThoughtSignatureTables(db); err != nil {
