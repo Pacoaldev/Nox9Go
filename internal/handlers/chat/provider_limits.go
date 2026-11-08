@@ -181,7 +181,7 @@ func (h *ChatHandler) providerLimitsFor(ctx context.Context, state *providerLimi
 	if h.Repo == nil {
 		return db.ProviderLimits{}
 	}
-	limits, err := h.Repo.GetProviderLimits(ctx, provider)
+	limits, err := h.readProviderPolicy(ctx, provider)
 	if err != nil {
 		log.Warn("providerlimit", "provider limits read failed, treating as unlimited",
 			"provider", provider, "error", err)

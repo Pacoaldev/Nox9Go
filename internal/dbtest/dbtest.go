@@ -112,5 +112,11 @@ func CreateTables(database *sql.DB) error {
 	if err := db.EnsureLedgerTables(database); err != nil {
 		return fmt.Errorf("create ledger tables: %w", err)
 	}
+	// The integrated-provider capacity tables are Go-only too: without them a
+	// fixture that records or reads a provider's capacity fails on a missing
+	// table rather than on the behavior the test is about.
+	if err := db.EnsureProviderCapacityTables(database); err != nil {
+		return fmt.Errorf("create provider capacity tables: %w", err)
+	}
 	return db.EnsureAdditiveColumns(database)
 }

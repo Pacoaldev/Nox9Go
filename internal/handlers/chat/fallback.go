@@ -257,6 +257,10 @@ func (h *ChatHandler) handleAccountFallback(
 			currentBackoffLevel := h.Repo.GetConnectionBackoffLevel(connObj.ID)
 			// Classify error to get dynamic cooldown
 			classification := providers.ClassifyError(ue.StatusCode, errorText, currentBackoffLevel)
+			// Grow the integrated-provider knowledge base from this failure, so the
+			// dashboard can prefill that provider's capacity editor. Fail-open and
+			// integrated-providers-only: see provider_capacity.go.
+			h.recordProviderObservation(ctx, provider, model, ue.StatusCode, ue.Body, ue.Header)
 			cooldownSec := retryableCooldownSec(provider, ue.StatusCode, time.Duration(classification.CooldownMs)*time.Millisecond, ue)
 			cooldownSec = accountRestrictionCooldownSec(provider, ue, cooldownSec)
 			errMsg := errorText
