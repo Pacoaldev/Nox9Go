@@ -63,6 +63,7 @@ func TestProviderLimits_RoundTrip(t *testing.T) {
 		RPM:               60,
 		TPM:               90_000,
 		Concurrency:       4,
+		DailyRequests:     60,
 		QueueTimeoutMs:    15_000,
 		TokenQuota:        5_000_000,
 		ContractExpiresAt: "2027-01-31T00:00:00Z",
@@ -123,6 +124,7 @@ func TestSetProviderLimits_RejectsNegativeCounts(t *testing.T) {
 		{"rpm", ProviderLimits{RPM: -1}},
 		{"tpm", ProviderLimits{TPM: -1}},
 		{"concurrency", ProviderLimits{Concurrency: -1}},
+		{"daily requests", ProviderLimits{DailyRequests: -1}},
 		{"token quota", ProviderLimits{TokenQuota: -1}},
 		{"queue timeout", ProviderLimits{QueueTimeoutMs: -1}},
 	}

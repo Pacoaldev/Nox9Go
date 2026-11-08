@@ -64,8 +64,8 @@ func TestClassifyObservation_DailyLimitBody(t *testing.T) {
 	if got.Signal != SignalQuotaExceeded {
 		t.Errorf("signal = %q, want %q", got.Signal, SignalQuotaExceeded)
 	}
-	if got.LimitValue != 60 || got.LimitUnit != "requests" {
-		t.Errorf("limit = %d %s, want 60 requests", got.LimitValue, got.LimitUnit)
+	if got.LimitValue != 60 || got.LimitUnit != "rpd" {
+		t.Errorf("limit = %d %s, want 60 req/day (rpd)", got.LimitValue, got.LimitUnit)
 	}
 	if got.Evidence == "" {
 		t.Error("evidence was not captured")
@@ -93,7 +93,7 @@ func TestParseObservedLimit_Units(t *testing.T) {
 		{"limit is 5000 tokens per minute", 5000, "tpm"},
 		{"300 requests per minute", 300, "rpm"},
 		{"max 4 concurrent requests allowed", 4, "concurrent"},
-		{"you may send 60 requests per day", 60, "requests"},
+		{"you may send 60 requests per day", 60, "rpd"},
 		{"up to 200000 tokens per request", 200000, "tokens"},
 		{"no numbers here", 0, ""},
 	}

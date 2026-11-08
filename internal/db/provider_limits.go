@@ -47,6 +47,10 @@ type ProviderLimits struct {
 	// Concurrency is how many requests may be in flight against the node at
 	// once. 0 = unlimited.
 	Concurrency int
+	// DailyRequests caps the requests the node may spend per UTC day. It is a
+	// fixed-window budget, not a sliding one: it refills at midnight UTC, the
+	// boundary a provider that publishes a daily allowance names. 0 = unlimited.
+	DailyRequests int
 	// QueueTimeoutMs is how long a request may wait for an RPM or concurrency
 	// slot before it gives up and is refused. 0 = do not wait at all.
 	QueueTimeoutMs int
@@ -61,12 +65,12 @@ type ProviderLimits struct {
 }
 
 // providerLimitColumns is the shared column list for every provider limit read.
-const providerLimitColumns = `rpmLimit, tpmLimit, concurrencyLimit, tokenQuota, queueTimeoutMs, quotaResetId, COALESCE(contractExpiresAt, '')`
+const providerLimitColumns = `rpmLimit, tpmLimit, concurrencyLimit, dailyRequests, tokenQuota, queueTimeoutMs, quotaResetId, COALESCE(contractExpiresAt, '')`
 
 // scanProviderLimits fills limits from a row shaped like providerLimitColumns.
 func scanProviderLimits(scan func(dest ...any) error, limits *ProviderLimits) error {
 	return scan(
-		&limits.RPM, &limits.TPM, &limits.Concurrency, &limits.TokenQuota,
+		&limits.RPM, &limits.TPM, &limits.Concurrency, &limits.DailyRequests, &limits.TokenQuota,
 		&limits.QueueTimeoutMs, &limits.QuotaResetID, &limits.ContractExpiresAt,
 	)
 }
@@ -126,10 +130,14 @@ func (r *Repo) ListProviderLimits(ctx context.Context) (map[string]ProviderLimit
 	for rows.Next() {
 		var id string
 		var limits ProviderLimits
-		if err := rows.Scan(&id,
-			&limits.RPM, &limits.TPM, &limits.Concurrency, &limits.TokenQuota,
-			&limits.QueueTimeoutMs, &limits.QuotaResetID, &limits.ContractExpiresAt,
-		); err != nil {
+		// The scan goes through the shared helper so the column order lives in
+		// one place: this list used to spell the order out a second time, and a
+		// column added to providerLimitColumns alone made it read eight
+		// destinations for nine columns.
+		err := scanProviderLimits(func(dest ...any) error {
+			return rows.Scan(append([]any{&id}, dest...)...)
+		}, &limits)
+		if err != nil {
 			return nil, fmt.Errorf("scan provider limits: %w", err)
 		}
 		out[id] = limits
@@ -161,7 +169,7 @@ func (r *Repo) SetProviderLimits(ctx context.Context, nodeID string, limits Prov
 	if nodeID == "" {
 		return fmt.Errorf("set provider limits: empty node id")
 	}
-	if limits.RPM < 0 || limits.TPM < 0 || limits.Concurrency < 0 ||
+	if limits.RPM < 0 || limits.TPM < 0 || limits.Concurrency < 0 || limits.DailyRequests < 0 ||
 		limits.TokenQuota < 0 || limits.QueueTimeoutMs < 0 {
 		return fmt.Errorf("set provider limits %s: limits are counts and cannot be negative", nodeID)
 	}
@@ -175,10 +183,10 @@ func (r *Repo) SetProviderLimits(ctx context.Context, nodeID string, limits Prov
 	}
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE providerNodes
-		   SET rpmLimit = ?, tpmLimit = ?, concurrencyLimit = ?, tokenQuota = ?,
-		       queueTimeoutMs = ?, contractExpiresAt = ?
+		   SET rpmLimit = ?, tpmLimit = ?, concurrencyLimit = ?, dailyRequests = ?,
+		       tokenQuota = ?, queueTimeoutMs = ?, contractExpiresAt = ?
 		 WHERE id = ?`,
-		limits.RPM, limits.TPM, limits.Concurrency, limits.TokenQuota,
+		limits.RPM, limits.TPM, limits.Concurrency, limits.DailyRequests, limits.TokenQuota,
 		limits.QueueTimeoutMs, expiresAt, nodeID,
 	)
 	if err != nil {

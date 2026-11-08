@@ -22,8 +22,8 @@ func TestRecordProviderObservation_RecordsIntegratedProvider(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("recorded %d observations, want 1", len(list))
 	}
-	if list[0].Signal != "quota_exceeded" || list[0].LimitValue != 60 || list[0].LimitUnit != "requests" {
-		t.Errorf("observation = %+v, want quota_exceeded 60 requests", list[0])
+	if list[0].Signal != "quota_exceeded" || list[0].LimitValue != 60 || list[0].LimitUnit != "rpd" {
+		t.Errorf("observation = %+v, want quota_exceeded 60 req/day", list[0])
 	}
 }
 
@@ -101,6 +101,34 @@ func TestAcquireProviderAttempt_EnforcesIntegratedCapacity(t *testing.T) {
 	_, err = handler.acquireProviderAttempt(ctx, "bazaarlink", "auto:free", "conn-1", []byte(`{"messages":[]}`))
 	if err == nil {
 		t.Fatal("second attempt was admitted while the integrated provider's window was full")
+	}
+}
+
+func TestAcquireProviderAttempt_EnforcesIntegratedDailyBudget(t *testing.T) {
+	handler, repo := newProviderLimitHandler(t)
+	ctx := withProviderLimitState(context.Background())
+	if err := repo.SetProviderCapacity(ctx, "bazaarlink", db.ProviderCapacity{DailyRequests: 2}); err != nil {
+		t.Fatalf("SetProviderCapacity: %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		slot, err := handler.acquireProviderAttempt(ctx, "bazaarlink", "auto:free", "conn-1", []byte(`{"messages":[]}`))
+		if slot == nil || err != nil {
+			t.Fatalf("attempt %d = slot %v err %v, want admitted", i, slot, err)
+		}
+		slot.Release()
+	}
+
+	_, err := handler.acquireProviderAttempt(ctx, "bazaarlink", "auto:free", "conn-1", []byte(`{"messages":[]}`))
+	if err == nil {
+		t.Fatal("third attempt was admitted while the daily budget was exhausted")
+	}
+	refusal, ok := providerLimitRefusal(err)
+	if !ok {
+		t.Fatalf("err %v was not recognized as a providerLimitRefusal", err)
+	}
+	if refusal.Axis != "rpd" || refusal.Limit != 2 {
+		t.Errorf("refusal = %+v, want axis rpd limit 2", refusal)
 	}
 }
 

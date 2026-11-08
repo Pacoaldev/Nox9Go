@@ -8,6 +8,7 @@ import (
 
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlerutil"
+	"nox9go/proxy/internal/middleware"
 	"nox9go/proxy/internal/providers"
 )
 
@@ -34,25 +35,31 @@ type ProviderCapacityResponse struct {
 	// Suggestions are values derived from the observations, for prefilling the
 	// editor. They are never applied automatically — the operator saves to apply.
 	Suggestions ProviderCapacitySuggestions `json:"suggestions"`
+	// DailyUsedWindow is how many requests the provider spent today against its
+	// daily budget, read from the limiter. It is 0 when no daily budget is
+	// configured or the limiter is not wired.
+	DailyUsedWindow int `json:"dailyUsedWindow"`
 }
 
 // ProviderCapacityLimits is the editable policy shape.
 type ProviderCapacityLimits struct {
-	RPM               int    `json:"rpm"`
-	TPM               int    `json:"tpm"`
-	Concurrency       int    `json:"concurrency"`
-	QueueTimeoutMs    int    `json:"queueTimeoutMs"`
-	TokenQuota        int    `json:"tokenQuota"`
+	RPM               int `json:"rpm"`
+	TPM               int `json:"tpm"`
+	Concurrency       int `json:"concurrency"`
+	DailyRequests     int `json:"dailyRequests"`
+	QueueTimeoutMs    int `json:"queueTimeoutMs"`
+	TokenQuota        int `json:"tokenQuota"`
 	ContractExpiresAt string `json:"contractExpiresAt,omitempty"`
 	UpdatedAt         string `json:"updatedAt,omitempty"`
 }
 
 // ProviderCapacitySuggestions carries the observed-value prefill.
 type ProviderCapacitySuggestions struct {
-	RPM         int `json:"rpm"`
-	TPM         int `json:"tpm"`
-	Concurrency int `json:"concurrency"`
-	TokenQuota  int `json:"tokenQuota"`
+	RPM           int `json:"rpm"`
+	TPM           int `json:"tpm"`
+	Concurrency   int `json:"concurrency"`
+	DailyRequests int `json:"dailyRequests"`
+	TokenQuota    int `json:"tokenQuota"`
 }
 
 // capacityLimitsFrom maps the stored policy onto the response shape.
@@ -61,6 +68,7 @@ func capacityLimitsFrom(c db.ProviderCapacity) ProviderCapacityLimits {
 		RPM:               c.RPM,
 		TPM:               c.TPM,
 		Concurrency:       c.Concurrency,
+		DailyRequests:     c.DailyRequests,
 		QueueTimeoutMs:    c.QueueTimeoutMs,
 		TokenQuota:        c.TokenQuota,
 		ContractExpiresAt: c.ContractExpiresAt,
@@ -72,9 +80,9 @@ func capacityLimitsFrom(c db.ProviderCapacity) ProviderCapacityLimits {
 // the largest value the provider named in that unit.
 //
 // Only units that map onto a field are used: an rpm/tpm/concurrent observation maps
-// directly, and a bare "requests"/"tokens" count (which is a window or lifetime
-// figure, not a per-minute one) is surfaced in the list but never prefill a
-// per-minute field it does not mean.
+// directly, a daily request count maps onto the daily budget, and a bare
+// "requests"/"tokens" count (which is a window or lifetime figure, not a per-minute
+// one) is surfaced in the list but never prefill a per-minute field it does not mean.
 func suggestCapacity(observations []db.ProviderObservation) ProviderCapacitySuggestions {
 	var s ProviderCapacitySuggestions
 	for _, o := range observations {
@@ -88,6 +96,8 @@ func suggestCapacity(observations []db.ProviderObservation) ProviderCapacitySugg
 			s.TPM = max(s.TPM, o.LimitValue)
 		case "concurrent":
 			s.Concurrency = max(s.Concurrency, o.LimitValue)
+		case "rpd":
+			s.DailyRequests = max(s.DailyRequests, o.LimitValue)
 		}
 	}
 	return s
@@ -140,6 +150,12 @@ func (h *DashboardHandler) providerCapacityResponse(ctx context.Context, provide
 		Limits:       capacityLimitsFrom(limits),
 		Observations: observations,
 		Suggestions:  suggestCapacity(observations),
+		DailyUsedWindow: func() int {
+			if h.Limiter == nil {
+				return 0
+			}
+			return h.Limiter.SnapshotDaily(middleware.ProviderScopeKey(providerID))
+		}(),
 	}, nil
 }
 
@@ -171,6 +187,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 		RPM               *int    `json:"rpm"`
 		TPM               *int    `json:"tpm"`
 		Concurrency       *int    `json:"concurrency"`
+		DailyRequests     *int    `json:"dailyRequests"`
 		TokenQuota        *int    `json:"tokenQuota"`
 		QueueTimeoutMs    *int    `json:"queueTimeoutMs"`
 		ContractExpiresAt *string `json:"contractExpiresAt"`
@@ -196,6 +213,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 		{"rpm", patch.RPM, &merged.RPM},
 		{"tpm", patch.TPM, &merged.TPM},
 		{"concurrency", patch.Concurrency, &merged.Concurrency},
+		{"dailyRequests", patch.DailyRequests, &merged.DailyRequests},
 		{"tokenQuota", patch.TokenQuota, &merged.TokenQuota},
 		{"queueTimeoutMs", patch.QueueTimeoutMs, &merged.QueueTimeoutMs},
 	}

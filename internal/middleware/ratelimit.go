@@ -25,6 +25,10 @@ type RateLimiter struct {
 	windows map[string]*slidingWindow
 	tokens  map[string]*tokenBucket
 	active  map[string]*int32
+	// daily holds each provider's fixed UTC-day request counter. A daily budget
+	// is a different axis from the sliding RPM window: it refills at midnight
+	// instead of continuously, so it cannot be served by the same window.
+	daily map[string]*dailyWindow
 	// queues holds each key's waiting queue. A request that cannot be admitted
 	// immediately is parked at the tail and granted at the head, in arrival
 	// order, when a slot frees or the RPM window rolls forward — the FIFO
@@ -79,6 +83,18 @@ type tokenBucket struct {
 	lastRefill time.Time
 }
 
+// dailyWindow is a fixed UTC-day request counter.
+//
+// It is deliberately not a sliding window: a provider that says "60 free-model
+// requests per day, resets at 00:00 UTC" resets on the UTC day boundary, not one
+// minute after the first request. day holds the UTC date the count belongs to, so
+// a counter that survives midnight is recognised as belonging to yesterday and
+// restarts.
+type dailyWindow struct {
+	day  string
+	used int
+}
+
 // NewRateLimiter creates a new rate limiter with the given window size.
 func NewRateLimiter(window time.Duration) *RateLimiter {
 	if window <= 0 {
@@ -88,6 +104,7 @@ func NewRateLimiter(window time.Duration) *RateLimiter {
 		windows:       make(map[string]*slidingWindow),
 		tokens:        make(map[string]*tokenBucket),
 		active:        make(map[string]*int32),
+		daily:         make(map[string]*dailyWindow),
 		queues:        make(map[string]*waitQueue),
 		windowTimers:  make(map[string]*time.Timer),
 		window:        window,
@@ -622,11 +639,14 @@ func (rl *RateLimiter) tpmRetryAfter(keyID string, tpm int, tokens int) int {
 //
 // Must be called with rl.mu held.
 func (rl *RateLimiter) evictIfNeededLocked(keep string) {
-	if len(rl.windows) < rl.maxKeys {
+	// The daily map is bounded too: a scope may configure a daily budget and
+	// nothing else, so it never touches the sliding-window map and would
+	// otherwise grow without limit.
+	if len(rl.windows) < rl.maxKeys && len(rl.daily) < rl.maxKeys {
 		return
 	}
 	target := rl.maxKeys * 9 / 10
-	for k := range rl.windows {
+	for k := range rl.evictionCandidatesLocked() {
 		// Never evict the key whose admit is in progress: its window is about
 		// to be stamped by the caller, and reclaiming it here would let the
 		// stamp land in a fresh window and over-admit.
@@ -646,14 +666,30 @@ func (rl *RateLimiter) evictIfNeededLocked(keep string) {
 		delete(rl.tokens, k)
 		delete(rl.active, k)
 		delete(rl.queues, k)
+		delete(rl.daily, k)
 		if timer, ok := rl.windowTimers[k]; ok {
 			timer.Stop()
 			delete(rl.windowTimers, k)
 		}
-		if len(rl.windows) <= target {
+		if len(rl.windows) <= target && len(rl.daily) <= target {
 			break
 		}
 	}
+}
+
+// evictionCandidatesLocked is every key the limiter holds state for, so the
+// sweep can reclaim a scope that only occupies one of the maps.
+//
+// Must be called with rl.mu held.
+func (rl *RateLimiter) evictionCandidatesLocked() map[string]struct{} {
+	out := make(map[string]struct{}, len(rl.windows)+len(rl.daily))
+	for k := range rl.windows {
+		out[k] = struct{}{}
+	}
+	for k := range rl.daily {
+		out[k] = struct{}{}
+	}
+	return out
 }
 
 // keyBusy reports whether a key currently holds a concurrency slot. Must be
@@ -779,11 +815,12 @@ func EstimatePromptTokens(body []byte) int { return estimatePromptTokens(body) }
 
 // ProviderRefusal says why one provider attempt was refused.
 type ProviderRefusal struct {
-	// Axis is the limit that refused: "tpm", "rpm" or "concurrency".
+	// Axis is the limit that refused: "tpm", "rpm", "rpd" or "concurrency".
 	Axis string
 	// RetryAfter is how long to wait before trying this provider again. For a
 	// queue timeout it is the wait that just elapsed; for TPM it is how long the
-	// bucket needs to refill enough for this request.
+	// bucket needs to refill enough for this request; for the daily budget it is
+	// the time left until the next UTC midnight.
 	RetryAfter time.Duration
 	// Limit is the configured value that refused, for the response body.
 	Limit int
@@ -844,16 +881,37 @@ func (rl *RateLimiter) AcquireProvider(ctx context.Context, providerID string, l
 	if rl == nil || providerID == "" {
 		return nil, nil
 	}
-	if limits.RPM <= 0 && limits.TPM <= 0 && limits.Concurrency <= 0 {
+	if limits.RPM <= 0 && limits.TPM <= 0 && limits.Concurrency <= 0 && limits.DailyRequests <= 0 {
 		return nil, nil
 	}
 	key := ProviderScopeKey(providerID)
 	slot := &ProviderSlot{rl: rl, key: key, tpm: limits.TPM}
 
+	// The daily budget is charged first and is NOT queueable: a daily allowance
+	// does not refill while a request waits, so parking a caller for it would
+	// promise a slot the day may never grant. Refusing immediately also matches
+	// what the upstream would answer — the provider's own daily limit is
+	// already spent, and the call would be rejected anyway.
+	dailyCharged := false
+	if limits.DailyRequests > 0 {
+		ok, retryAfter := rl.reserveDaily(key, limits.DailyRequests, time.Now())
+		if !ok {
+			return nil, &ProviderRefusal{
+				Axis:       axisRequestsPerDay,
+				Limit:      limits.DailyRequests,
+				RetryAfter: retryAfter,
+			}
+		}
+		dailyCharged = true
+	}
+
 	// TPM first, and not queueable: a token bucket refills continuously, so a
 	// request parked for one could be admitted and immediately re-refused.
 	if limits.TPM > 0 && promptTokens > 0 {
 		if allowed, retryAfterSeconds, axis := rl.checkTPMOnly(key, limits.TPM, promptTokens); !allowed {
+			if dailyCharged {
+				rl.refundDaily(key)
+			}
 			return nil, &ProviderRefusal{
 				Axis:       axis,
 				Limit:      limits.TPM,
@@ -871,6 +929,9 @@ func (rl *RateLimiter) AcquireProvider(ctx context.Context, providerID string, l
 		// The TPM charge was taken before the queue and the attempt never left,
 		// so it is not a spend: hand the whole amount back.
 		slot.Release()
+		if dailyCharged {
+			rl.refundDaily(key)
+		}
 		return nil, &ProviderRefusal{
 			Axis:       queueScope(limits),
 			Limit:      queueLimit(limits),
@@ -882,6 +943,86 @@ func (rl *RateLimiter) AcquireProvider(ctx context.Context, providerID string, l
 	}
 	slot.held = limits.Concurrency > 0
 	return slot, nil
+}
+
+// axisRequestsPerDay names the daily request budget in a refusal.
+const axisRequestsPerDay = "rpd"
+
+// reserveDaily charges one request against a provider's daily budget.
+//
+// It returns false when the budget for the current UTC day is already spent, with
+// the time left until the next UTC midnight as the retry delay. The check and the
+// charge are one atomic step under the limiter's lock, so two requests arriving
+// together cannot both pass a budget with one slot left.
+func (rl *RateLimiter) reserveDaily(key string, limit int, now time.Time) (bool, time.Duration) {
+	if rl == nil || limit <= 0 {
+		return true, 0
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	counter, exists := rl.daily[key]
+	if !exists {
+		counter = &dailyWindow{}
+		rl.daily[key] = counter
+	}
+	today := now.UTC().Format("2006-01-02")
+	if counter.day != today {
+		// A counter from a previous day is yesterday's budget: it resets.
+		counter.day = today
+		counter.used = 0
+	}
+	if counter.used >= limit {
+		return false, timeUntilUTCMidnight(now)
+	}
+	counter.used++
+	return true, 0
+}
+
+// refundDaily hands a daily reservation back.
+//
+// It is called only for the paths where the attempt never left: a TPM refusal and
+// a queue timeout. A request the provider actually saw keeps its charge, exactly
+// as it keeps its slot in the sliding window.
+func (rl *RateLimiter) refundDaily(key string) {
+	if rl == nil {
+		return
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if counter, ok := rl.daily[key]; ok && counter.used > 0 {
+		counter.used--
+	}
+}
+
+// SnapshotDaily reports how many requests the scope has spent today against its
+// daily budget. It reads 0 for a scope that has never spent one.
+func (rl *RateLimiter) SnapshotDaily(keyID string) int {
+	return rl.SnapshotDailyAt(keyID, time.Now())
+}
+
+// SnapshotDailyAt is SnapshotDaily evaluated at a specific moment.
+func (rl *RateLimiter) SnapshotDailyAt(keyID string, now time.Time) int {
+	if rl == nil {
+		return 0
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	counter, ok := rl.daily[keyID]
+	if !ok || counter.day != now.UTC().Format("2006-01-02") {
+		return 0
+	}
+	return counter.used
+}
+
+// timeUntilUTCMidnight is how long the current UTC day still has.
+func timeUntilUTCMidnight(now time.Time) time.Duration {
+	utc := now.UTC()
+	midnight := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+	d := midnight.Sub(utc)
+	if d < 0 {
+		return 0
+	}
+	return d
 }
 
 // queueLimit names the configured value a queue timeout was waiting on, so the
@@ -1058,6 +1199,13 @@ type Limits struct {
 	RPM         int
 	TPM         int
 	Concurrency int
+	// DailyRequests caps the requests one scope may spend per UTC day. It is a
+	// fixed-window budget, not a sliding one: it refills at midnight UTC, the
+	// boundary a provider that publishes a daily allowance names. 0 = unlimited.
+	//
+	// It is provider-scope only: the per-key limits are a caller's own allowance,
+	// and a caller's daily allowance is not a thing the gateway meters.
+	DailyRequests int
 	// TokenQuota caps the key's cumulative prompt+completion tokens. It is
 	// enforced before dispatch and is not a per-window rate: it only ever
 	// decreases the key's remaining budget.

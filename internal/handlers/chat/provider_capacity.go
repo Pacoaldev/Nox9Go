@@ -37,6 +37,7 @@ func (h *ChatHandler) readProviderPolicy(ctx context.Context, provider string) (
 			RPM:               c.RPM,
 			TPM:               c.TPM,
 			Concurrency:       c.Concurrency,
+			DailyRequests:     c.DailyRequests,
 			QueueTimeoutMs:    c.QueueTimeoutMs,
 			TokenQuota:        c.TokenQuota,
 			ContractExpiresAt: c.ContractExpiresAt,

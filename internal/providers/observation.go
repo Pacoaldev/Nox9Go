@@ -167,10 +167,28 @@ func parseObservedLimit(lowerText string, headers http.Header) (int, string) {
 		{obsTokensRe, "tokens"},
 	} {
 		if v, ok := firstGroupInt(m.re, lowerText); ok {
-			return v, m.unit
+			return v, dailyUnitIfNamed(lowerText, m.unit)
 		}
 	}
 	return 0, ""
+}
+
+// dailyUnitIfNamed upgrades a request or token count to the daily unit when the
+// text says the allowance is per day.
+//
+// A provider that publishes "the daily limit of 60 free-model requests" is stating
+// a fixed daily budget, not a per-minute rate, and the two must not be confused:
+// filling a per-minute field with a daily figure would throttle the provider by
+// three orders of magnitude.
+func dailyUnitIfNamed(lowerText, unit string) string {
+	if unit != "requests" && unit != "tokens" {
+		return unit
+	}
+	if strings.Contains(lowerText, "per day") || strings.Contains(lowerText, "daily") ||
+		strings.Contains(lowerText, "per 24 hours") || strings.Contains(lowerText, "each day") {
+		return "rpd"
+	}
+	return unit
 }
 
 func firstHeaderInt(headers http.Header, key string) (int, bool) {

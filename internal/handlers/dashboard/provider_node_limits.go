@@ -36,6 +36,7 @@ type ProviderNodeLimitsResponse struct {
 	RPM            int `json:"rpm"`
 	TPM            int `json:"tpm"`
 	Concurrency    int `json:"concurrency"`
+	DailyRequests  int `json:"dailyRequests"`
 	TokenQuota     int `json:"tokenQuota"`
 	QueueTimeoutMs int `json:"queueTimeoutMs"`
 	// QuotaResetID is the usageHistory row the token quota is measured from, and
@@ -56,6 +57,10 @@ type ProviderNodeLimitsResponse struct {
 	// tell "unused" from "unobserved" reads the policy next to it.
 	RPMUsedWindow     int `json:"rpmUsedWindow"`
 	ActiveConcurrency int `json:"activeConcurrency"`
+	// DailyUsedWindow is how many requests the node spent today against its
+	// daily budget. It is 0 when no daily budget is configured or the limiter is
+	// not wired, which is the same shape an unlimited node reports.
+	DailyUsedWindow int `json:"dailyUsedWindow"`
 }
 
 // providerNodeLimitsFrom assembles the response from values the caller already
@@ -66,6 +71,7 @@ func (h *DashboardHandler) providerNodeLimitsFrom(nodeID string, limits db.Provi
 		RPM:               limits.RPM,
 		TPM:               limits.TPM,
 		Concurrency:       limits.Concurrency,
+		DailyRequests:     limits.DailyRequests,
 		TokenQuota:        limits.TokenQuota,
 		QueueTimeoutMs:    limits.QueueTimeoutMs,
 		QuotaResetID:      limits.QuotaResetID,
@@ -75,6 +81,7 @@ func (h *DashboardHandler) providerNodeLimitsFrom(nodeID string, limits db.Provi
 	}
 	if h.Limiter != nil {
 		res.RPMUsedWindow, res.ActiveConcurrency = h.Limiter.Snapshot(middleware.ProviderScopeKey(nodeID))
+		res.DailyUsedWindow = h.Limiter.SnapshotDaily(middleware.ProviderScopeKey(nodeID))
 	}
 	return res
 }
@@ -111,6 +118,7 @@ func (h *DashboardHandler) HandleUpdateProviderNodeLimits(w http.ResponseWriter,
 		RPM               *int    `json:"rpm"`
 		TPM               *int    `json:"tpm"`
 		Concurrency       *int    `json:"concurrency"`
+		DailyRequests     *int    `json:"dailyRequests"`
 		TokenQuota        *int    `json:"tokenQuota"`
 		QueueTimeoutMs    *int    `json:"queueTimeoutMs"`
 		ContractExpiresAt *string `json:"contractExpiresAt"`
@@ -148,6 +156,7 @@ func (h *DashboardHandler) HandleUpdateProviderNodeLimits(w http.ResponseWriter,
 		{"rpm", patch.RPM, &merged.RPM},
 		{"tpm", patch.TPM, &merged.TPM},
 		{"concurrency", patch.Concurrency, &merged.Concurrency},
+		{"dailyRequests", patch.DailyRequests, &merged.DailyRequests},
 		{"tokenQuota", patch.TokenQuota, &merged.TokenQuota},
 		{"queueTimeoutMs", patch.QueueTimeoutMs, &merged.QueueTimeoutMs},
 	}

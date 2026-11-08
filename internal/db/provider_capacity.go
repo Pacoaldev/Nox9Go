@@ -33,6 +33,10 @@ type ProviderCapacity struct {
 	RPM               int
 	TPM               int
 	Concurrency       int
+	// DailyRequests caps the requests the provider may spend per UTC day. It is a
+	// fixed-window budget, not a sliding one: it refills at midnight UTC, the
+	// boundary a provider that publishes a daily allowance names. 0 = unlimited.
+	DailyRequests     int
 	QueueTimeoutMs    int
 	TokenQuota        int
 	ContractExpiresAt string
@@ -73,7 +77,7 @@ type ProviderObservation struct {
 }
 
 // providerCapacityColumns is the shared column list for a capacity read.
-const providerCapacityColumns = `rpm, tpm, concurrency, queueTimeoutMs, tokenQuota, COALESCE(contractExpiresAt, ''), COALESCE(updatedAt, '')`
+const providerCapacityColumns = `rpm, tpm, concurrency, dailyRequests, queueTimeoutMs, tokenQuota, COALESCE(contractExpiresAt, ''), COALESCE(updatedAt, '')`
 
 // GetProviderCapacity reads an integrated provider's policy. An unknown provider
 // answers the zero value, which the caller reads as "unlimited" — the same shape
@@ -85,7 +89,7 @@ func (r *Repo) GetProviderCapacity(ctx context.Context, providerID string) (Prov
 	}
 	err := r.db.QueryRowContext(ctx,
 		`SELECT `+providerCapacityColumns+` FROM providerCapacity WHERE provider = ? LIMIT 1`, providerID,
-	).Scan(&c.RPM, &c.TPM, &c.Concurrency, &c.QueueTimeoutMs, &c.TokenQuota, &c.ContractExpiresAt, &c.UpdatedAt)
+	).Scan(&c.RPM, &c.TPM, &c.Concurrency, &c.DailyRequests, &c.QueueTimeoutMs, &c.TokenQuota, &c.ContractExpiresAt, &c.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ProviderCapacity{}, nil
 	}
@@ -108,7 +112,7 @@ func (r *Repo) SetProviderCapacity(ctx context.Context, providerID string, c Pro
 	if strings.TrimSpace(providerID) == "" {
 		return fmt.Errorf("set provider capacity: empty provider id")
 	}
-	if c.RPM < 0 || c.TPM < 0 || c.Concurrency < 0 || c.TokenQuota < 0 || c.QueueTimeoutMs < 0 {
+	if c.RPM < 0 || c.TPM < 0 || c.Concurrency < 0 || c.DailyRequests < 0 || c.TokenQuota < 0 || c.QueueTimeoutMs < 0 {
 		return fmt.Errorf("set provider capacity %s: limits are counts and cannot be negative", providerID)
 	}
 	expiresAt := strings.TrimSpace(c.ContractExpiresAt)
@@ -122,17 +126,18 @@ func (r *Repo) SetProviderCapacity(ctx context.Context, providerID string, c Pro
 	updatedAt := time.Now().UTC().Format(time.RFC3339)
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO providerCapacity
-			(provider, rpm, tpm, concurrency, queueTimeoutMs, tokenQuota, contractExpiresAt, updatedAt)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			(provider, rpm, tpm, concurrency, dailyRequests, queueTimeoutMs, tokenQuota, contractExpiresAt, updatedAt)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(provider) DO UPDATE SET
 			rpm = excluded.rpm,
 			tpm = excluded.tpm,
 			concurrency = excluded.concurrency,
+			dailyRequests = excluded.dailyRequests,
 			queueTimeoutMs = excluded.queueTimeoutMs,
 			tokenQuota = excluded.tokenQuota,
 			contractExpiresAt = excluded.contractExpiresAt,
 			updatedAt = excluded.updatedAt`,
-		providerID, c.RPM, c.TPM, c.Concurrency, c.QueueTimeoutMs, c.TokenQuota, expiresAt, updatedAt,
+		providerID, c.RPM, c.TPM, c.Concurrency, c.DailyRequests, c.QueueTimeoutMs, c.TokenQuota, expiresAt, updatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("set provider capacity %s: %w", providerID, err)

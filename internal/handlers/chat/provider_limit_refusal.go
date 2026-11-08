@@ -22,6 +22,10 @@ const (
 	axisTokenQuota = "token_quota"
 	// axisCircuit is a provider whose circuit breaker is open after repeated 5xx.
 	axisCircuit = "circuit_open"
+	// axisDailyRequests is a provider whose fixed UTC-day request budget is spent.
+	// It is not a rate limit: the budget does not refill in a minute, it refills at
+	// midnight UTC, so the client is told a different thing.
+	axisDailyRequests = "rpd"
 )
 
 // providerRefusalStatus derives the HTTP status from the axis. Congestion is a 429:
@@ -47,6 +51,8 @@ func providerRefusalType(axis string) string {
 		return "provider_token_quota_exhausted"
 	case axisCircuit:
 		return "provider_circuit_open"
+	case axisDailyRequests:
+		return "provider_daily_limit_exhausted"
 	default:
 		return "rate_limit_exceeded"
 	}
@@ -120,6 +126,8 @@ func providerRefusalMessage(provider string, attempt providerLimitAttempt) strin
 		return fmt.Sprintf("provider %s contract has ended; an operator must renew it", provider)
 	case axisTokenQuota:
 		return fmt.Sprintf("provider %s lifetime token quota is spent (%d)", provider, attempt.Limit)
+	case axisDailyRequests:
+		return fmt.Sprintf("provider %s daily request budget is spent (%d requests, resets at 00:00 UTC)", provider, attempt.Limit)
 	default:
 		return fmt.Sprintf("provider %s refused this request at its %s limit (%d)", provider, attempt.Axis, attempt.Limit)
 	}

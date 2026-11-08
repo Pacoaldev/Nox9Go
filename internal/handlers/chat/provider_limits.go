@@ -241,10 +241,11 @@ func (h *ChatHandler) providerNodeVerdict(ctx context.Context, provider string, 
 // middlewareLimits maps the stored policy onto the limiter's own type.
 func middlewareLimits(limits db.ProviderLimits) middleware.Limits {
 	return middleware.Limits{
-		RPM:          limits.RPM,
-		TPM:          limits.TPM,
-		Concurrency:  limits.Concurrency,
-		QueueTimeout: time.Duration(limits.QueueTimeoutMs) * time.Millisecond,
+		RPM:            limits.RPM,
+		TPM:            limits.TPM,
+		Concurrency:    limits.Concurrency,
+		DailyRequests:  limits.DailyRequests,
+		QueueTimeout:   time.Duration(limits.QueueTimeoutMs) * time.Millisecond,
 	}
 }
 
@@ -283,7 +284,7 @@ func (h *ChatHandler) acquireProviderAttempt(ctx context.Context, provider, mode
 		return nil, nil
 	}
 	effective := middlewareLimits(limits)
-	if effective.RPM <= 0 && effective.TPM <= 0 && effective.Concurrency <= 0 {
+	if effective.RPM <= 0 && effective.TPM <= 0 && effective.Concurrency <= 0 && effective.DailyRequests <= 0 {
 		return nil, nil
 	}
 
