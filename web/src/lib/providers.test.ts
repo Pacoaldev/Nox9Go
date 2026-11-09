@@ -239,6 +239,7 @@ describe('providers & media separation', () => {
       assert.ok(p, `${id} missing from catalog`)
       assert.strictEqual(p.alias, want.alias, `${id} alias`)
       assert.strictEqual(p.noAuth, want.noAuth, `${id} noAuth`)
+      assert.strictEqual(p.category, 'freeTier', `${id} should be freeTier`)
       assert.ok(isChatProvider(p), `${id} should be a chat provider`)
       assert.strictEqual(getModelsByProviderId(id).length, want.models, `${id} model count`)
       assert.strictEqual(Boolean(p.modelsFetcher), true, `${id} modelsFetcher`)

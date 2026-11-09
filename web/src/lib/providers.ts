@@ -2692,7 +2692,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "iteracompute",
     "name": "IteraCompute",
-    "category": "apikey",
+    "category": "freeTier",
     "alias": "itc",
     "color": "#6366F1",
     "icon": "memory",
@@ -2708,7 +2708,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "ainative",
     "name": "AINative Studio",
-    "category": "apikey",
+    "category": "freeTier",
     "alias": "ain",
     "color": "#0EA5E9",
     "icon": "auto_awesome",
@@ -2724,7 +2724,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "navyai",
     "name": "NavyAI",
-    "category": "apikey",
+    "category": "freeTier",
     "alias": "navy",
     "color": "#1E3A8A",
     "icon": "sailing",
@@ -2740,7 +2740,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "anyapi",
     "name": "AnyAPI",
-    "category": "apikey",
+    "category": "freeTier",
     "alias": "any",
     "color": "#10B981",
     "icon": "hub",
@@ -2756,7 +2756,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "ovhcloud",
     "name": "OVHcloud AI Endpoints",
-    "category": "apikey",
+    "category": "freeTier",
     "alias": "ovh",
     "color": "#000E9C",
     "icon": "cloud",
@@ -2772,7 +2772,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "sealion",
     "name": "SEA-LION (AI Singapore)",
-    "category": "apikey",
+    "category": "freeTier",
     "alias": "sl",
     "color": "#E11D48",
     "icon": "language",
@@ -2788,7 +2788,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "longcat",
     "name": "LongCat (Meituan)",
-    "category": "apikey",
+    "category": "freeTier",
     "alias": "lc",
     "color": "#F59E0B",
     "icon": "pets",
