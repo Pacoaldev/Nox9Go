@@ -478,6 +478,66 @@ var ProviderModels = map[string][]string{
 		"sensenova/sensenova-u1.5-lite",
 		"xkiro-voice",
 	},
+	"iteracompute": {
+		"qwen/qwen3.8-27b",
+	},
+	"itc": {
+		"qwen/qwen3.8-27b",
+	},
+	"ainative": {
+		"gpt-4o-mini",
+		"claude-3-5-haiku-20241022",
+	},
+	"ain": {
+		"gpt-4o-mini",
+		"claude-3-5-haiku-20241022",
+	},
+	"navyai": {
+		"gpt-4o-mini",
+		"deepseek-v3",
+		"llama-3.3-70b-instruct",
+	},
+	"navy": {
+		"gpt-4o-mini",
+		"deepseek-v3",
+		"llama-3.3-70b-instruct",
+	},
+	"anyapi": {
+		"meta-llama/llama-3.3-70b-instruct:free",
+		"qwen/qwen3-coder:free",
+		"nvidia/nemotron-3-ultra-550b-a55b:free",
+		"google/gemma-4-26b-a4b-it:free",
+	},
+	"any": {
+		"meta-llama/llama-3.3-70b-instruct:free",
+		"qwen/qwen3-coder:free",
+		"nvidia/nemotron-3-ultra-550b-a55b:free",
+		"google/gemma-4-26b-a4b-it:free",
+	},
+	"ovhcloud": {
+		"gpt-oss-120b",
+		"Meta-Llama-3_3-70B-Instruct",
+	},
+	"ovh": {
+		"gpt-oss-120b",
+		"Meta-Llama-3_3-70B-Instruct",
+	},
+	"sealion": {
+		"aisingapore/gemma-sea-lion-v4-27b-it",
+		"aisingapore/llama-sea-lion-v3-70b-it",
+	},
+	"sl": {
+		"aisingapore/gemma-sea-lion-v4-27b-it",
+		"aisingapore/llama-sea-lion-v3-70b-it",
+	},
+	"longcat": {
+		"LongCat-Flash",
+		"LongCat-Pro",
+	},
+	"lc": {
+		"LongCat-Flash",
+		"LongCat-Pro",
+	},
 }
 
 // ProviderModelKinds maps provider alias/ID → model id → service kind for the

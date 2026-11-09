@@ -2688,6 +2688,118 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "serviceKinds": [
       "embedding"
     ]
+  },
+  {
+    "id": "iteracompute",
+    "name": "IteraCompute",
+    "category": "apikey",
+    "alias": "itc",
+    "color": "#6366F1",
+    "icon": "memory",
+    "website": "https://iteracompute.com",
+    "notice": {"text": "Free tier: 30M tokens/month, 160K TPM, no credit card required.", "apiKeyUrl": "https://iteracompute.com"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://api.iteracompute.com/v1/models", "type": "openai"}
+  },
+  {
+    "id": "ainative",
+    "name": "AINative Studio",
+    "category": "apikey",
+    "alias": "ain",
+    "color": "#0EA5E9",
+    "icon": "auto_awesome",
+    "website": "https://ainative.studio",
+    "notice": {"text": "Free tier: ~10M tokens/month recurring allocation, no credit card required.", "apiKeyUrl": "https://ainative.studio"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://api.ainative.studio/api/v1/models", "type": "openai"}
+  },
+  {
+    "id": "navyai",
+    "name": "NavyAI",
+    "category": "apikey",
+    "alias": "navy",
+    "color": "#1E3A8A",
+    "icon": "sailing",
+    "website": "https://api.navy",
+    "notice": {"text": "Free tier: 150K tokens/day (~4.5M/month), 20 RPM.", "apiKeyUrl": "https://api.navy"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://api.navy/v1/models", "type": "openai"}
+  },
+  {
+    "id": "anyapi",
+    "name": "AnyAPI",
+    "category": "apikey",
+    "alias": "any",
+    "color": "#10B981",
+    "icon": "hub",
+    "website": "https://anyapi.ai",
+    "notice": {"text": "Free tier: 100K tokens/day recurring on :free models, no credit card required.", "apiKeyUrl": "https://anyapi.ai"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://api.anyapi.ai/v1/models", "type": "openai"}
+  },
+  {
+    "id": "ovhcloud",
+    "name": "OVHcloud AI Endpoints",
+    "category": "apikey",
+    "alias": "ovh",
+    "color": "#000E9C",
+    "icon": "cloud",
+    "website": "https://endpoints.ai.cloud.ovh.net",
+    "notice": {"text": "Works keyless anonymously (2 RPM/IP) or authenticated with API token (400 RPM).", "apiKeyUrl": "https://endpoints.ai.cloud.ovh.net"},
+    "authType": "apikey",
+    "noAuth": true,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models", "type": "openai"}
+  },
+  {
+    "id": "sealion",
+    "name": "SEA-LION (AI Singapore)",
+    "category": "apikey",
+    "alias": "sl",
+    "color": "#E11D48",
+    "icon": "language",
+    "website": "https://sea-lion.ai",
+    "notice": {"text": "Free tier: 10 RPM recurring, Google sign-in, no credit card required.", "apiKeyUrl": "https://sea-lion.ai"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://api.sea-lion.ai/v1/models", "type": "openai"}
+  },
+  {
+    "id": "longcat",
+    "name": "LongCat (Meituan)",
+    "category": "apikey",
+    "alias": "lc",
+    "color": "#F59E0B",
+    "icon": "pets",
+    "website": "https://longcat.chat",
+    "notice": {"text": "Free daily token quota via OpenAI-compatible endpoint.", "apiKeyUrl": "https://longcat.chat"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://api.longcat.chat/openai/v1/models", "type": "openai"}
   }
 ]
 

@@ -719,6 +719,50 @@ func init() {
 	}
 	providerCapabilities["amd"] = providerCapabilities["amd-radeon"]
 
+	providerCapabilities["iteracompute"] = map[string]Capabilities{
+		"qwen/qwen3.8-27b": {Vision: true, Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 262144, MaxOutput: 65536},
+	}
+	providerCapabilities["itc"] = providerCapabilities["iteracompute"]
+
+	providerCapabilities["ainative"] = map[string]Capabilities{
+		"gpt-4o-mini":               {Vision: true, Tools: true, ContextWindow: 128000, MaxOutput: 16384},
+		"claude-3-5-haiku-20241022": {Vision: true, Tools: true, ContextWindow: 200000, MaxOutput: 8192},
+	}
+	providerCapabilities["ain"] = providerCapabilities["ainative"]
+
+	providerCapabilities["navyai"] = map[string]Capabilities{
+		"gpt-4o-mini":            {Vision: true, Tools: true, ContextWindow: 128000, MaxOutput: 16384},
+		"deepseek-v3":            {Tools: true, ContextWindow: 131072, MaxOutput: 16384},
+		"llama-3.3-70b-instruct": {Tools: true, ContextWindow: 131072, MaxOutput: 16384},
+	}
+	providerCapabilities["navy"] = providerCapabilities["navyai"]
+
+	providerCapabilities["anyapi"] = map[string]Capabilities{
+		"meta-llama/llama-3.3-70b-instruct:free": {Tools: true, ContextWindow: 131072, MaxOutput: 16384},
+		"qwen/qwen3-coder:free":                  {Tools: true, ContextWindow: 262144, MaxOutput: 65536},
+		"nvidia/nemotron-3-ultra-550b-a55b:free": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 1048576, MaxOutput: 65536},
+		"google/gemma-4-26b-a4b-it:free":         {Vision: true, Tools: true, ContextWindow: 262144, MaxOutput: 8192},
+	}
+	providerCapabilities["any"] = providerCapabilities["anyapi"]
+
+	providerCapabilities["ovhcloud"] = map[string]Capabilities{
+		"gpt-oss-120b":                {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 131072, MaxOutput: 32768},
+		"Meta-Llama-3_3-70B-Instruct": {Tools: true, ContextWindow: 131072, MaxOutput: 16384},
+	}
+	providerCapabilities["ovh"] = providerCapabilities["ovhcloud"]
+
+	providerCapabilities["sealion"] = map[string]Capabilities{
+		"aisingapore/gemma-sea-lion-v4-27b-it": {Tools: true, ContextWindow: 131072, MaxOutput: 8192},
+		"aisingapore/llama-sea-lion-v3-70b-it": {Tools: true, ContextWindow: 131072, MaxOutput: 8192},
+	}
+	providerCapabilities["sl"] = providerCapabilities["sealion"]
+
+	providerCapabilities["longcat"] = map[string]Capabilities{
+		"LongCat-Flash": {Tools: true, ContextWindow: 131072, MaxOutput: 16384},
+		"LongCat-Pro":   {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 131072, MaxOutput: 32768},
+	}
+	providerCapabilities["lc"] = providerCapabilities["longcat"]
+
 	initPatternIndex()
 }
 

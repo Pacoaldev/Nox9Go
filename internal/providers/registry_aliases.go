@@ -93,4 +93,11 @@ var RegistryAliases = map[string]string{
 	"zed":                 "zd",
 	"hcnsec":              "hc",
 	"xkiro":               "xk",
+	"iteracompute":        "itc",
+	"ainative":            "ain",
+	"navyai":              "navy",
+	"anyapi":              "any",
+	"ovhcloud":            "ovh",
+	"sealion":             "sl",
+	"longcat":             "lc",
 }

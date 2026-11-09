@@ -223,4 +223,25 @@ describe('providers & media separation', () => {
     ).map((p) => p.id)
     assert.deepStrictEqual(missing, [], `providers without artwork: ${missing.join(', ')}`)
   })
+
+  it('wires the 7 freellmapi providers end-to-end', () => {
+    const expected: Record<string, { alias: string; models: number; noAuth: boolean }> = {
+      iteracompute: { alias: 'itc', models: 1, noAuth: false },
+      ainative: { alias: 'ain', models: 2, noAuth: false },
+      navyai: { alias: 'navy', models: 3, noAuth: false },
+      anyapi: { alias: 'any', models: 4, noAuth: false },
+      ovhcloud: { alias: 'ovh', models: 2, noAuth: true },
+      sealion: { alias: 'sl', models: 2, noAuth: false },
+      longcat: { alias: 'lc', models: 2, noAuth: false },
+    }
+    for (const [id, want] of Object.entries(expected)) {
+      const p = PROVIDER_CATALOG.find((e) => e.id === id)
+      assert.ok(p, `${id} missing from catalog`)
+      assert.strictEqual(p.alias, want.alias, `${id} alias`)
+      assert.strictEqual(p.noAuth, want.noAuth, `${id} noAuth`)
+      assert.ok(isChatProvider(p), `${id} should be a chat provider`)
+      assert.strictEqual(getModelsByProviderId(id).length, want.models, `${id} model count`)
+      assert.strictEqual(Boolean(p.modelsFetcher), true, `${id} modelsFetcher`)
+    }
+  })
 })

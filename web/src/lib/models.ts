@@ -146,6 +146,20 @@ export const PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "xiaomi-mimo": "mimo",
   "xiaomi-tokenplan": "xmtp",
   "zed": "zd",
+  "iteracompute": "itc",
+  "itc": "itc",
+  "ainative": "ain",
+  "ain": "ain",
+  "navyai": "navy",
+  "navy": "navy",
+  "anyapi": "any",
+  "any": "any",
+  "ovhcloud": "ovh",
+  "ovh": "ovh",
+  "sealion": "sl",
+  "sl": "sl",
+  "longcat": "lc",
+  "lc": "lc",
 };
 
 const FREEBUFF_MODELS: ProviderModel[] = [
@@ -7367,6 +7381,96 @@ export const BUILTIN_MODELS_BY_PROVIDER: Record<string, ProviderModel[]> = {
       "id": "mimo-v2.5-tts",
       "name": "MiMo V2.5 TTS",
       "type": "tts"
+    }
+  ],
+  "iteracompute": [
+    {
+      "id": "qwen/qwen3.8-27b",
+      "name": "Qwen 3.8 27B",
+      "capabilities": ["vision", "reasoning"]
+    }
+  ],
+  "ainative": [
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT-4o Mini",
+      "capabilities": ["vision"]
+    },
+    {
+      "id": "claude-3-5-haiku-20241022",
+      "name": "Claude 3.5 Haiku",
+      "capabilities": ["vision"]
+    }
+  ],
+  "navyai": [
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT-4o Mini",
+      "capabilities": ["vision"]
+    },
+    {
+      "id": "deepseek-v3",
+      "name": "DeepSeek V3"
+    },
+    {
+      "id": "llama-3.3-70b-instruct",
+      "name": "Llama 3.3 70B Instruct"
+    }
+  ],
+  "anyapi": [
+    {
+      "id": "meta-llama/llama-3.3-70b-instruct:free",
+      "name": "Llama 3.3 70B Instruct (Free)",
+      "isFree": true
+    },
+    {
+      "id": "qwen/qwen3-coder:free",
+      "name": "Qwen3 Coder (Free)",
+      "isFree": true
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "name": "Nemotron 3 Ultra 550B (Free)",
+      "capabilities": ["reasoning"],
+      "isFree": true
+    },
+    {
+      "id": "google/gemma-4-26b-a4b-it:free",
+      "name": "Gemma 4 26B IT (Free)",
+      "capabilities": ["vision"],
+      "isFree": true
+    }
+  ],
+  "ovhcloud": [
+    {
+      "id": "gpt-oss-120b",
+      "name": "GPT-OSS 120B",
+      "capabilities": ["reasoning"]
+    },
+    {
+      "id": "Meta-Llama-3_3-70B-Instruct",
+      "name": "Llama 3.3 70B Instruct"
+    }
+  ],
+  "sealion": [
+    {
+      "id": "aisingapore/gemma-sea-lion-v4-27b-it",
+      "name": "Gemma SEA-LION v4 27B IT"
+    },
+    {
+      "id": "aisingapore/llama-sea-lion-v3-70b-it",
+      "name": "Llama SEA-LION v3 70B IT"
+    }
+  ],
+  "longcat": [
+    {
+      "id": "LongCat-Flash",
+      "name": "LongCat Flash"
+    },
+    {
+      "id": "LongCat-Pro",
+      "name": "LongCat Pro",
+      "capabilities": ["reasoning"]
     }
   ],
 };

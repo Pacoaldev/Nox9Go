@@ -141,6 +141,13 @@ var ProviderAliasMap = map[string]string{
 	"zd":             "zed",
 	"hc":             "hcnsec",
 	"xk":             "xkiro",
+	"itc":            "iteracompute",
+	"ain":            "ainative",
+	"navy":           "navyai",
+	"any":            "anyapi",
+	"ovh":            "ovhcloud",
+	"sl":             "sealion",
+	"lc":             "longcat",
 }
 
 // ResolveAlias returns the canonical provider ID for an alias, or the alias itself if not found.

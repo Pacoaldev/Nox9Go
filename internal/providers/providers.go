@@ -209,8 +209,22 @@ var modelsListURL = map[string]string{
 	"xk":          "https://api.xkiro.com/v1/models",
 	// AMD Radeon Cloud Token Factory (China site). Auth required; catalogue
 	// is the source of truth and churns faster than the static snapshot.
-	"amd-radeon": "https://developer.amd.com.cn/radeon/api/v1/models",
-	"amd":        "https://developer.amd.com.cn/radeon/api/v1/models",
+	"amd-radeon":   "https://developer.amd.com.cn/radeon/api/v1/models",
+	"amd":          "https://developer.amd.com.cn/radeon/api/v1/models",
+	"iteracompute": "https://api.iteracompute.com/v1/models",
+	"itc":          "https://api.iteracompute.com/v1/models",
+	"ainative":     "https://api.ainative.studio/api/v1/models",
+	"ain":          "https://api.ainative.studio/api/v1/models",
+	"navyai":       "https://api.navy/v1/models",
+	"navy":         "https://api.navy/v1/models",
+	"anyapi":       "https://api.anyapi.ai/v1/models",
+	"any":          "https://api.anyapi.ai/v1/models",
+	"ovhcloud":     "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models",
+	"ovh":          "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models",
+	"sealion":      "https://api.sea-lion.ai/v1/models",
+	"sl":           "https://api.sea-lion.ai/v1/models",
+	"longcat":      "https://api.longcat.chat/openai/v1/models",
+	"lc":           "https://api.longcat.chat/openai/v1/models",
 }
 
 // modelsListHeaders carries the extra headers one live-catalogue endpoint
@@ -1425,6 +1439,80 @@ var KnownProviders = map[string]ProviderConfig{
 		FetchURL:    "https://api.xkiro.com/v1/fetch",
 		FetchMethod: "POST",
 		UsageURL:    "https://api.xkiro.com/v1/usage",
+		AuthHeader:  "Authorization",
+		AuthScheme:  "bearer",
+	},
+	"iteracompute": {
+		BaseURL:    "https://api.iteracompute.com/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"itc": {
+		BaseURL:    "https://api.iteracompute.com/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"ainative": {
+		BaseURL:    "https://api.ainative.studio/api/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"ain": {
+		BaseURL:    "https://api.ainative.studio/api/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"navyai": {
+		BaseURL:       "https://api.navy/v1/chat/completions",
+		AuthHeader:    "Authorization",
+		AuthScheme:    "bearer",
+		StaticHeaders: map[string]string{"User-Agent": "NOX9GO/1.0"},
+	},
+	"navy": {
+		BaseURL:       "https://api.navy/v1/chat/completions",
+		AuthHeader:    "Authorization",
+		AuthScheme:    "bearer",
+		StaticHeaders: map[string]string{"User-Agent": "NOX9GO/1.0"},
+	},
+	"anyapi": {
+		BaseURL:    "https://api.anyapi.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"any": {
+		BaseURL:    "https://api.anyapi.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"ovhcloud": {
+		BaseURL:    "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+		NoAuth:     true,
+	},
+	"ovh": {
+		BaseURL:    "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+		NoAuth:     true,
+	},
+	"sealion": {
+		BaseURL:    "https://api.sea-lion.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"sl": {
+		BaseURL:    "https://api.sea-lion.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"longcat": {
+		BaseURL:    "https://api.longcat.chat/openai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"lc": {
+		BaseURL:    "https://api.longcat.chat/openai/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},
