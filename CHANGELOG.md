@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased] - 1.1.1
+
+### Providers & Dashboard
+
+- **Reclassified seven FreeLLMAPI providers to Free Tier section.** Moved `iteracompute` (`itc`), `ainative` (`ain`), `navyai` (`navy`), `anyapi` (`any`), `ovhcloud` (`ovh`), `sealion` (`sl`), and `longcat` (`lc`) from `apikey` to the `freeTier` category in `web/src/lib/providers.ts` so they correctly render under the "Free Tier Providers" dashboard tab.
+- **Provider logo parity.** Bundled and verified SVG/PNG brand artwork for all seven free-tier providers under `web/public/providers/` (`iteracompute.svg`, `ainative.svg`, `navyai.png`, `anyapi.png`, `ovhcloud.svg`, `sealion.png`, `longcat.png`).
+- **Modernized frontend provider test suite.** Refactored `web/src/lib/providers.test.ts` to `bun:test` (`describe`, `expect`, `it`), replacing legacy `node:assert` and `node:test` calls. Added strict null-check guards eliminating TypeScript diagnostic warnings, updated path resolution to `import.meta.dirname`, and aligned test assertions with the `freeTier` category schema.
+
 ## [1.1.0] - 2026-11-09
 
 ### Routing & Executors
