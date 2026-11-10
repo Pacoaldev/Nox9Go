@@ -257,10 +257,6 @@ func (h *ChatHandler) handleAccountFallback(
 			currentBackoffLevel := h.Repo.GetConnectionBackoffLevel(connObj.ID)
 			// Classify error to get dynamic cooldown
 			classification := providers.ClassifyError(ue.StatusCode, errorText, currentBackoffLevel)
-			// Grow the integrated-provider knowledge base from this failure, so the
-			// dashboard can prefill that provider's capacity editor. Fail-open and
-			// integrated-providers-only: see provider_capacity.go.
-			h.recordProviderObservation(ctx, provider, model, ue.StatusCode, ue.Body, ue.Header)
 			cooldownSec := retryableCooldownSec(provider, ue.StatusCode, time.Duration(classification.CooldownMs)*time.Millisecond, ue)
 			cooldownSec = accountRestrictionCooldownSec(provider, ue, cooldownSec)
 			errMsg := errorText
@@ -1045,6 +1041,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 
 	usage := translator.GetAndClearUsage(ctx)
 	if completed {
+		h.recordProviderHeaderObservations(ctx, provider, model, http.StatusOK, metrics.UpstreamHeader)
 		// A dashboard "Test" probe (POST /api/models/test) is dispatched into
 		// this very handler, and it reaches the provider for real — but it is
 		// not operator traffic. Recording it wrote a usageHistory row and a
@@ -1201,6 +1198,13 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 			"provider", provider, "model", model,
 			"status", statusCode, "error", fwdErr,
 		}, identity...)...)
+		if errors.As(fwdErr, &ue) {
+			if !isOpencodeFreeTierRefusal(provider, ue) {
+				h.recordProviderObservation(ctx, provider, model, ue.StatusCode, ue.Body, ue.Header)
+			}
+		} else if errors.Is(fwdErr, context.DeadlineExceeded) {
+			h.recordProviderObservation(ctx, provider, model, http.StatusGatewayTimeout, []byte(fwdErr.Error()), nil)
+		}
 	}
 
 	if !errors.As(fwdErr, &zc) {
@@ -1398,7 +1402,11 @@ func extractErrorText(body []byte) string {
 				Reason string `json:"reason"`
 			} `json:"details"`
 		} `json:"error"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 		Message string `json:"message"`
+		Detail  string `json:"detail"`
 	}
 	if err := json.Unmarshal(body, &parsed); err == nil {
 		var parts []string
@@ -1406,6 +1414,14 @@ func extractErrorText(body []byte) string {
 			parts = append(parts, parsed.Error.Message)
 		} else if parsed.Message != "" {
 			parts = append(parts, parsed.Message)
+		} else if parsed.Detail != "" {
+			parts = append(parts, parsed.Detail)
+		} else {
+			for _, e := range parsed.Errors {
+				if e.Message != "" {
+					parts = append(parts, e.Message)
+				}
+			}
 		}
 		if parsed.Error.Status != "" {
 			parts = append(parts, parsed.Error.Status)
@@ -1417,6 +1433,32 @@ func extractErrorText(body []byte) string {
 		}
 		if len(parts) > 0 {
 			return strings.Join(parts, " ")
+		}
+	}
+	var strErr struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &strErr); err == nil && strings.TrimSpace(strErr.Error) != "" {
+		return strings.TrimSpace(strErr.Error)
+	}
+	var arrParsed []struct {
+		Error struct {
+			Message string `json:"message"`
+			Status  string `json:"status"`
+		} `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &arrParsed); err == nil {
+		for _, item := range arrParsed {
+			if item.Error.Message != "" {
+				if item.Error.Status != "" {
+					return item.Error.Message + " " + item.Error.Status
+				}
+				return item.Error.Message
+			}
+			if item.Message != "" {
+				return item.Message
+			}
 		}
 	}
 	trimmed := bytes.TrimSpace(body)

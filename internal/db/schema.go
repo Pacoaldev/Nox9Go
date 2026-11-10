@@ -649,6 +649,9 @@ func EnsureCoreSchema(db *sql.DB) error {
 	if err := BackfillCompressionAnalytics(db); err != nil {
 		return err
 	}
+	if err := BackfillProviderObservations(db); err != nil {
+		return err
+	}
 	return nil
 }
 

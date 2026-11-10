@@ -647,6 +647,10 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 				if modelInfo.Provider == "mimo-free" {
 					comboMetrics := &streamMetrics{}
 					fwdErr = h.MimoFreeChat(fwdCtx, attemptWriter, upstreamJSON, isStream, comboMetrics)
+					var mimoUE *upstreamError
+					if errors.As(fwdErr, &mimoUE) && ctx.Err() == nil && !errors.Is(fwdCtx.Err(), context.Canceled) {
+						h.recordProviderObservation(ctx, modelInfo.Provider, modelInfo.Model, mimoUE.StatusCode, mimoUE.Body, mimoUE.Header)
+					}
 				} else {
 					fwdErr = h.tryForwardWithConnection(forwardRequestParams{
 						Ctx: fwdCtx, W: attemptWriter, Provider: modelInfo.Provider, Model: modelInfo.Model,
@@ -663,6 +667,7 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 				if memberTimedOut {
 					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", comboMemberTimeout)
 					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, comboMemberTimeout))}
+					h.recordProviderObservation(ctx, modelInfo.Provider, modelInfo.Model, lastErr.StatusCode, lastErr.Body, nil)
 					break
 				}
 
@@ -1008,6 +1013,7 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 				if memberTimedOut {
 					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", comboMemberTimeout)
 					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, comboMemberTimeout))}
+					h.recordProviderObservation(ctx, modelInfo.Provider, modelInfo.Model, lastErr.StatusCode, lastErr.Body, nil)
 					break
 				}
 

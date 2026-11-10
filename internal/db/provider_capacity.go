@@ -3,10 +3,15 @@ package db
 import (
 	"context"
 	"database/sql"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"nox9go/proxy/internal/providers"
 )
 
 // Capacity for INTEGRATED providers (docs/provider-capacity-learning).
@@ -241,4 +246,193 @@ func boundEvidence(raw string) string {
 		cut = cut[:len(cut)-1]
 	}
 	return strings.TrimSpace(cut)
+}
+
+var backfillConnStatusRe = regexp.MustCompile(`(?:\[(\d{3})\]|\b(?:HTTP|status|returned)\s+(\d{3})\b)`)
+
+func parseBackfillConnError(raw string) (int, string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, ""
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var obj struct {
+			Message    string `json:"message"`
+			StatusCode int    `json:"statusCode"`
+			Status     int    `json:"status"`
+		}
+		if err := json.Unmarshal([]byte(trimmed), &obj); err == nil {
+			code := obj.StatusCode
+			if code == 0 {
+				code = obj.Status
+			}
+			msg := strings.TrimSpace(obj.Message)
+			if msg == "" {
+				msg = trimmed
+			}
+			return code, msg
+		}
+	}
+	if m := backfillConnStatusRe.FindStringSubmatch(trimmed); len(m) >= 3 {
+		s := m[1]
+		if s == "" {
+			s = m[2]
+		}
+		if code, err := strconv.Atoi(s); err == nil && code >= 400 && code <= 599 {
+			return code, trimmed
+		}
+	}
+	return 0, trimmed
+}
+
+// BackfillProviderObservations populates providerObservations once from historical
+// error records in requestDetails and providerConnections so existing installations
+// immediately surface learned provider facts in the dashboard.
+func BackfillProviderObservations(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+
+	var done string
+	if err := db.QueryRow(`SELECT value FROM _meta WHERE key = 'migration_provider_observations_backfill_v1'`).Scan(&done); err == nil && done == "true" {
+		return nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	upsertStmt, prepErr := db.Prepare(`
+		INSERT INTO providerObservations
+			(provider, model, signal, statusCode, limitValue, limitUnit, evidence, sampleCount, firstSeen, lastSeen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(provider, model, signal, limitUnit, limitValue) DO UPDATE SET
+			sampleCount = sampleCount + excluded.sampleCount,
+			firstSeen = CASE WHEN firstSeen = '' OR (excluded.firstSeen != '' AND excluded.firstSeen < firstSeen) THEN excluded.firstSeen ELSE firstSeen END,
+			lastSeen = CASE WHEN excluded.lastSeen > lastSeen THEN excluded.lastSeen ELSE lastSeen END,
+			statusCode = CASE WHEN excluded.statusCode > 0 THEN excluded.statusCode ELSE statusCode END,
+			evidence = CASE WHEN excluded.evidence != '' THEN excluded.evidence ELSE evidence END`)
+	if prepErr != nil {
+		return nil
+	}
+	defer upsertStmt.Close()
+
+	rdRows, err := db.Query(`
+		SELECT
+			COALESCE(provider, ''),
+			COALESCE(model, ''),
+			CAST(COALESCE(json_extract(data, '$.response.status'), 0) AS INTEGER) AS statusCode,
+			COALESCE(json_extract(data, '$.response.error'), '') AS errText,
+			COUNT(*) AS cnt,
+			MIN(COALESCE(timestamp, '')),
+			MAX(COALESCE(timestamp, ''))
+		FROM requestDetails
+		WHERE status = 'error' AND data IS NOT NULL AND json_valid(data)
+		GROUP BY provider, model, statusCode, errText`)
+	if err == nil {
+		defer rdRows.Close()
+		for rdRows.Next() {
+			var (
+				prov, mdl, errText, minTS, maxTS string
+				statusCode, cnt                  int
+			)
+			if scanErr := rdRows.Scan(&prov, &mdl, &statusCode, &errText, &cnt, &minTS, &maxTS); scanErr != nil {
+				continue
+			}
+			if statusCode == 499 && (errText == "" || errText == "request failed") {
+				continue
+			}
+			canon := providers.ResolveAlias(strings.TrimSpace(prov))
+			if _, ok := providers.KnownProviders[canon]; !ok {
+				continue
+			}
+			obs, ok := providers.ClassifyObservation(statusCode, []byte(errText), nil)
+			if !ok {
+				continue
+			}
+			if cnt <= 0 {
+				cnt = 1
+			}
+			if strings.TrimSpace(minTS) == "" {
+				minTS = now
+			}
+			if strings.TrimSpace(maxTS) == "" {
+				maxTS = minTS
+			}
+			_, _ = upsertStmt.Exec(
+				canon,
+				strings.TrimSpace(mdl),
+				obs.Signal,
+				obs.StatusCode,
+				obs.LimitValue,
+				strings.TrimSpace(obs.LimitUnit),
+				boundEvidence(obs.Evidence),
+				cnt,
+				minTS,
+				maxTS,
+			)
+		}
+		if err := rdRows.Err(); err != nil {
+			return fmt.Errorf("BackfillProviderObservations requestDetails rows: %w", err)
+		}
+	}
+
+	connInsertStmt, connPrepErr := db.Prepare(`
+		INSERT INTO providerObservations
+			(provider, model, signal, statusCode, limitValue, limitUnit, evidence, sampleCount, firstSeen, lastSeen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+		ON CONFLICT(provider, model, signal, limitUnit, limitValue) DO UPDATE SET
+			evidence = CASE WHEN evidence = '' AND excluded.evidence != '' THEN excluded.evidence ELSE evidence END`)
+	if connPrepErr == nil {
+		defer connInsertStmt.Close()
+		connRows, cErr := db.Query(`
+			SELECT
+				COALESCE(provider, ''),
+				COALESCE(json_extract(data, '$.defaultModel'), ''),
+				COALESCE(json_extract(data, '$.lastError'), ''),
+				COALESCE(json_extract(data, '$.lastErrorAt'), updatedAt, createdAt, '')
+			FROM providerConnections
+			WHERE data IS NOT NULL AND json_valid(data)
+			  AND json_extract(data, '$.lastError') IS NOT NULL`)
+		if cErr == nil {
+			defer connRows.Close()
+			for connRows.Next() {
+				var prov, mdl, lastErrRaw, ts string
+				if scanErr := connRows.Scan(&prov, &mdl, &lastErrRaw, &ts); scanErr != nil {
+					continue
+				}
+				statusCode, msg := parseBackfillConnError(lastErrRaw)
+				if msg == "" || msg == "Provider test not supported" {
+					continue
+				}
+				canon := providers.ResolveAlias(strings.TrimSpace(prov))
+				if _, ok := providers.KnownProviders[canon]; !ok {
+					continue
+				}
+				obs, ok := providers.ClassifyObservation(statusCode, []byte(msg), nil)
+				if !ok {
+					continue
+				}
+				if strings.TrimSpace(ts) == "" {
+					ts = now
+				}
+				_, _ = connInsertStmt.Exec(
+					canon,
+					strings.TrimSpace(mdl),
+					obs.Signal,
+					obs.StatusCode,
+					obs.LimitValue,
+					strings.TrimSpace(obs.LimitUnit),
+					boundEvidence(obs.Evidence),
+					ts,
+					ts,
+				)
+			}
+			if err := connRows.Err(); err != nil {
+				return fmt.Errorf("BackfillProviderObservations providerConnections rows: %w", err)
+			}
+		}
+	}
+
+	if _, err := db.Exec(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('migration_provider_observations_backfill_v1', 'true')`); err != nil {
+		return fmt.Errorf("BackfillProviderObservations mark done: %w", err)
+	}
+	return nil
 }

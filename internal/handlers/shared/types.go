@@ -159,8 +159,9 @@ func (b *ResponseBuf) Bytes() []byte {
 
 // StreamMetrics captures timing and content during a proxied stream.
 type StreamMetrics struct {
-	TTFT        int64       // ms from request start to first chunk
-	ResponseBuf ResponseBuf // accumulated response content (capped)
+	TTFT           int64       // ms from request start to first chunk
+	ResponseBuf    ResponseBuf // accumulated response content (capped)
+	UpstreamHeader http.Header // upstream HTTP response headers when available
 }
 
 // UpstreamError is an alias for proxy.UpstreamError — retryable errors from upstream.

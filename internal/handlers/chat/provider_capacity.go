@@ -65,19 +65,65 @@ func (h *ChatHandler) recordProviderObservation(ctx context.Context, provider, m
 	if _, known := providers.KnownProviders[canon]; !known {
 		return
 	}
+	writeCtx := context.Background()
+	if ctx != nil {
+		writeCtx = context.WithoutCancel(ctx)
+	}
 	obs, ok := providers.ClassifyObservation(status, body, headers)
-	if !ok {
+	if ok {
+		if _, err := h.Repo.RecordProviderObservation(writeCtx, db.ProviderObservation{
+			Provider:   canon,
+			Model:      model,
+			Signal:     obs.Signal,
+			StatusCode: obs.StatusCode,
+			LimitValue: obs.LimitValue,
+			LimitUnit:  obs.LimitUnit,
+			Evidence:   obs.Evidence,
+		}); err != nil {
+			log.Debug("providerobs", "record failed", "provider", canon, "error", err)
+		}
+	}
+	for _, hObs := range providers.ClassifyHeaderObservations(status, headers) {
+		if ok && hObs.LimitUnit == obs.LimitUnit && hObs.LimitValue == obs.LimitValue {
+			continue
+		}
+		if _, err := h.Repo.RecordProviderObservation(writeCtx, db.ProviderObservation{
+			Provider:   canon,
+			Model:      model,
+			Signal:     hObs.Signal,
+			StatusCode: hObs.StatusCode,
+			LimitValue: hObs.LimitValue,
+			LimitUnit:  hObs.LimitUnit,
+			Evidence:   hObs.Evidence,
+		}); err != nil {
+			log.Debug("providerobs", "record header failed", "provider", canon, "error", err)
+		}
+	}
+}
+
+func (h *ChatHandler) recordProviderHeaderObservations(ctx context.Context, provider, model string, status int, headers http.Header) {
+	if h == nil || h.Repo == nil || provider == "" || headers == nil {
 		return
 	}
-	if _, err := h.Repo.RecordProviderObservation(ctx, db.ProviderObservation{
-		Provider:   canon,
-		Model:      model,
-		Signal:     obs.Signal,
-		StatusCode: obs.StatusCode,
-		LimitValue: obs.LimitValue,
-		LimitUnit:  obs.LimitUnit,
-		Evidence:   obs.Evidence,
-	}); err != nil {
-		log.Debug("providerobs", "record failed", "provider", canon, "error", err)
+	canon := providers.ResolveAlias(provider)
+	if _, known := providers.KnownProviders[canon]; !known {
+		return
+	}
+	writeCtx := context.Background()
+	if ctx != nil {
+		writeCtx = context.WithoutCancel(ctx)
+	}
+	for _, hObs := range providers.ClassifyHeaderObservations(status, headers) {
+		if _, err := h.Repo.RecordProviderObservation(writeCtx, db.ProviderObservation{
+			Provider:   canon,
+			Model:      model,
+			Signal:     hObs.Signal,
+			StatusCode: hObs.StatusCode,
+			LimitValue: hObs.LimitValue,
+			LimitUnit:  hObs.LimitUnit,
+			Evidence:   hObs.Evidence,
+		}); err != nil {
+			log.Debug("providerobs", "record header failed", "provider", canon, "error", err)
+		}
 	}
 }

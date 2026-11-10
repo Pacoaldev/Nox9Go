@@ -140,3 +140,30 @@ func TestAcquireProviderAttempt_UnlimitedIntegratedProviderReturnsNoSlot(t *test
 		t.Fatalf("unconfigured integrated provider = slot %v err %v, want nil/nil", slot, err)
 	}
 }
+
+func TestRecordProviderObservation_CanceledContextAnd200Headers(t *testing.T) {
+	handler, repo := newProviderLimitHandler(t)
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handler.recordProviderObservation(canceledCtx, "minimax-cn", "MiniMax-M2.7",
+		http.StatusGatewayTimeout, []byte(`upstream timed out`), nil)
+
+	obs, err := repo.ListProviderObservations(context.Background(), "minimax-cn")
+	if err != nil || len(obs) != 1 {
+		t.Fatalf("minimax-cn observations with canceled ctx = %+v, err %v; want 1", obs, err)
+	}
+	if obs[0].Signal != "timeout" {
+		t.Errorf("signal = %q, want timeout", obs[0].Signal)
+	}
+
+	h := http.Header{}
+	h.Set("x-ratelimit-limit-requests-minute", "60")
+	h.Set("x-ratelimit-limit-tokens-minute", "150000")
+	handler.recordProviderHeaderObservations(context.Background(), "groq", "llama-3.3-70b-versatile", http.StatusOK, h)
+
+	groqObs, err := repo.ListProviderObservations(context.Background(), "groq")
+	if err != nil || len(groqObs) != 2 {
+		t.Fatalf("groq header observations = %+v, err %v; want 2", groqObs, err)
+	}
+}

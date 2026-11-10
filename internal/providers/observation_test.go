@@ -117,3 +117,117 @@ func TestObservationEvidence_PrefersJSONMessage(t *testing.T) {
 		t.Errorf("evidence = %q, want the trimmed raw text", raw)
 	}
 }
+
+func TestClassifyObservation_RealWorldProviderBodies(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		body       string
+		wantOK     bool
+		wantSignal string
+		wantVal    int
+		wantUnit   string
+	}{
+		{
+			name:       "groq 413 TPM limit",
+			status:     http.StatusRequestEntityTooLarge,
+			body:       `Request too large for model moonshotai/kimi-k2-instruct on tokens per minute (TPM): Limit 8000, Requested 72572`,
+			wantOK:     true,
+			wantSignal: SignalRateLimit,
+			wantVal:    8000,
+			wantUnit:   "tpm",
+		},
+		{
+			name:       "groq 413 ITPM limit",
+			status:     http.StatusRequestEntityTooLarge,
+			body:       `Request too large for model openai/gpt-oss-120b on input tokens per minute (ITPM): Limit 7000, Requested 22480`,
+			wantOK:     true,
+			wantSignal: SignalRateLimit,
+			wantVal:    7000,
+			wantUnit:   "tpm",
+		},
+		{
+			name:       "gonkabroker 6 RPM",
+			status:     http.StatusTooManyRequests,
+			body:       `Rate limit exceeded (6 RPM). Add X-Wallet-Address header with $GNK balance for 60 RPM.`,
+			wantOK:     true,
+			wantSignal: SignalRateLimit,
+			wantVal:    6,
+			wantUnit:   "rpm",
+		},
+		{
+			name:       "api-airforce 1 request(s) per minute",
+			status:     http.StatusTooManyRequests,
+			body:       `Ratelimit Exceeded! Please wait before making more requests. Limit: 1 request(s) per minute.`,
+			wantOK:     true,
+			wantSignal: SignalRateLimit,
+			wantVal:    1,
+			wantUnit:   "rpm",
+		},
+		{
+			name:       "minimax-cn token plan quota CJK",
+			status:     http.StatusTooManyRequests,
+			body:       `已达到 Token Plan 用量上限，请稍后再试 (2056)`,
+			wantOK:     true,
+			wantSignal: SignalQuotaExceeded,
+		},
+		{
+			name:       "minimax-cn token plan rate limit CJK",
+			status:     http.StatusTooManyRequests,
+			body:       `已达到 Token Plan 速率限制，请稍后再试 (1002)`,
+			wantOK:     true,
+			wantSignal: SignalRateLimit,
+		},
+		{
+			name:       "openrouter upsell does not invent 1000 rpd limit",
+			status:     http.StatusTooManyRequests,
+			body:       `Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day`,
+			wantOK:     true,
+			wantSignal: SignalQuotaExceeded,
+			wantVal:    0,
+			wantUnit:   "",
+		},
+		{
+			name:   "embedded 502 context length error is rejected",
+			status: http.StatusBadGateway,
+			body:   `upstream SSE error frame: {"message":"Upstream error: This model's maximum context length is 256000 tokens. However, your messages resulted in 288332 tokens.","code":"bad_response_status_code"}`,
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ClassifyObservation(tt.status, []byte(tt.body), nil)
+			if ok != tt.wantOK {
+				t.Fatalf("ClassifyObservation() ok = %v, want %v (got %+v)", ok, tt.wantOK, got)
+			}
+			if !tt.wantOK {
+				return
+			}
+			if got.Signal != tt.wantSignal {
+				t.Errorf("Signal = %q, want %q", got.Signal, tt.wantSignal)
+			}
+			if got.LimitValue != tt.wantVal || got.LimitUnit != tt.wantUnit {
+				t.Errorf("Limit = %d %q, want %d %q", got.LimitValue, got.LimitUnit, tt.wantVal, tt.wantUnit)
+			}
+		})
+	}
+}
+
+func TestClassifyHeaderObservations(t *testing.T) {
+	h := http.Header{}
+	h.Set("x-ratelimit-limit-requests-minute", "30")
+	h.Set("x-ratelimit-limit-tokens-minute", "12000")
+	h.Set("x-ratelimit-limit-requests-day", "14400")
+
+	got := ClassifyHeaderObservations(http.StatusOK, h)
+	if len(got) != 3 {
+		t.Fatalf("len(ClassifyHeaderObservations) = %d, want 3 (%+v)", len(got), got)
+	}
+	want := map[string]int{"rpm": 30, "tpm": 12000, "rpd": 14400}
+	for _, obs := range got {
+		if want[obs.LimitUnit] != obs.LimitValue {
+			t.Errorf("unexpected header observation: %+v", obs)
+		}
+	}
+}

@@ -8,9 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlerutil"
 	"nox9go/proxy/internal/models"
 	"nox9go/proxy/internal/providers"
@@ -1012,4 +1015,36 @@ func (h *DashboardHandler) persistProbeResult(conn *models.ProviderConnection, r
 		return
 	}
 	_ = h.Repo.UpdateConnectionData(conn.ID, string(encoded))
+
+	if h.Repo != nil && conn != nil && out.message != "" && out.message != "Provider test not supported" {
+		canon := providers.ResolveAlias(conn.Provider)
+		if _, known := providers.KnownProviders[canon]; known {
+			status := extractProbeStatusCode(out.message)
+			if obs, ok := providers.ClassifyObservation(status, []byte(out.message), nil); ok {
+				_, _ = h.Repo.RecordProviderObservation(context.Background(), db.ProviderObservation{
+					Provider:   canon,
+					Signal:     obs.Signal,
+					StatusCode: obs.StatusCode,
+					LimitValue: obs.LimitValue,
+					LimitUnit:  obs.LimitUnit,
+					Evidence:   obs.Evidence,
+				})
+			}
+		}
+	}
+}
+
+var probeStatusRe = regexp.MustCompile(`(?:\[(\d{3})\]|\b(?:HTTP|status|returned)\s+(\d{3})\b)`)
+
+func extractProbeStatusCode(message string) int {
+	if m := probeStatusRe.FindStringSubmatch(message); len(m) >= 3 {
+		raw := m[1]
+		if raw == "" {
+			raw = m[2]
+		}
+		if code, err := strconv.Atoi(raw); err == nil && code >= 400 && code <= 599 {
+			return code
+		}
+	}
+	return 0
 }

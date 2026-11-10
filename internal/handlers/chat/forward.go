@@ -96,6 +96,7 @@ func (h *ChatHandler) forwardRequest(
 	if metrics == nil {
 		metrics = &streamMetrics{}
 	}
+	metrics.UpstreamHeader = resp.Header
 	if isStream {
 		contentType := resp.Header.Get("Content-Type")
 		if !strings.HasPrefix(strings.ToLower(contentType), "text/event-stream") {

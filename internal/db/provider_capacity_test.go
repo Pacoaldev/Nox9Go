@@ -238,3 +238,73 @@ func TestBoundEvidence_TrimsAndCollapsesWhitespace(t *testing.T) {
 		t.Errorf("evidence length = %d, want <= %d", len(got), maxEvidenceLen)
 	}
 }
+
+func TestBackfillProviderObservations(t *testing.T) {
+	repo := openEphemeralSchemaDB(t)
+	ctx := context.Background()
+
+	// Clear the migration flag seeded during openEphemeralSchemaDB so we can test backfill with rows.
+	if _, err := repo.db.Exec(`DELETE FROM _meta WHERE key = 'migration_provider_observations_backfill_v1'`); err != nil {
+		t.Fatalf("clear _meta: %v", err)
+	}
+
+	_, err := repo.db.Exec(`
+		INSERT INTO requestDetails (id, provider, model, timestamp, status, data)
+		VALUES
+			('req-1', 'minimax-cn', 'MiniMax-M2.7', '2026-11-01T10:00:00Z', 'error',
+			 '{"response":{"status":429,"error":"已达到 Token Plan 用量上限，请稍后再试 (2056)"}}'),
+			('req-2', 'minimax-cn', 'MiniMax-M2.7', '2026-11-01T10:05:00Z', 'error',
+			 '{"response":{"status":429,"error":"已达到 Token Plan 用量上限，请稍后再试 (2056)"}}'),
+			('req-3', 'groq', 'moonshotai/kimi-k2-instruct', '2026-11-01T11:00:00Z', 'error',
+			 '{"response":{"status":413,"error":"Request too large for model moonshotai/kimi-k2-instruct on tokens per minute (TPM): Limit 8000, Requested 72572"}}')
+	`)
+	if err != nil {
+		t.Fatalf("seed requestDetails: %v", err)
+	}
+
+	_, err = repo.db.Exec(`
+		INSERT INTO providerConnections (id, provider, authType, name, priority, isActive, createdAt, updatedAt, data)
+		VALUES ('conn-sf', 'siliconflow', 'apikey', 'sf-key', 1, 1, '2026-11-01T12:00:00Z', '2026-11-01T12:00:00Z',
+		        '{"lastError":"[402]: Paid balance is insufficient","lastErrorAt":"2026-11-01T12:00:00Z"}')
+	`)
+	if err != nil {
+		t.Fatalf("seed providerConnections: %v", err)
+	}
+
+	if err := BackfillProviderObservations(repo.db); err != nil {
+		t.Fatalf("BackfillProviderObservations: %v", err)
+	}
+
+	mmObs, err := repo.ListProviderObservations(ctx, "minimax-cn")
+	if err != nil || len(mmObs) != 1 {
+		t.Fatalf("minimax-cn observations = %+v, err %v; want 1", mmObs, err)
+	}
+	if mmObs[0].Signal != "quota_exceeded" || mmObs[0].SampleCount != 2 {
+		t.Errorf("minimax-cn observation = %+v, want quota_exceeded with sampleCount 2", mmObs[0])
+	}
+
+	groqObs, err := repo.ListProviderObservations(ctx, "groq")
+	if err != nil || len(groqObs) != 1 {
+		t.Fatalf("groq observations = %+v, err %v; want 1", groqObs, err)
+	}
+	if groqObs[0].LimitValue != 8000 || groqObs[0].LimitUnit != "tpm" {
+		t.Errorf("groq observation = %+v, want 8000 tpm", groqObs[0])
+	}
+
+	sfObs, err := repo.ListProviderObservations(ctx, "siliconflow")
+	if err != nil || len(sfObs) != 1 {
+		t.Fatalf("siliconflow observations = %+v, err %v; want 1", sfObs, err)
+	}
+	if sfObs[0].Signal != "quota_exceeded" {
+		t.Errorf("siliconflow observation = %+v, want quota_exceeded", sfObs[0])
+	}
+
+	// Second call must be idempotent and not increment sampleCount.
+	if err := BackfillProviderObservations(repo.db); err != nil {
+		t.Fatalf("second BackfillProviderObservations: %v", err)
+	}
+	mmObsAfter, _ := repo.ListProviderObservations(ctx, "minimax-cn")
+	if len(mmObsAfter) != 1 || mmObsAfter[0].SampleCount != 2 {
+		t.Errorf("sampleCount changed on second backfill: %+v", mmObsAfter)
+	}
+}
