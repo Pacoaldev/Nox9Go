@@ -1,19 +1,19 @@
 {
-  "latestVersion": "1.1.0",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.0/nox9go-windows-amd64.exe",
+  "latestVersion": "1.1.1",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.0/nox9go-windows-amd64.exe",
-    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.0/nox9go-linux-amd64",
-    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.0/nox9go-linux-arm64",
-    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.0/nox9go-darwin-amd64",
-    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.0/nox9go-darwin-arm64"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-windows-amd64.exe",
+    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-linux-amd64",
+    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-linux-arm64",
+    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-darwin-amd64",
+    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-darwin-arm64"
   },
   "sha256": {
-    "windows_amd64": "228e795a7cb4a7bcdf043ab6d852a343f8b03f3c61e8e1d5e110c7ccc2ed71ce",
-    "linux_amd64": "43cd13f98b6a2cf5aa306ee861661e59e2086fbcb28eeb7a9d5490d618551a70",
-    "linux_arm64": "42f34a8a4c41f58ba2c342a15716b049ff9bc3062da2df34a627701ccdc81fb1",
-    "darwin_amd64": "92b550a4b4842cc32d7da7f4784a758e35052b7871bcdf9bc3f7eacde58013ee",
-    "darwin_arm64": "72b5ed420cbe2b07988c8c5d7275a7e1a435bd1c6df69bdebdbd9106b20e142e"
+    "windows_amd64": "0c9232dfd024f9d670335d1a80ee29d64c5b4be80f3182cc1cbbbff8be6c174d",
+    "linux_amd64": "977660d1085bd80faf1977dfb8b0a4b15f3f0474144eba631ce076685b43e180",
+    "linux_arm64": "02883d2754a9a72e6d2094b13dd0627b39d797e48b4900d7df890623ff4220ad",
+    "darwin_amd64": "3af495a784838888bd8a95d509b167b810ea74bead3e576115aeb1becd3e6425",
+    "darwin_arm64": "f0c4c52c02621997d10ddca4cbdc9af589f736a62a7345efed41ae0c485faea1"
   },
-  "releaseNotes": "NOX9GO 1.1.0 — 7 free-tier LLM providers from freellmapi, complete dashboard artwork, Qoder identity unmasking, Antigravity CLI 1.5.1 fingerprint, MiniMax Code translation, Cloudflare AI FLUX.2 image routing, Copilot native Claude messages, Groq reasoning clamping, Token Saver bypass, and integrated provider capacity limits."
+  "releaseNotes": "Quota tracker cards get a per-card checkbox and a Custom view; NaN.Builders reports its real per-model token quota; providers without a metered endpoint show the traffic the gateway routed. Also: official brand logos, provider capacity observations, and media-modality stripping before dispatch."
 }
