@@ -9,7 +9,7 @@
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Svelte](https://img.shields.io/badge/Dashboard-Svelte%205-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev)
 [![Runtime](https://img.shields.io/badge/Runtime-Single%20binary-4C1D3D)](#instalacion)
-[![Providers](https://img.shields.io/badge/Providers-152%2B-6E56CF)](#proveedores)
+[![Providers](https://img.shields.io/badge/Providers-178-6E56CF)](#proveedores)
 [![License](https://img.shields.io/badge/License-MIT-8B5CF6)](LICENSE)
 [![Gentle-ai](https://img.shields.io/github/v/release/Gentleman-Programming/gentle-ai?label=Gentle-ai&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABUAAAAcCAYAAACOGPReAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAWkSURBVEhLrZZZbFRVGMdPZ%2bnc2Zc7M%2ffOnZk7d6Z3OvveTmfrTGcYu1uKZbO0BUGBQqAsCmjBIWGLYi1GEWvdCImJIBhfjEtMNCaaGHnixWjE6JM%2b%2bWBMFAJ%2fMyUQOxKB4C85L%2bd83%2b%2bck%2fOdk0PIHdhBeE9j330xTWfHT7dP%2fDEbXf7VifCyZ18ODaw%2b1lJI1cfeJC7DckKUjTn%2fyTF9tvJqx8RffYkudHvTWOnNY6UjjkkhfXVrtPvrA20jv8z4ll4cJ1q6Mfe2zBjSsZOxkW8fTnWj4ghjM5%2fHXrYT2%2bk0xrh2xFkRLk7AxtQgTniH3mnM%2fxcnPAPH93mr10ejJbisTkz6KqgyQexmO7HbmMMWaxbb2Ry2cnnEGC8OxYbxvFC98IQ%2bkmx0kVUKRph1979xJDsKD%2btCVozCYbSijwuhohEwZo5jkzGJrYYUHqDceNrTgyLtxWhLFntCAzjhHTzb6CQzzuq5t3IbkIqloVCqEGfccGhpDNM%2bRCkbtrJ5TNlLmOAyWEvH0af1YJiJoGhtRUgM42h06S8zuqBpkfQZS3Hv4%2fFBxKIpUM0UVFI5sjoeEYrBiK0NAR2PhNqJoJbDkDmCMWsc65xtUMop%2bHxhbPZXcJqtBhZJzzt623e0VtCezMKsM0FKCCJqDnaVBYKGQdkgYhUdwR62iEl7ARssSTBEDplKhUowgwO%2bnktfOjKLS2yi2dM36ey41hloQ8QfhZJIYNAawautECkzMgY3EowXAYcXdsYJs1wLLZEg6PRhOtKP%2fVx2tu6pESJZENZKJdlj%2blD5IJeb3tmS%2f7UvWUDCE4JaTkEtVYCVamCgLWgRvBAFL8y0FZRUjoiRR587CZfahC2O7JV5ayG6aKX72Y5ATR0NX%2fAvoV9K9qxbH82h1x1HXs9DLVOAolSwGC0w6IywKLQoqF2Iax1QEAkcFideT47jRWd1aqMmZSZzqZT8LFkhrYtBSNPNSQ6L6e8DMg2CejvKrB8Zk2th5YomGVopCwwSBZQSGTgzt1BSp3xLz%2byxpx276PY15OyKG8KbPK4KspOEN77b8VD%2fc94iBKkK9fmclB55nRO6Jjn0pBkcZUDY6sEGdwHHxd73HiRq5pakps5aa7Z84foL3yk%2bahsLn%2fEODbztHhpAsNZ8bsmartdCfReHTAKUEiksEgqCVIOC3o7ljtDlTXz6s5fE%2fqM1YlNtMyTGn6Bz2gXpU6aMfY%2b7NNfrjv9Y4PzXylY%2fRrgE1tgSl44GHuj4MDlUnrQGzmX1tt8tEgViFP3D8UBp%2fNP4SO50sMr%2fY5NkShvxTZmS6251pGziN1YtDQ9lgV1Bg1PS6KV9OOjtWlsfTxgtR4IS3ZWTzR2Bfl3r3qOu4qvzHcMLxf6ku9i5yxRfsVOXMdXbLekjocwEp7egpHZj0tQOu0QDTZMCJT3%2f57lAb%2bLRWHtcoDSX12rEDW%2f7VnP1nL2%2b8voeT%2bzrZY7EJ%2fssCRHArYNe4KfRfcYqG%2fjdJNOCk%2brQ1mRFlXDgJTos0fEHAEhjZu5qxeZaRgiRZM3Cx1vsnSiZWrGKCXXts7Z5thFRsUha5ylH6ZUs7YFfxUIvVYNv0qCTMIg26c98MbiRLztbLtXj5loePFVWecBI9cgZXb%2f%2btnTK0OhaxGxqoGu1kJjPOcTzOcZ9fKVO2L9bET4yHcgWh13%2b90FKsnWa0PW4nEWXTsQk2zaPUk3WWJp3ZD7cG32I93%2bwjPEdfNggljoU5kvdVvHzaU%2f55JuuHqEx%2fq7A3Jw8Z%2bGvlaXMqcO2TPL6zi%2bVl4VRV2PcPXEkUYlGtczPgxJ20wVSDJwleb5GYvEVJNjcGHvXdOtcF9MS02ftxNgzTRIu8XanfC%2fk5MyheJPx%2fHYiDq4nvhvX8H4Y07e6K0pu8zHi%2fX9%2bKfVncEzR6l5PWBdI7cZrfpf8DeRY4wJrYaUrAAAAAElFTkSuQmCC)](https://github.com/Gentleman-Programming/gentle-ai)
 
@@ -147,11 +147,10 @@ Los **combos** agrupan varios modelos o proveedores bajo un mismo nombre.
 |---|---|
 | `fallback` | Prueba los modelos en orden hasta que uno responde |
 | `round-robin` | Reparte las peticiones entre los modelos del combo |
-| `sticky` | Mantiene temporalmente un cliente en el mismo modelo |
 | `capacity` | Elige la entrada con más capacidad disponible |
 | `fusion` | Combina respuestas de varias entradas |
 
-También puedes rotar varias cuentas del mismo proveedor y asociar pools de proxy a una conexión concreta o a varias a la vez.
+La **rotación de cuentas** del mismo proveedor es independiente de la estrategia del combo y acepta `none`, `round-robin`, `random` y `sticky` (esta última mantiene temporalmente a un cliente en la misma cuenta). También puedes asociar pools de proxy a una conexión concreta o a varias a la vez.
 
 ### Observabilidad
 
@@ -210,7 +209,7 @@ El mismo gateway puede enrutar:
 
 ## Proveedores
 
-NOX9GO incluye un catálogo de 152 proveedores registrados y permite añadir endpoints compatibles con OpenAI o Anthropic desde el panel. "Registrado" significa que el proveedor está en el catálogo con su endpoint, su método de autenticación y sus modelos; no que cada integración esté verificada contra el servicio en cada release. Los catálogos de modelos cambian más rápido de lo que se puede revisar, así que un proveedor puede dejar de responder aunque siga listado.
+NOX9GO incluye un catálogo de 178 proveedores registrados —9 de ellos ocultos en los selectores pero totalmente enrutables— y permite añadir endpoints compatibles con OpenAI o Anthropic desde el panel. "Registrado" significa que el proveedor está en el catálogo con su endpoint, su método de autenticación y sus modelos; no que cada integración esté verificada contra el servicio en cada release. Los catálogos de modelos cambian más rápido de lo que se puede revisar, así que un proveedor puede dejar de responder aunque siga listado.
 
 ### Suscripciones y OAuth
 
@@ -263,26 +262,32 @@ glm/glm-4.6
 
 | Comando | Descripción |
 |---|---|
-| `nox9go` | Arranca el gateway en primer plano |
+| `nox9go` | Con una terminal abre el selector de interfaz; sin terminal arranca el gateway en primer plano |
 | `nox9go start` | Arranca en segundo plano |
 | `nox9go stop` | Detiene el proceso en segundo plano |
 | `nox9go restart` | Reinicia el gateway |
 | `nox9go status` | Muestra estado, PID, panel y logs |
-| `nox9go logs -n 100` | Muestra las últimas 100 líneas de log |
-| `nox9go rtk` | Activa o desactiva RTK |
-| `nox9go caveman` | Activa el estilo Caveman |
-| `nox9go ponytail` | Activa el estilo Ponytail |
-| `nox9go adhd` | Activa el estilo ADHD |
-| `nox9go auto-update` | Activa o desactiva las actualizaciones automáticas |
-| `nox9go no-injection-guard` | Activa o desactiva la protección contra prompt injection |
-| `nox9go update` | Comprueba e instala actualizaciones del gateway |
 | `nox9go status --json` | Devuelve el estado en JSON para scripts |
-| `nox9go service install` | Registra el arranque automático |
-| `nox9go service start` / `restart` | Arranca o reinicia el servicio registrado |
-| `nox9go service status` | Consulta el servicio registrado |
-| `nox9go service uninstall` | Elimina el arranque automático |
+| `nox9go logs -n 100` | Muestra las últimas 100 líneas de log |
 | `nox9go version` | Muestra versión, sistema y arquitectura |
-| `nox9go mitm enable` | Activa los comandos de proxy MITM |
+| `nox9go update` | Comprueba e instala actualizaciones del gateway |
+| `nox9go service install` | Registra el arranque automático |
+| `nox9go service uninstall` | Elimina el arranque automático |
+| `nox9go service start` / `stop` / `restart` | Arranca, detiene o reinicia el servicio registrado |
+| `nox9go service status` | Consulta el servicio registrado |
+| `nox9go mitm enable` / `disable` / `status` | Activa, desactiva o consulta el proxy MITM (redirección DNS y TLS en `:443`) |
+
+Los modos de ahorro de contexto y las actualizaciones automáticas son **flags globales**, no subcomandos. Van antes del subcomando (`nox9go --caveman start`) y cada uno tiene su variable de entorno equivalente:
+
+| Flag | Efecto |
+|---|---|
+| `--rtk` / `--rtk=false` | Activa o desactiva RTK (activo por defecto) |
+| `--caveman` | Activa el estilo Caveman |
+| `--ponytail` | Activa el estilo Ponytail |
+| `--adhd` | Activa el estilo ADHD |
+| `--auto-update` | Permite actualizaciones automáticas |
+| `--no-injection-guard` | Desactiva la protección contra prompt injection |
+| `--background`, `-d` | Equivale a `nox9go start` |
 
 ### Arranque automático
 
@@ -321,7 +326,7 @@ La configuración en ejecución se realiza mediante variables de entorno.
 | `AUTO_UPDATE` | `false` | Permite actualizaciones automáticas |
 | `INITIAL_PASSWORD` | aleatoria en primer arranque | Contraseña del panel; si se genera, se imprime una vez y obliga a cambiarla |
 | `JWT_SECRET` | aleatoria y persistida en el data dir | Secreto de firma de la sesiones del panel; úsalo para fijar tu propio valor |
-| `MINIMAX_CODE_SIGN_SECRET` | **requerido** | Necesario para MiniMax Code; sin él la cuenta falla con error claro |
+| `MINIMAX_CODE_SIGN_SECRET` | valor embebido | Opcional. Secreto de firma de la API de cuenta de MiniMax Code; el valor por defecto es el que publica el cliente oficial. Configúralo solo si MiniMax lo rota |
 | `ALLOW_INSECURE_TLS` | `false` | Escape hatch intencional: omite la verificación TLS (no usar en producción) |
 | `ANTIGRAVITY_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Antigravity; los IDs vienen con defaults públicos, los secretos no |
 | `GEMINI_CLI_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Gemini CLI |
@@ -331,19 +336,32 @@ La configuración en ejecución se realiza mediante variables de entorno.
 | `IFLOW_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de iFlow |
 | `KIMI_CODING_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Kimi |
 | `QWEN_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Qwen |
+| `QODER_OAUTH_CLIENT_SECRET` | **requerido** | Secreto OAuth de Qoder |
 
 ---
 
 ## Base de datos compartida
 
-NOX9GO puede usar el mismo directorio de datos que 9Router.
+NOX9GO usa el mismo esquema SQLite que 9Router, así que puede trabajar directamente sobre el directorio de datos de una instalación existente.
+
+Cuando no defines `DATA_DIR`, la detección es automática y sigue este orden:
+
+1. `DATA_DIR` del entorno
+2. `DATA_DIR` del archivo `.env` (el del directorio actual o el que está junto al binario)
+3. `%APPDATA%\nox9go` en Windows (`~/.nox9go` en el resto), si ya contiene una base
+4. `%APPDATA%\9router` en Windows (`~/.9router` en el resto), si ya contiene una base
+5. `%APPDATA%\nox9go` / `~/.nox9go` en caso contrario
+
+Dentro del directorio elegido, el archivo se resuelve en este orden: `db/data.sqlite`, `data.sqlite`, `nox9go.db`, `9router.db`. El nombre que verás en una instalación de 9Router es `db/data.sqlite`.
+
+Para forzar una ruta concreta:
 
 ```bash
 export DATA_DIR="/ruta/compartida/con/9router"
 ./nox9go start
 ```
 
-Al apuntar ambos proyectos al mismo `DATA_DIR`, comparten:
+Al compartir `DATA_DIR` ambos proyectos leen y escriben lo mismo:
 
 - Proveedores
 - Conexiones
@@ -351,7 +369,7 @@ Al apuntar ambos proyectos al mismo `DATA_DIR`, comparten:
 - Combos
 - Historial de uso
 
-No requiere importación. Comparte la base sin migrarla, así que antes de apuntar aquí una instalación existente haz una copia de la base de datos (`9router.db`; en una instalación de NOX9GO, `nox9go.db`) y de la configuración, y ten en cuenta que ambas versiones deben usar un esquema compatible: un 9Router más reciente puede haber añadido columnas que esta versión no conoce, y al revés. Si el esquema no coincide, vuelve a la copia.
+No requiere importación, pero comparten esquema y no hay migración: antes de apuntar aquí una instalación existente, haz una copia de la base de datos y de la configuración. Ambas versiones deben usar un esquema compatible — un 9Router más reciente puede haber añadido columnas que esta versión no conoce, y al revés. Si el esquema no coincide, restaura la copia.
 
 ---
 
@@ -392,7 +410,7 @@ El proyecto publica dos binarios con funciones distintas:
 
 ### Herramientas adicionales
 
-- **Túnel Cloudflare:** expone el gateway temporalmente mediante Cloudflare quick tunnel; habilita, desactiva y consulta su estado desde la CLI o el panel, y guarda el estado en el directorio de datos.
+- **Túneles:** expone el gateway temporalmente mediante Cloudflare quick tunnel o Tailscale. Se gestiona desde el panel (`GET /api/tunnel/status`, `POST /api/tunnel/enable`, `POST /api/tunnel/disable`, más `GET /api/tunnel/tailscale-check` y `POST /api/tunnel/tailscale-enable` / `tailscale-disable`) y guarda el estado en el directorio de datos; no tiene comando de CLI propio.
 - **CliToolsView / adaptador Pi:** conecta herramientas de línea de comandos al mismo catálogo de proveedores, cuentas y combos del panel.
 
 ---
