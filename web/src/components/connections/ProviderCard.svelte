@@ -3,8 +3,8 @@
   import Badge from '../../lib/ui/Badge.svelte'
   import Card from '../../lib/ui/Card.svelte'
   import Toggle from '../../lib/ui/Toggle.svelte'
-  import ProviderIcon from './ProviderIcon.svelte'
-  import { type ProviderStats } from './types'
+  import ProviderArtwork from '../providers/ProviderArtwork.svelte'
+  import { getProviderGlyph, type ProviderStats } from './types'
 
   interface Props {
     id: string
@@ -27,6 +27,7 @@
   }: Props = $props()
 
   let isAllDisabled = $derived(stats.allDisabled)
+  const glyph = $derived(getProviderGlyph(id))
 </script>
 
 <div
@@ -53,7 +54,18 @@
   >
     <div class="flex min-w-0 items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-3">
-        <ProviderIcon {id} {apiType} size="md" />
+        <div
+          class="w-12 h-12 shrink-0 rounded-lg flex items-center justify-center bg-black/5 dark:bg-white/5 border border-border overflow-hidden"
+          role="img"
+          aria-label={glyph.name}
+          title={glyph.name}
+        >
+          <ProviderArtwork
+            {id}
+            {apiType}
+            class="w-10 h-10 object-contain leading-none font-semibold text-sm"
+          />
+        </div>
         <div class="min-w-0">
           <h3 class="truncate font-semibold text-sm text-text-main group-hover:text-brand-500 transition-colors">
             {name}

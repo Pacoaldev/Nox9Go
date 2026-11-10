@@ -14,6 +14,12 @@ export interface ProviderCatalogItem {
   authModes?: string[]
   /** hidden from provider list (upstream parity) but detail page stays reachable. */
   hidden?: boolean
+  /**
+   * Overview section that renders this provider when `category` would file it
+   * elsewhere. Purely presentational: `category` still drives the auth flow, so
+   * a provider can sit in the OAuth section and keep its API-key add modal.
+   */
+  uiSection?: 'oauth'
   /** Region choices for cluster-specific providers (upstream registry `regions`). */
   regions?: { id: string; label: string }[]
   defaultRegion?: string
@@ -743,6 +749,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "id": "nan",
     "name": "NaN.Builders",
     "category": "freeTier",
+    "uiSection": "oauth",
     "alias": "nan",
     "color": "#06B6D4",
     "icon": "construction",

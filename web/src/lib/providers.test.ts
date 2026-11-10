@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import {
@@ -217,6 +217,29 @@ describe('providers & media separation', () => {
     expect(missing).toEqual([])
   })
 
+  it('files NaN.Builders under the OAuth overview section without changing its auth', () => {
+    // The operator wants it listed with the OAuth providers, but the provider
+    // authenticates with a bearer API key: `category` must stay freeTier so the
+    // detail page keeps opening the API-key modal instead of a nonexistent
+    // OAuth flow. `uiSection` moves only the card.
+    const nan = PROVIDER_CATALOG.find((p) => p.id === 'nan')
+    expect(nan).toBeDefined()
+    if (!nan) throw new Error('missing nan')
+    expect(nan.category).toBe('freeTier')
+    expect(nan.uiSection).toBe('oauth')
+    expect(nan.authType).toBe('apikey')
+
+    const inOauthSection = PROVIDER_CATALOG.filter(
+      (p) => isChatProvider(p) && !p.hidden && (p.category === 'oauth' || p.uiSection === 'oauth')
+    )
+    expect(inOauthSection.some((p) => p.id === 'nan')).toBe(true)
+
+    const inFreeTierSection = PROVIDER_CATALOG.filter(
+      (p) => isChatProvider(p) && !p.hidden && p.uiSection !== 'oauth' && (p.category === 'free' || p.category === 'freeTier')
+    )
+    expect(inFreeTierSection.some((p) => p.id === 'nan')).toBe(false)
+  })
+
   it('ships artwork for every provider the dashboard can render', () => {
     // getIconPath derives the URL from the catalog id, so a catalog entry
     // without an asset under web/public/providers is a 404 on every surface
@@ -228,6 +251,23 @@ describe('providers & media separation', () => {
       (p) => !shared.has(p.id) && !assets.has(`${p.id}.png`) && !assets.has(`${p.id}.svg`)
     ).map((p) => p.id)
     expect(missing).toEqual([])
+  })
+
+  it('ships a real brand mark, never an initials badge, for every catalog provider', () => {
+    // A letter badge is not a logo: it renders the provider's initials in a
+    // flat circle and reads as a placeholder, which is what the operator asked
+    // to be replaced with the official, coloured artwork. An SVG that draws
+    // text is the fingerprint of that placeholder, so the check is structural
+    // rather than a per-provider allowlist that would rot.
+    const providersDir = join(import.meta.dirname, '../../public/providers')
+    const assets = readdirSync(providersDir)
+    const badges = PROVIDER_CATALOG.map((p) => {
+      const svg = assets.find((f) => f === `${p.id}.svg`)
+      if (!svg) return null
+      const content = readFileSync(join(providersDir, svg), 'utf8')
+      return /<text[\s>]/.test(content) ? p.id : null
+    }).filter((id): id is string => id !== null)
+    expect(badges).toEqual([])
   })
 
   it('wires the 7 freellmapi providers end-to-end', () => {

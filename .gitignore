@@ -8,6 +8,16 @@ web/dist/
 web/.dist-stamp
 _site/
 
+# ODD task documents (odd/tasks/*.md) are local working artifacts: they hold
+# the spec of a change in progress and the log of how it was built. They must
+# never reach the repository, on any branch, in any commit.
+#
+# Note: this pattern only stops NEW files. A file already tracked stays tracked
+# until it is removed from the index (`git rm -r --cached odd`), which is why
+# the odd/ tree was untracked explicitly.
+/odd/
+/odd
+
 # Test binaries
 *.test
 *.out

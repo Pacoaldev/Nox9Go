@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { getIconCandidates, getIconPath, getProviderStats, getRemoteSources, providerAuthTypes } from './types'
+import { PROVIDER_CATALOG } from '../../lib/providers'
 import type { ProviderConnection } from '../../api/client'
 
 function conn(overrides: Partial<ProviderConnection> = {}): ProviderConnection {
@@ -80,6 +81,14 @@ describe('getProviderStats', () => {
 })
 
 describe('getIconPath', () => {
+  test('keeps catalog providers with shipped artwork out of the generic glyph fallback', () => {
+    const genericPaths = new Set(['/providers/oai-cc.png', '/providers/oai-r.png'])
+    const unresolved = PROVIDER_CATALOG
+      .filter((provider) => genericPaths.has(getIconPath(provider.id)))
+      .map((provider) => provider.id)
+    expect(unresolved).toEqual([])
+  })
+
   test('resolves a catalog alias to the id its artwork is filed under', () => {
     expect(getIconPath('ag')).toBe('/providers/antigravity.png')
     expect(getIconPath('antigravity')).toBe('/providers/antigravity.png')
@@ -97,6 +106,10 @@ describe('getIconPath', () => {
     expect(getIconPath('anthropic-compatible-x')).toBe('/providers/anthropic-m.png')
     expect(getIconPath('my-reverse-proxy')).toBe('/providers/oai-cc.png')
     expect(getIconPath(undefined)).toBe('/providers/oai-cc.png')
+  })
+
+  test('uses the official NaN.Builders SVG mark', () => {
+    expect(getIconPath('nan')).toBe('/providers/nan.svg')
   })
 
   test('resolves SVG artwork, not only PNG', () => {

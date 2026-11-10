@@ -80,12 +80,12 @@
     <div class="flex min-w-0 items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-3">
         <div
-          class="size-8 rounded-lg flex items-center justify-center shrink-0"
+          class="size-12 rounded-lg flex items-center justify-center shrink-0"
           style="background-color: {bgColor}"
         >
           <ProviderArtwork
             id={provider.id}
-            class="object-contain rounded-lg max-w-[30px] max-h-[30px]"
+            class="size-10 object-contain rounded-lg"
           />
         </div>
         <div class="min-w-0">
