@@ -115,6 +115,8 @@ func fetchProviderUsage(ctx context.Context, provider string, data map[string]an
 		return fetchGitHubUsage(ctx, firstNonEmptyStr(accessToken, apiKey)), true
 	case "glm", "glm-cn":
 		return fetchGlmUsage(ctx, provider, apiKey), true
+	case "nan", "nanbuilders":
+		return fetchNanUsage(ctx, firstNonEmptyStr(apiKey, accessToken)), true
 	case "kimi":
 		return fetchKimiUsage(ctx, accessToken, apiKey, psd), true
 	case "minimax", "minimax-cn":

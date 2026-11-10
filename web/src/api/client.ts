@@ -742,6 +742,12 @@ export interface ConnectionUsageResponse {
   error?: string
   message?: string
   quotaStatus?: 'available' | 'exhausted' | 'unknown'
+  /**
+   * Traffic this gateway routed through the connection over the last 30 days.
+   * Attached only when the provider exposes no metered quota, so a card with
+   * nothing else to draw still reports something it actually did.
+   */
+  usage?: { requests: number; tokens: number; lastUsed?: string }
 }
 
 // Usage dashboard (Details section): heatmap cells, lifetime cards, node health.

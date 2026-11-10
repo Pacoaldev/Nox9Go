@@ -17,6 +17,7 @@ export const ACCOUNT_FILTER_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Turned off' },
   { value: 'metered', label: 'With quota limits only' },
+  { value: 'custom', label: 'Custom' },
 ]
 
 export const QUOTA_SORT_OPTIONS = [
@@ -49,6 +50,8 @@ export interface QuotaEntry {
   plan?: string | null
   message?: string | null
   quotaStatus?: 'available' | 'exhausted' | 'unknown'
+  /** Gateway-recorded traffic, present only when no metered quota exists. */
+  usage?: { requests: number; tokens: number; lastUsed?: string }
   raw?: unknown
   cachedAt?: string
 }
@@ -200,6 +203,13 @@ export function getConnectionsEmptyMessage(
       description: 'Connect to providers with OAuth to track your API quota limits and usage.',
     }
   }
+  if (accountFilter === 'custom' && totals.providerFilteredConnections > 0) {
+    return {
+      icon: 'visibility_off',
+      title: 'No Cards In The Custom View',
+      description: 'Tick the checkbox on a provider card to add it to the Custom view.',
+    }
+  }
   if (!totals.providerFilteredConnections) {
     return {
       icon: 'filter_alt_off',
@@ -338,6 +348,28 @@ export function formatResetTimeDisplay(resetTime?: string | Date | null): string
   }
 }
 
+/**
+ * How long ago a past timestamp was, in the same compact shape the countdown
+ * uses: `3h 12m`, `2d 4h`. Used by the gateway-usage line, where the value is
+ * always in the past.
+ */
+export function formatTimeAgo(date?: string | null): string | null {
+  if (!date) return null
+  const then = new Date(date)
+  if (Number.isNaN(then.getTime())) return null
+  const diffMs = Date.now() - then.getTime()
+  if (diffMs < 0) return 'just now'
+  const totalMinutes = Math.floor(diffMs / 60_000)
+  if (totalMinutes < 1) return 'just now'
+  if (totalMinutes < 60) return `${totalMinutes}m ago`
+  const hours = Math.floor(totalMinutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  return `${months}mo ago`
+}
+
 export function getStatusColor(percentage: number): 'green' | 'yellow' | 'red' {
   if (percentage > 70) return 'green'
   if (percentage >= 30) return 'yellow'
@@ -355,6 +387,24 @@ export function calculatePercentage(used?: number, total?: number): number {
   if (!used || used < 0) return 100
   if (used >= total) return 0
   return Math.round(((total - used) / total) * 100)
+}
+
+/**
+ * Compact token count: `1.0B`, `500.0M`, `12.5K`.
+ *
+ * A token quota of one billion rendered as `1,000,000,000 / 1,000,000,000`,
+ * which is unreadable in a narrow card. Everything below a thousand keeps its
+ * digits: `40 / 100` must not become `40.0`.
+ */
+export function formatCompactCount(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  const n = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  if (n < 1000) return `${Math.round(value)}`
+  if (n < 1_000_000) return `${sign}${(n / 1_000).toFixed(1)}K`
+  if (n < 1_000_000_000) return `${sign}${(n / 1_000_000).toFixed(1)}M`
+  if (n < 1_000_000_000_000) return `${sign}${(n / 1_000_000_000).toFixed(1)}B`
+  return `${sign}${(n / 1_000_000_000_000).toFixed(1)}T`
 }
 
 /**
@@ -384,6 +434,48 @@ export function getQuotaVisibilityKey(quota: Partial<NormalizedQuota> | null | u
 
 export interface QuotaVisibility {
   [provider: string]: { hidden?: string[] } | undefined
+}
+
+// ─── Card visibility (which cards the `Custom` view lists) ──────────────────
+//
+// Every provider card carries a toggle that only decides whether the card is
+// part of the operator's own shortlist. It never touches `isActive`: a provider
+// can be left out of the Custom view and still serve traffic. A connection with
+// no stored choice counts as pinned, so the Custom view is never mysteriously
+// empty on a fresh install.
+export const CARD_VISIBILITY_KEY = 'quotaCardVisibility'
+
+export interface CardVisibility {
+  [connectionId: string]: boolean
+}
+
+export function isCardPinned(visibility: CardVisibility, connectionId: string): boolean {
+  return visibility?.[connectionId] !== false
+}
+
+export function setCardPinned(
+  visibility: CardVisibility,
+  connectionId: string,
+  pinned: boolean,
+): CardVisibility {
+  const next: CardVisibility = { ...visibility }
+  if (pinned) {
+    // Pinned is the default, so the key is dropped instead of storing `true`:
+    // the settings map stays small and a connection that comes back keeps the
+    // same answer.
+    delete next[connectionId]
+  } else {
+    next[connectionId] = false
+  }
+  return next
+}
+
+/** Keeps only the connections the operator left pinned to the Custom view. */
+export function filterPinnedConnections<T extends ProviderConnectionLike>(
+  connections: T[],
+  visibility: CardVisibility,
+): T[] {
+  return connections.filter((connection) => isCardPinned(visibility, connection.id))
 }
 
 function trimHiddenQuotaKeys(hidden: string[], quotas: NormalizedQuota[]): string[] {
@@ -803,6 +895,33 @@ export function parseQuotaData(provider: string, data: unknown): NormalizedQuota
               resetAt: (quota.resetAt as string) || null,
               remainingPercentage: quota.remainingPercentage !== undefined ? Number(quota.remainingPercentage) : undefined,
             })
+          })
+        }
+        break
+
+      case 'nan':
+      case 'nanbuilders':
+        // NaN.Builders reports per-model token caps (1.0B for DeepSeek, 500.0M
+        // for GLM 5.3) that renew monthly, keyed by the model id its cloud
+        // dashboard names. The row keeps the model name as the label and marks
+        // itself as a token quota so the card formats the counts compactly.
+        if (d.quotas) {
+          Object.entries(d.quotas).forEach(([modelKey, quota]) => {
+            const used = Number(quota.used) || 0
+            const total = Number(quota.total) || 0
+            const row: NormalizedQuota = {
+              name: (quota.displayName as string) || `${modelKey} (tokens)`,
+              modelKey,
+              used,
+              total,
+              resetAt: (quota.resetAt as string) || null,
+              unit: 'tokens',
+            }
+            if (quota.remaining !== undefined) row.remaining = Number(quota.remaining)
+            if (quota.remainingPercentage !== undefined) {
+              row.remainingPercentage = Number(quota.remainingPercentage)
+            }
+            normalizedQuotas.push(row)
           })
         }
         break

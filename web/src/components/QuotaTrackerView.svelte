@@ -38,14 +38,18 @@
     ACCOUNT_PAGE_SIZE_MAX,
     ACCOUNT_PAGE_SIZE_OPTIONS,
     AUTO_REFRESH_STORAGE_KEY,
+    CARD_VISIBILITY_KEY,
     CLAUDE_REFRESH_INTERVAL_MS,
     DEPLETED_QUOTA_THRESHOLD,
     QUOTA_SORT_OPTIONS,
     REFRESH_INTERVAL_MS,
     buildLoadingState,
     calculatePercentage,
+    filterPinnedConnections,
     filterQuotaStateByConnections,
     filterQuotasByVisibility,
+    formatCompactCount,
+    formatTimeAgo,
     getConnectionsEmptyMessage,
     getConnectionsPaginationSummary,
     getHiddenQuotaRows,
@@ -54,10 +58,13 @@
     getQuotaVisibilityKey,
     getSafePagination,
     getSafeTotals,
+    isCardPinned,
     parseQuotaData,
+    setCardPinned,
     setQuotaCache,
     shouldResetPage,
     sortVisibleConnections,
+    type CardVisibility,
     type Pagination,
     type ProviderConnectionLike,
     type QuotaEntry,
@@ -160,6 +167,10 @@
 
   // Quota visibility (hidden rows), persisted via /api/settings quotaVisibility
   let quotaVisibility = $state<QuotaVisibility>({})
+  // Which cards the `Custom` account filter lists. Persisted in the same
+  // settings blob under CARD_VISIBILITY_KEY. Unpinning a card never disables the
+  // provider: it only takes it out of the operator's shortlist.
+  let cardVisibility = $state<CardVisibility>({})
   let autoPingMaps = $state<{ claude: Record<string, boolean>; codex: Record<string, boolean> }>({
     claude: {},
     codex: {},
@@ -245,6 +256,8 @@
           quotas: parseQuotaData(target.provider, data),
           plan: data?.plan || null,
           message: data?.message || null,
+          quotaStatus: data?.quotaStatus,
+          usage: data?.usage,
           raw: data,
         }
         quotaData = { ...quotaData, [target.id]: quotaEntry }
@@ -634,6 +647,7 @@
           plan: data?.plan || null,
           message: data?.message || null,
           quotaStatus: data?.quotaStatus,
+          usage: data?.usage,
           raw: data,
         }
         quotaData = { ...quotaData, [target.id]: quotaEntry }
@@ -808,6 +822,19 @@
     void updateQuotaVisibility(next, previous)
   }
 
+  // ─── Card visibility (the `Custom` view shortlist) ─────────────────────────
+  async function toggleCardPinned(connectionId: string, pinned: boolean): Promise<void> {
+    const previous = cardVisibility
+    const next = setCardPinned(previous, connectionId, pinned)
+    cardVisibility = next
+    try {
+      await api.patchSettings({ [CARD_VISIBILITY_KEY]: next })
+    } catch (error) {
+      console.error('Error updating card visibility:', error)
+      cardVisibility = previous
+    }
+  }
+
   // ─── Derived ───────────────────────────────────────────────────────────────
   let sortedConnections = $derived.by<ProviderConnection[]>(() => {
     let list = connections as ProviderConnectionLike[]
@@ -831,6 +858,9 @@
         }
         return false
       })
+    }
+    if (accountFilter === 'custom') {
+      list = filterPinnedConnections(list, cardVisibility)
     }
     return sortVisibleConnections(
       list,
@@ -966,6 +996,7 @@
       .then((s) => {
         const raw = s as unknown as Record<string, unknown>
         quotaVisibility = (raw?.quotaVisibility as QuotaVisibility) || {}
+        cardVisibility = (raw?.[CARD_VISIBILITY_KEY] as CardVisibility) || {}
         // Nested shape from the server (Node parity): the settings key holds
         // two independent halves — the connections switch and the schedule map.
         const claudeConfig = raw?.claudeAutoPing as AutoPingSettings | undefined
@@ -1392,6 +1423,29 @@
                   </button>
                 {/if}
 
+                <!-- Card visibility: the `Custom` view lists only pinned cards.
+                     This never disables the provider. -->
+                <button
+                  type="button"
+                  onclick={() => toggleCardPinned(conn.id, !isCardPinned(cardVisibility, conn.id))}
+                  aria-label={isCardPinned(cardVisibility, conn.id)
+                    ? 'Hide from the Custom view'
+                    : 'Show in the Custom view'}
+                  title={isCardPinned(cardVisibility, conn.id)
+                    ? 'Hide from the Custom view (the provider stays active)'
+                    : 'Show in the Custom view'}
+                  class="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-3 cursor-pointer {isCardPinned(
+                    cardVisibility,
+                    conn.id,
+                  )
+                    ? 'text-primary'
+                    : 'text-text-muted'}"
+                >
+                  <span class="material-symbols-outlined text-[18px]">
+                    {isCardPinned(cardVisibility, conn.id) ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                </button>
+
                 <!-- Refresh quota -->
                 <button
                   type="button"
@@ -1504,6 +1558,24 @@
                   Account active. No quota limits tracked.
                 </div>
               {/if}
+            {/if}
+            {#if quota?.usage}
+              <!-- This gateway's own record for a provider that publishes no
+                   metered quota: spend, not an allowance, so it is never drawn
+                   as a percentage. -->
+              <div
+                class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-border-subtle/60 px-1 pt-1.5 text-[10px] text-text-muted"
+                title={`Traffic this gateway routed through this connection in the last 30 days`}
+              >
+                <span class="material-symbols-outlined text-[12px]">bar_chart</span>
+                <span class="tabular-nums">{formatCompactCount(quota.usage.requests)} requests</span>
+                <span class="opacity-50">·</span>
+                <span class="tabular-nums">{formatCompactCount(quota.usage.tokens)} tokens</span>
+                {#if quota.usage.lastUsed}
+                  <span class="opacity-50">·</span>
+                  <span>last used {formatTimeAgo(quota.usage.lastUsed)}</span>
+                {/if}
+              </div>
             {/if}
             {#if hiddenQuotaRows.length > 0}
               <div

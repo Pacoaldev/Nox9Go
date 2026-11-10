@@ -1,6 +1,7 @@
 <script lang="ts">
   // Port of Next.js ProviderLimits/QuotaTable.js for the Go dashboard.
   import {
+    formatCompactCount,
     formatResetTime,
     formatResetTimeDisplay,
     getRemainingPercentage,
@@ -119,6 +120,12 @@
   function fmtNum(n?: number): string {
     return (n || 0).toLocaleString()
   }
+
+  // A token quota is counted in millions or billions, where raw digits are
+  // unreadable in a card. Small counts keep their exact digits.
+  function fmtCount(n: number): string {
+    return n >= 10_000 ? formatCompactCount(n) : fmtNum(n)
+  }
 </script>
 
 {#if quotas && quotas.length > 0}
@@ -194,13 +201,13 @@
                   ? `${fmtNum(quota.used)} used · Unlimited`
                   : isCreditBalance
                     ? `Credit balance: ${(quota.total || 0).toFixed(2)} ${quota.currency || ''}`
-                    : `${fmtNum(quota.used)} / ${(quota.total || 0) > 0 ? fmtNum(quota.total) : '∞'}`}
+                    : `${fmtCount(quota.used)} / ${(quota.total || 0) > 0 ? fmtCount(quota.total) : '∞'}`}
               >
                 {isUnlimited
                   ? `${fmtNum(quota.used)} used · Unlimited`
                   : isCreditBalance
                     ? `Credit: ${(quota.total || 0).toFixed(2)} ${quota.currency || ''}`
-                    : `${fmtNum(quota.used)} / ${(quota.total || 0) > 0 ? fmtNum(quota.total) : '∞'}`}
+                    : `${fmtCount(quota.used)} / ${(quota.total || 0) > 0 ? fmtCount(quota.total) : '∞'}`}
               </span>
               <span
                 class="font-medium shrink-0 {isUnlimited

@@ -105,13 +105,15 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 			log.Warn("usage", "forced credential refresh failed", "provider", conn.Provider, "conn", connID, "error", retry.err)
 		} else if retry.refreshed {
 			if retried, retryOK := fetchProviderUsage(r.Context(), conn.Provider, data); retryOK {
-				handlerutil.WriteJSON(w, http.StatusOK, retried.toResponse())
+				out := retried.toResponse()
+				handlerutil.WriteJSON(w, http.StatusOK, h.withConnectionUsage(r.Context(), connID, out))
 				return
 			}
 		}
 	}
 	if ok {
-		handlerutil.WriteJSON(w, http.StatusOK, res.toResponse())
+		out := res.toResponse()
+		handlerutil.WriteJSON(w, http.StatusOK, h.withConnectionUsage(r.Context(), connID, out))
 		return
 	}
 
@@ -150,21 +152,21 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 			if message == "" {
 				message = "Connected. Provider exposes no quota details."
 			}
-			handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+			handlerutil.WriteJSON(w, http.StatusOK, h.withConnectionUsage(r.Context(), connID, map[string]any{
 				"plan":        conn.Provider,
 				"message":     message,
 				"quotaStatus": "available",
-			})
+			}))
 			return
 		}
 		if out.message != "" && out.message != "Provider test not supported" {
 			// A probe error does not prove quota exhaustion, and the message is
 			// provider-owned wording: report it as unknown, never as exhausted.
-			handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+			handlerutil.WriteJSON(w, http.StatusOK, h.withConnectionUsage(r.Context(), connID, map[string]any{
 				"plan":        conn.Provider,
 				"message":     "Quota probe failed: " + out.message,
 				"quotaStatus": "unknown",
-			})
+			}))
 			return
 		}
 	}
@@ -193,10 +195,50 @@ func (h *DashboardHandler) HandleGetConnectionUsage(w http.ResponseWriter, r *ht
 		}
 	}
 
-	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+	handlerutil.WriteJSON(w, http.StatusOK, h.withConnectionUsage(r.Context(), connID, map[string]any{
 		"plan":   conn.Provider,
 		"quotas": respQuotas,
-	})
+	}))
+}
+
+// connectionUsageWindowDays bounds the gateway-recorded summary a card shows.
+// Thirty days keeps the read on the connection's own index slice instead of
+// walking the whole ledger, and is long enough that a weekly or monthly free
+// tier is not reported as idle.
+const connectionUsageWindowDays = 30
+
+// withConnectionUsage decorates a usage response that carries no quota rows with
+// the traffic this gateway routed through the connection.
+//
+// The card for a provider with no metered endpoint used to say only "no quota
+// details", which told the operator nothing at all. What this gateway did route
+// is a fact it owns: how many requests, how many tokens, and when the last one
+// went out. It is attached only when there is nothing else to show, and never as
+// a percentage — it is spend, not an allowance.
+func (h *DashboardHandler) withConnectionUsage(ctx context.Context, connID string, resp map[string]any) map[string]any {
+	if !hasNoQuotaRows(resp) {
+		return resp
+	}
+	since := time.Now().UTC().AddDate(0, 0, -connectionUsageWindowDays).Format(time.RFC3339)
+	summary, err := h.Repo.GetConnectionUsageSummary(ctx, connID, since)
+	if err != nil {
+		log.Warn("usage", "connection usage summary failed", "conn", connID, "error", err)
+		return resp
+	}
+	if summary.Requests == 0 {
+		return resp
+	}
+	resp["usage"] = summary
+	return resp
+}
+
+// hasNoQuotaRows reports whether a response has nothing to draw in the table.
+func hasNoQuotaRows(resp map[string]any) bool {
+	quotas, ok := resp["quotas"].(map[string]any)
+	if !ok {
+		return true
+	}
+	return len(quotas) == 0
 }
 
 // HandleGetUsageProviders handles GET /api/usage/providers
