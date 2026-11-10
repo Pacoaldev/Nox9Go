@@ -711,6 +711,14 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 		}
 	}
 
+	// Auto-strip media the target model cannot read (vision/pdf/audio) before it
+	// is translated upstream, replacing each removed kind with a text
+	// placeholder. Parity with upstream chatCore (stripUnsupportedModalities),
+	// which runs ahead of prefetch: without it an image block reached a
+	// text-only model verbatim and drew e.g. Bedrock 400 IMAGE_FORMAT_UNSUPPORTED
+	// on kiro/glm-5, where the only useful answer is the degraded text turn.
+	pipedBody = stripUnsupportedModalities(pipedBody, providers.GetCapabilitiesForModel(provider, model))
+
 	// G11: a target whose wire format cannot fetch a remote image would receive
 	// the URL as a dead string. Done here rather than inside a translator
 	// because this is the one place that knows both the target provider and the

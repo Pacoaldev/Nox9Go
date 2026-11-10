@@ -80,7 +80,7 @@ func TestDispatch_DispatchesThroughPrefetch(t *testing.T) {
 	seedConnDB(t, database, "ollama", "conn-prefetch", "sk-test", upstream.URL)
 	handler := NewChatHandler(db.NewRepo(database))
 
-	reqBody := `{"model":"ollama/m","messages":[{"role":"user","content":[` +
+	reqBody := `{"model":"ollama/deepseek-v4.1-flash:cloud","messages":[{"role":"user","content":[` +
 		`{"type":"text","text":"what is this"},` +
 		`{"type":"image_url","image_url":{"url":"` + imageSrv.URL + `/a.png"}}]}]}`
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(reqBody))
