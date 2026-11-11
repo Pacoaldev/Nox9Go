@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.2] - Unreleased
+
+### Media & Dashboard
+
+- **Media providers report upstream failures instead of showing an empty result.** The "test model" probe in `web/src/components/media/MediaProviderDetail.svelte` treated every HTTP response as a success: a 401 or a 500 produced a blank or truncated example panel with no explanation. It now checks `res.ok`, extracts the message from the JSON error envelope (`error.message`, `error`, or `message`) or falls back to the raw body, and throws it so the view renders the actual reason the provider rejected the call. Speech-to-text probes go through `api.testModel` with the resolved qualified model and never build a `/v1/...` request by hand, and an unhandled media kind now raises a real error rather than reaching the response parser with an unassigned `res`.
+
+### Documentation
+
+- **README corrected against the shipped binary.** The provider catalog is 178 entries with 9 hidden, not 152. The token-saver and auto-update switches are global flags, so they moved out of the subcommand list into their own table, and a bare `nox9go` on a terminal opens the interface picker instead of the gateway. `MINIMAX_CODE_SIGN_SECRET` is optional because it has a built-in default, `sticky` belongs to account rotation rather than to combo strategies, tunnels are panel-only routes, and the shared-database section now documents the automatic data-dir resolution and the real `db/data.sqlite` filename. `QODER_OAUTH_CLIENT_SECRET` was added to the environment table.
+
 ## [1.1.1] - 2026-11-10
 
 ### Providers & Dashboard

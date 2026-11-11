@@ -510,6 +510,13 @@
       const defaultModel = effectiveModelId()
       const qualifiedModel = resolveQualifiedModel(defaultModel)
 
+      if (kind === 'stt') {
+        const probe = await api.testModel(qualifiedModel, kind)
+        exampleLatency = Math.round(performance.now() - start)
+        exampleResponse = JSON.stringify(probe, null, 2)
+        return
+      }
+
       const headers: Record<string, string> = {}
       if (activeApiKey) headers['Authorization'] = `Bearer ${activeApiKey}`
       if (selectedConnId) {
@@ -517,7 +524,7 @@
         headers['x-provider-connection-id'] = selectedConnId
       }
 
-      let res: Response
+      let res: Response | null = null
       if (kind === 'video') {
         headers['Content-Type'] = 'application/json'
         res = await fetch('/v1/videos/generations', {
@@ -601,8 +608,18 @@
         })
       }
 
+      if (!res) throw new Error(`Unsupported media kind: ${kind}`)
       exampleLatency = Math.round(performance.now() - start)
       const cType = res.headers.get('content-type') || ''
+      if (!res.ok) {
+        const errorBody = cType.includes('application/json')
+          ? await res.json().catch(() => null)
+          : await res.text().catch(() => '')
+        const message = typeof errorBody === 'string'
+          ? errorBody
+          : errorBody?.error?.message || errorBody?.error || errorBody?.message || `HTTP ${res.status}`
+        throw new Error(String(message))
+      }
       if (cType.includes('application/json')) {
         const json = await res.json()
         exampleResponse = JSON.stringify(json, null, 2)
