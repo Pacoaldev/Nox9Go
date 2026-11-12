@@ -4,15 +4,12 @@
   // and Base URL, separated from them by a rule, and collapsed to one header line
   // until someone needs them.
   //
-  // The section opens by itself when the node already has a limit and stays closed
-  // for an unlimited node, so a fresh node's dialog shows only the fields that
-  // matter for creating it. Typing does not reopen or close it: only the node's
-  // stored policy can, because that is what the operator is being shown.
+  // The section always starts collapsed, for every node, so the dialog opens on
+  // the fields that matter and the limits stay one click away. Typing never
+  // reopens or closes it; only the operator's click does.
   import Input from '../../lib/ui/Input.svelte'
   import Button from '../../lib/ui/Button.svelte'
   import {
-    hasAnyNodeLimit,
-    nodeLimitsDraftOf,
     nodeLimitsSummary,
     nodeLimitsUsageSummary,
     type NodeLimitsDraft,
@@ -41,8 +38,7 @@
   // the effect on its own write.
   let seededFor: string | null = null
 
-  // Seeded from the stored policy, deliberately not from `draft`: a policy that
-  // exists opens the section, an unlimited node keeps it closed.
+  // Reset per node so switching nodes always lands on the collapsed state.
   //
   // Seeded once per node, because the provider page re-reads the node list while
   // this dialog is open and hands down a fresh `limits` object each time. Tracking
@@ -52,7 +48,7 @@
     const node = nodeId || 'new-node'
     if (seededFor === node) return
     seededFor = node
-    open = hasAnyNodeLimit(nodeLimitsDraftOf(usage))
+    open = false
     confirmingReset = false
   })
 

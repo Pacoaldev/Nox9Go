@@ -12,7 +12,7 @@
   // must never silently throttle a provider.
   import Input from '../../lib/ui/Input.svelte'
   import Button from '../../lib/ui/Button.svelte'
-  import { EMPTY_NODE_LIMITS, hasAnyNodeLimit, nodeLimitsPatchOf, nodeLimitsSummary, type NodeLimitsDraft } from '../../lib/node-limits'
+  import { EMPTY_NODE_LIMITS, nodeLimitsPatchOf, nodeLimitsSummary, type NodeLimitsDraft } from '../../lib/node-limits'
   import { api, type ProviderCapacity, type ProviderCapacityLimits, type ProviderObservation } from '../../api/client'
 
   interface Props {
@@ -59,7 +59,7 @@
       const res = await api.getProviderCapacity(id)
       capacity = res
       draft = draftOf(res.limits)
-      open = hasAnyNodeLimit(draft) || res.observations.length > 0
+      // Always start collapsed: the section is opt-in, even when a policy is stored.
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
     } finally {
@@ -160,6 +160,38 @@
     return at.toLocaleString()
   }
 
+  const noiseVisibilityKey = (id: string) => `capacityObservationsNoiseVisible:${id}`
+  let noiseVisible = $state(false)
+
+  function readNoiseVisibility(id: string): boolean {
+    if (typeof localStorage === 'undefined') return false
+    try {
+      return localStorage.getItem(noiseVisibilityKey(id)) === '1'
+    } catch {
+      return false
+    }
+  }
+
+  function toggleNoiseVisibility() {
+    noiseVisible = !noiseVisible
+    if (typeof localStorage === 'undefined') return
+    try {
+      if (noiseVisible) localStorage.setItem(noiseVisibilityKey(providerId), '1')
+      else localStorage.removeItem(noiseVisibilityKey(providerId))
+    } catch {
+      // Keep the current view usable when browser storage is unavailable.
+    }
+  }
+
+  let usableObservations = $derived(
+    (capacity?.observations ?? []).filter((obs) =>
+      (obs.limitUnit === 'rpm' || obs.limitUnit === 'tpm' || obs.limitUnit === 'concurrent' || obs.limitUnit === 'rpd') &&
+      (obs.limitValue ?? 0) > 0,
+    ),
+  )
+  let noisyObservations = $derived(
+    (capacity?.observations ?? []).filter((obs) => !usableObservations.includes(obs)),
+  )
   let suggestionsReady = $derived(
     (capacity?.suggestions.rpm ?? 0) > 0 ||
       (capacity?.suggestions.tpm ?? 0) > 0 ||
@@ -167,6 +199,10 @@
       (capacity?.suggestions.dailyRequests ?? 0) > 0 ||
       (capacity?.suggestions.tokenQuota ?? 0) > 0,
   )
+
+  $effect(() => {
+    noiseVisible = readNoiseVisibility(providerId)
+  })
 </script>
 
 {#if !loading || capacity}
@@ -263,8 +299,18 @@
               What {providerName || providerId} itself reported at runtime. Applying a value fills the form above; nothing
               is saved until you press Save limits.
             </p>
+            {#if noisyObservations.length > 0}
+              <button
+                type="button"
+                class="self-start text-xs text-text-muted underline decoration-dotted underline-offset-2 hover:text-text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded-sm"
+                aria-expanded={noiseVisible}
+                onclick={toggleNoiseVisibility}
+              >
+                {noiseVisible ? 'Hide' : 'Show'} {noisyObservations.length} observations without usable limits
+              </button>
+            {/if}
             <div class="flex flex-col divide-y divide-border-subtle">
-              {#each capacity.observations as obs (obs.signal + '|' + (obs.model ?? '') + '|' + (obs.limitUnit ?? '') + '|' + (obs.limitValue ?? 0))}
+              {#each (noiseVisible ? capacity.observations : usableObservations) as obs (obs.signal + '|' + (obs.model ?? '') + '|' + (obs.limitUnit ?? '') + '|' + (obs.limitValue ?? 0))}
                 <div class="flex flex-wrap items-center justify-between gap-2 py-2">
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">

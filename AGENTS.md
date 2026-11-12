@@ -43,6 +43,14 @@ This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): CI runs on GitHub Act
 - **CI lives in `.github/workflows/ci.yml`.** It builds the frontend from the lockfile, runs the `svelte-check` ratchet and `oxlint`, builds the SPA, then `go vet`, `go test ./...`, a clean-tree build, the race detector, `gitleaks`, `govulncheck`, the update-manifest check and the end-to-end (Playwright) suite. Most gates have a local equivalent in §8; gitleaks, the manifest check and the e2e suite are the exceptions, so for those CI is the only place they run unless the tools are installed locally.
 - **`make` must be 3.82 or newer.** The Makefile reads `VERSION` with `$(file <VERSION)`, and under 3.81 that expands to empty and embeds an empty version. Every target below works under `sh` and `cmd.exe`, but this one needs the newer Make.
 
+### 0.3 Provider model availability (why some models fail)
+
+A provider that "works" does not mean every model in its catalog works. Model availability is decided upstream, per account and per plan, and the gateway cannot make a gated model answer. Check the live catalog before blaming the key.
+
+- **GitHub Copilot (`github`/`gh`).** Which models the account may use is decided by Copilot's own `GET /models` response (`capabilities.type === "chat"` and `policy.state`). The `copilot-integration-id: vscode-chat` header in `internal/providers/providers.go` matches upstream, so it is not the cause. On the current account only `gpt-4.1` answers; the static catalog in `registry_models.go` lists far more (including `gpt-5.4`, which returns `400 model_not_available_for_integrator`) and is stale for this account. Upstream discovers the real set by fetching `https://api.githubcopilot.com/models` live (`open-sse/services/copilotModels.js`); this fork does not port that fetch yet. Never treat a catalog row as proof the model works.
+- **ClinePass (`clinepass`/`cp`).** The free tier rotates and is published separately at `https://api.cline.bot/api/v1/ai/cline/recommended-models` (`free[]`), not in `/api/v1/models`. The models that answer are the ones Cline serves for that key; other ids in the `/models` dump return `500 {"error":"empty response content"}`. That is upstream availability, not a header problem, and an old working set can stop working when the tier rotates.
+- **Baidu Qianfan (`baidu`/`qianfan`).** The China endpoint `qianfan.baidubce.com` edge-blocks this egress with a `403` before the key is evaluated (`internal/handlers/dashboard/validate.go`: `looksEdgeBlocked` and `validateBlockedMessage`), and the row is reported as `quotaStatus: unknown` on purpose (`internal/handlers/dashboard/usage.go`). The key is fine: it is a network/region block, not a credential error. Reach it through a Proxy Pool egress in an allowed region, or route the same models through a reachable provider.
+
 ---
 
 ## 1. Upstream Source of Truth (fetch, don't look for a clone)
