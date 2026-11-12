@@ -453,6 +453,11 @@ export function isCardPinned(visibility: CardVisibility, connectionId: string): 
   return visibility?.[connectionId] !== false
 }
 
+/** A connection counts as active only when the stored flag says so. */
+export function isConnectionActive(connection: ProviderConnectionLike): boolean {
+  return connection.isActive === 1 || connection.isActive === true
+}
+
 export function setCardPinned(
   visibility: CardVisibility,
   connectionId: string,
@@ -476,6 +481,21 @@ export function filterPinnedConnections<T extends ProviderConnectionLike>(
   visibility: CardVisibility,
 ): T[] {
   return connections.filter((connection) => isCardPinned(visibility, connection.id))
+}
+
+/**
+ * The Custom view is the pinned shortlist, active connections only. A
+ * connection turned off from the quota tracker drops out of the view even when
+ * it was left pinned, so the shortlist never lists an account that is not
+ * serving traffic.
+ */
+export function filterCustomViewConnections<T extends ProviderConnectionLike>(
+  connections: T[],
+  visibility: CardVisibility,
+): T[] {
+  return connections.filter(
+    (connection) => isCardPinned(visibility, connection.id) && isConnectionActive(connection),
+  )
 }
 
 function trimHiddenQuotaKeys(hidden: string[], quotas: NormalizedQuota[]): string[] {

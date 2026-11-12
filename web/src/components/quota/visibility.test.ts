@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import {
   ACCOUNT_FILTER_OPTIONS,
+  filterCustomViewConnections,
   filterPinnedConnections,
   formatCompactCount,
   getConnectionsEmptyMessage,
@@ -47,6 +48,39 @@ describe('card visibility', () => {
     const visibility: CardVisibility = { 'conn-2': false }
     const visible = filterPinnedConnections(connections, visibility)
     expect(visible.map((c) => c.id)).toEqual(['conn-1', 'conn-3'])
+  })
+})
+
+// The `Custom` view is the operator's pinned shortlist, but only for accounts
+// that are actually serving. A connection turned off from the quota tracker
+// must not appear there even when it was left pinned: the view never lists an
+// account that is not sending traffic.
+describe('custom view lists pinned active connections only', () => {
+  const connections = [
+    { id: 'active-pinned', provider: 'a', isActive: 1 },
+    { id: 'inactive-pinned', provider: 'a', isActive: 0 },
+    { id: 'active-unpinned', provider: 'a', isActive: 1 },
+  ]
+  const visibility: CardVisibility = { 'active-unpinned': false }
+
+  it('keeps a pinned connection that is active', () => {
+    const visible = filterCustomViewConnections(connections, visibility)
+    expect(visible.map((c) => c.id)).toEqual(['active-pinned'])
+  })
+
+  it('drops a pinned connection that is turned off', () => {
+    const visible = filterCustomViewConnections(connections, visibility)
+    expect(visible.map((c) => c.id)).not.toContain('inactive-pinned')
+  })
+
+  it('drops an active connection that is not pinned', () => {
+    const visible = filterCustomViewConnections(connections, visibility)
+    expect(visible.map((c) => c.id)).not.toContain('active-unpinned')
+  })
+
+  it('treats a boolean isActive true as active', () => {
+    const visible = filterCustomViewConnections([{ id: 'bool', provider: 'a', isActive: true }], {})
+    expect(visible.map((c) => c.id)).toEqual(['bool'])
   })
 })
 

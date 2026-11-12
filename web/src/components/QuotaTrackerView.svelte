@@ -45,7 +45,7 @@
     REFRESH_INTERVAL_MS,
     buildLoadingState,
     calculatePercentage,
-    filterPinnedConnections,
+    filterCustomViewConnections,
     filterQuotaStateByConnections,
     filterQuotasByVisibility,
     formatCompactCount,
@@ -59,6 +59,7 @@
     getSafePagination,
     getSafeTotals,
     isCardPinned,
+    isConnectionActive,
     parseQuotaData,
     setCardPinned,
     setQuotaCache,
@@ -585,17 +586,17 @@
     })
   }
 
-  function isActiveConn(conn: ProviderConnection): boolean {
-    return conn.isActive === 1 || conn.isActive === true
-  }
-
   function getConnectionLabel(conn: ProviderConnectionLike): string | null {
     return conn.name?.trim() || conn.email?.trim() || conn.displayName?.trim() || null
   }
   // ─── Data loading ──────────────────────────────────────────────────────────
   async function fetchConnections(targetPage = page): Promise<ProviderConnection[]> {
     try {
-      const backendAccountStatus = accountFilter === 'metered' ? 'active' : accountFilter
+      // The Custom view lists active accounts only, so the backend narrows the
+      // page the same way it does for the metered filter; the pinned shortlist
+      // is layered on top client-side.
+      const backendAccountStatus =
+        accountFilter === 'metered' || accountFilter === 'custom' ? 'active' : accountFilter
       const params = new URLSearchParams({
         page: String(targetPage),
         pageSize: String(pageSize),
@@ -753,14 +754,14 @@
 
   function handleDisableDepleted(): void {
     const ids = connections
-      .filter((c) => isActiveConn(c) && isConnectionDepleted(c))
+      .filter((c) => isConnectionActive(c) && isConnectionDepleted(c))
       .map((c) => c.id)
     void bulkSetActive(ids, false)
   }
 
   function handleEnableAvailable(): void {
     const ids = connections
-      .filter((c) => !isActiveConn(c) && !isConnectionDepleted(c))
+      .filter((c) => !isConnectionActive(c) && !isConnectionDepleted(c))
       .map((c) => c.id)
     void bulkSetActive(ids, true)
   }
@@ -860,7 +861,7 @@
       })
     }
     if (accountFilter === 'custom') {
-      list = filterPinnedConnections(list, cardVisibility)
+      list = filterCustomViewConnections(list, cardVisibility)
     }
     return sortVisibleConnections(
       list,
@@ -1296,7 +1297,7 @@
     <!-- Provider cards: 2 columns, compact -->
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
       {#each sortedConnections as conn (conn.id)}
-        {@const isActive = isActiveConn(conn)}
+        {@const isActive = isConnectionActive(conn)}
         {@const quota = quotaData[conn.id]}
         {@const isLoading = quotaLoading[conn.id]}
         {@const error = quotaErrors[conn.id]}
