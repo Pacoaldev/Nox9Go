@@ -362,17 +362,29 @@ func orDefault(value, fallback string) string {
 
 // qoderIsBillingBlock recognizes Qoder's billing/quota envelopes. Upstream's
 // signatures: code 110 (billing daily count exceeded), 112 (quota exhausted),
-// 10605 (queue throttle), and a pricingUrl field.
+// and a pricingUrl field.
+//
+// Code 10605 is deliberately NOT here. It is the model-queue throttle
+// (`isQueued` / `RESOURCE_LIMIT`), a transient capacity signal: the model is
+// briefly unavailable and the very same request succeeds once it drains.
+// Treating it as a billing block turned a queued request into a 403 that locked
+// the model for minutes instead of waiting ~30s. See qoder_queue.go.
 func qoderIsBillingBlock(inner string) bool {
 	if inner == "" {
 		return false
 	}
-	for _, marker := range []string{`"code":110`, `"code":112`, `10605`, "pricingUrl", "pricing_url"} {
-		if strings.Contains(inner, marker) {
-			return true
+	if strings.Contains(inner, "pricingUrl") || strings.Contains(inner, "pricing_url") {
+		return true
+	}
+	if parsed := qoderTryParseJSON(inner); parsed != nil {
+		for _, obj := range qoderWalkObjects(parsed) {
+			if code := qoderStr(obj["code"]); code == "110" || code == "112" {
+				return true
+			}
 		}
 	}
-	return false
+	return strings.Contains(inner, `"code":110`) || strings.Contains(inner, `"code":"110"`) ||
+		strings.Contains(inner, `"code":112`) || strings.Contains(inner, `"code":"112"`)
 }
 
 // qoderCanonicalUsage normalizes Qoder's usage block into the shape the

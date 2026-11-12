@@ -84,6 +84,49 @@ func TestQoderCosyCreds_ReadsConnectionIdentity(t *testing.T) {
 	}
 }
 
+// A connection with no stored machine id must still present ONE stable device:
+// a random uuid per request makes every request look like a brand-new device,
+// and a new device rejoins the back of the model queue (the "Queue wait timed
+// out" path). The id is derived from the user id, so it is stable across
+// requests without extra storage.
+func TestBuildQoderCosyHeaders_DerivesStableMachineID(t *testing.T) {
+	const url = "https://api3.qoder.sh/algo/api/v2/model/list"
+	creds := QoderCosyCreds{UserID: "user-1", AuthToken: "dt-abc"}
+
+	first, err := BuildQoderCosyHeaders(nil, url, creds)
+	if err != nil {
+		t.Fatalf("BuildQoderCosyHeaders: %v", err)
+	}
+	second, err := BuildQoderCosyHeaders(nil, url, creds)
+	if err != nil {
+		t.Fatalf("BuildQoderCosyHeaders: %v", err)
+	}
+	if first["Cosy-Machineid"] == "" {
+		t.Fatal("Cosy-Machineid is empty")
+	}
+	if first["Cosy-Machineid"] != second["Cosy-Machineid"] {
+		t.Errorf("machine id changed between requests: %q vs %q", first["Cosy-Machineid"], second["Cosy-Machineid"])
+	}
+
+	// A different account must be a different device.
+	other, err := BuildQoderCosyHeaders(nil, url, QoderCosyCreds{UserID: "user-2", AuthToken: "dt-abc"})
+	if err != nil {
+		t.Fatalf("BuildQoderCosyHeaders: %v", err)
+	}
+	if other["Cosy-Machineid"] == first["Cosy-Machineid"] {
+		t.Errorf("machine id did not change with the account")
+	}
+
+	// A stored machine id wins over the derived one.
+	stored, err := BuildQoderCosyHeaders(nil, url, QoderCosyCreds{UserID: "user-1", AuthToken: "dt-abc", MachineID: "machine-uuid"})
+	if err != nil {
+		t.Fatalf("BuildQoderCosyHeaders: %v", err)
+	}
+	if stored["Cosy-Machineid"] != "machine-uuid" {
+		t.Errorf("stored machine id ignored: got %q", stored["Cosy-Machineid"])
+	}
+}
+
 // A connection without a stored userId must fail loudly rather than sign with
 // a made-up account.
 func TestQoderCosyCreds_MissingUserIDStaysEmpty(t *testing.T) {

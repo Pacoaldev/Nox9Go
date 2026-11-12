@@ -252,10 +252,14 @@ func TestQoderIsBillingBlock(t *testing.T) {
 	}{
 		{"daily billing count", `{"code":110,"message":"exceeded"}`, true},
 		{"quota exhausted", `{"code":112,"message":"quota"}`, true},
-		{"queue throttle", `{"code":10605,"message":"busy"}`, true},
 		{"pricing page pointer", `{"message":"see pricingUrl"}`, true},
 		{"ordinary model error", `{"code":400,"message":"flow nodes not found"}`, false},
 		{"empty", ``, false},
+		// 10605 is the model-queue throttle, a transient capacity signal — NOT a
+		// billing block. Treating it as one locks the model for minutes instead
+		// of waiting the ~30s the queue needs (upstream isBillingBlock excludes it).
+		{"model queue throttle is not billing", `{"code":10605,"message":"busy"}`, false},
+		{"queue resource limit is not billing", `{"subCode":"RESOURCE_LIMIT","isQueued":true}`, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

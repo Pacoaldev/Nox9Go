@@ -8,6 +8,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -84,6 +85,19 @@ func rsaEncryptBase64(data []byte) (string, error) {
 func md5Hex(data []byte) string {
 	h := md5.Sum(data)
 	return hex.EncodeToString(h[:])
+}
+
+// qoderDeriveMachineID returns a machine id derived deterministically from the
+// Qoder user id, so one account presents one stable device without any stored
+// state (upstream cosy.js deriveMachineId). Formatted as a UUID so it is
+// indistinguishable from a generated machine id.
+func qoderDeriveMachineID(seed string) string {
+	if seed == "" {
+		return uuid.NewString()
+	}
+	h := sha256.Sum256([]byte("qoder-machine\x00" + seed))
+	hexs := hex.EncodeToString(h[:])
+	return hexs[0:8] + "-" + hexs[8:12] + "-5" + hexs[13:16] + "-a" + hexs[17:20] + "-" + hexs[20:32]
 }
 
 // qoderCosySigPath mirrors upstream shared/qoder/cosy.js computeSigPath: the
@@ -176,7 +190,13 @@ func buildQoderCosyHeaders(body []byte, requestURL string, creds QoderCosyCreds)
 	// from one auth presents the same machine (cosy.js generateMachineId).
 	machineID := creds.MachineID
 	if machineID == "" {
-		machineID = uuid.New().String()
+		// PAT connections store no machine id, and a random one per request
+		// makes each request look like a brand-new device. Qoder tracks per-
+		// client queue state by this id, and a new device starts at the back of
+		// the model queue again — which is how a PAT connection kept hitting
+		// "Queue wait timed out". Derive a stable id from the account instead
+		// (upstream cosy.js deriveMachineId).
+		machineID = qoderDeriveMachineID(creds.UserID)
 	}
 	bodyHash := md5Hex(body)
 	bodyLength := fmt.Sprintf("%d", len(body))
@@ -269,26 +289,23 @@ func ForwardQoder(w http.ResponseWriter, req *Request) error {
 	}
 	encoded := QoderEncodeBody(plain)
 	targetURL := qoderChatURL(qoderEndpoint(req), region, creds.AuthToken)
-	headers, err := buildQoderCosyHeaders(encoded, targetURL, creds)
-	if err != nil {
-		return fmt.Errorf("build Qoder COSY headers: %w", err)
-	}
-	qoderApplyChatHeaders(headers, built)
 
-	resp, err := proxy.DoRequest(ctx, req.Client, http.MethodPost, targetURL, headers, encoded)
+	// A model that is out of capacity answers a queue signal instead of a
+	// completion; the send holds the request open and replays it once the queue
+	// drains (qoder_queue.go). A genuine failure comes back as an error.
+	body, err := qoderSendWithQueueWait(ctx, req, creds, region, built, encoded, targetURL)
 	if err != nil {
-		return fmt.Errorf("ForwardQoder: %w", err)
+		return err
 	}
-	defer resp.Body.Close()
+	defer body.Close()
 
 	// Qoder wraps every chunk in a {statusCodeValue, body} envelope, so the
 	// stream is peeled before it reaches the shared SSE folder — otherwise a
 	// perfectly good upstream looks like "200 without a completion".
 	rewoundR, rewoundW := io.Pipe()
 	go func() {
-		_ = rewoundW.CloseWithError(qoderSSERewrite(resp.Body, rewoundW, built.QoderKey))
+		_ = rewoundW.CloseWithError(qoderSSERewrite(body, rewoundW, built.QoderKey))
 	}()
-
 
 	if req.IsStream {
 		return execSSEStream(w, rewoundR, req)
