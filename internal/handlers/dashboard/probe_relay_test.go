@@ -119,11 +119,101 @@ func TestNewProbeRelayClient_RejectsUnusableInput(t *testing.T) {
 	if c := newProbeRelayClient("", "https://api.openai.com/v1/models"); c != nil {
 		t.Error("no relay host must produce no client, not a direct-dial one")
 	}
-	if c := newProbeRelayClient("https://relay.example", ""); c != nil {
-		t.Error("no upstream target must produce no client, not a direct-dial one")
+	// An unusable upstream no longer suppresses the client: the probe derives
+	// the relay target from the request it builds, so only the relay host is
+	// required here.
+	if c := newProbeRelayClient("https://relay.example", "garbage"); c == nil {
+		t.Error("a relay host is enough; the target comes from the request")
 	}
-	if c := newProbeRelayClient("https://relay.example", "garbage"); c != nil {
-		t.Error("an unparseable upstream must produce no client")
+}
+
+// A registry provider (baidu/qianfan is the case that exposed this) stores no
+// per-connection baseUrl, so the probe had no upstream to name and the relay
+// client came back nil — the probe then dialed the provider directly from the
+// host's own IP and reported the provider's edge block. The relay's whole
+// contract is "dial me and I forward to x-relay-target/x-relay-path", so the
+// target can be derived from the request the probe already built.
+func TestProbeRelayClient_DerivesTargetFromRequest(t *testing.T) {
+	var gotTarget, gotPath, gotHost string
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotTarget = r.Header.Get("x-relay-target")
+		gotPath = r.Header.Get("x-relay-path")
+		gotHost = r.Host
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"ernie-4.5"}]}`))
+	}))
+	defer relay.Close()
+
+	client := newProbeRelayClient(relay.URL, "")
+	if client == nil {
+		t.Fatal("a relay pool must produce a probe client even without a stored baseUrl")
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"https://qianfan.baidubce.com/v2/models", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("probe through relay: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotHost == "qianfan.baidubce.com" {
+		t.Fatal("the probe reached the provider directly instead of the relay")
+	}
+	if gotTarget != "https://qianfan.baidubce.com" {
+		t.Errorf("x-relay-target = %q, want the provider origin", gotTarget)
+	}
+	if gotPath != "/v2/models" {
+		t.Errorf("x-relay-path = %q, want the provider path", gotPath)
+	}
+}
+
+// The chat pipeline accepts a per-connection `vercelRelayUrl` in
+// providerSpecificData as a relay, but the probe only read a proxy pool id — so
+// a connection relayed that way was tested straight at the provider and could
+// report the provider's edge block while production traffic was flowing fine.
+func TestProbeHTTPClient_HonoursPerConnectionRelayURL(t *testing.T) {
+	var hitRelay bool
+	var gotTarget string
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitRelay = true
+		gotTarget = r.Header.Get("x-relay-target")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"ernie-4.5"}]}`))
+	}))
+	defer relay.Close()
+
+	h := &DashboardHandler{}
+	data := connectionProbeData{
+		ProviderSpecificData: map[string]any{"vercelRelayUrl": relay.URL},
+	}
+	client, proxyURL := h.probeHTTPClient(data, map[string]any{})
+	if proxyURL != "" {
+		t.Fatalf("a relay is not a pre-checked HTTP proxy, got %q", proxyURL)
+	}
+	if client == nil {
+		t.Fatal("a per-connection relay url must produce a probe client")
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"https://qianfan.baidubce.com/v2/models", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("probe through relay: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if !hitRelay {
+		t.Fatal("the probe never reached the relay host")
+	}
+	if gotTarget != "https://qianfan.baidubce.com" {
+		t.Errorf("x-relay-target = %q, want the provider origin", gotTarget)
 	}
 }
 

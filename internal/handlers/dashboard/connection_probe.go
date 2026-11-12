@@ -379,6 +379,15 @@ func (h *DashboardHandler) probeHTTPClient(data connectionProbeData, raw map[str
 			edgeRelay = pool.IsEdgeRelay()
 		}
 	}
+	// A per-connection relay url is the chat pipeline's other relay source
+	// (getProviderConfig reads it after the pool), so the probe must honour it
+	// too — otherwise a connection relayed this way is tested from the host IP.
+	if proxyURLStr == "" {
+		if u := psdStr(data.ProviderSpecificData, "vercelRelayUrl"); u != "" {
+			proxyURLStr = u
+			edgeRelay = true
+		}
+	}
 	if proxyURLStr == "" {
 		enabled := data.ConnectionProxyEnabled
 		target := data.ConnectionProxyURL

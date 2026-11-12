@@ -140,3 +140,54 @@ func TestValidateGeneric_RealKeyRejectionKeepsCredentialMessage(t *testing.T) {
 		t.Errorf("want the credential message, got %q", out.message)
 	}
 }
+
+// Baidu Qianfan serves no /v2/models route: its edge answers
+// `403 {"code":"AccessDenied","message":"Access denied."}` for that path while
+// the chat route the gateway actually uses evaluates the key and answers
+// `400/invalid_iam_token` for a bad one. Treating that 403 as an edge block made
+// a perfectly reachable provider look like a network problem and never tested
+// the credential. A blocked /models probe must therefore be confirmed against
+// the chat route before it is reported as a block.
+func TestValidateGeneric_EdgeBlockConfirmedAgainstChatRoute(t *testing.T) {
+	calls := withProbeStub(t, func(call int, p capturedProbe) (int, []byte, error) {
+		if call == 0 {
+			return http.StatusForbidden,
+				[]byte(`{"requestId":"ab2a2fbe","code":"AccessDenied","message":"Access denied."}`), nil
+		}
+		return http.StatusBadRequest,
+			[]byte(`{"error":{"code":"invalid_iam_token","message":"invalid_iam_token"}}`), nil
+	})
+
+	cfg := probeTestProviderConfig()
+	cfg.BaseURL = "https://qianfan.baidubce.com/v2/chat/completions"
+	out := validateGeneric(context.Background(), "baidu", cfg, "sk-test")
+
+	if len(*calls) < 2 {
+		t.Fatalf("the blocked /models probe must be confirmed against the chat route, got %d probe(s)", len(*calls))
+	}
+	if strings.Contains(out.message, "Network/region block") {
+		t.Errorf("a provider whose chat route answers must not be reported as blocked: %q", out.message)
+	}
+	if !out.valid {
+		t.Errorf("the chat route answered the key, want a valid outcome, got %+v", out)
+	}
+}
+
+// A provider genuinely behind an edge block answers the same refusal on the
+// chat route, so the block verdict must survive the confirmation.
+func TestValidateGeneric_RealEdgeBlockStillReported(t *testing.T) {
+	withProbeStub(t, func(int, capturedProbe) (int, []byte, error) {
+		return http.StatusForbidden,
+			[]byte(`{"error":{"message":"Access denied. Please check your network settings."}}`), nil
+	})
+
+	cfg := probeTestProviderConfig()
+	out := validateGeneric(context.Background(), "groq", cfg, "sk-test")
+
+	if out.valid {
+		t.Fatal("a blocked probe must not be reported as valid")
+	}
+	if !strings.Contains(out.message, "Network/region block") {
+		t.Errorf("want the network-block message, got %q", out.message)
+	}
+}

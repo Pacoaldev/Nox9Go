@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,7 +49,13 @@ func newProbeRelayClient(relayURL, upstreamURL string) *http.Client {
 	}
 	target, ok := splitRelayTarget(upstreamURL)
 	if !ok {
-		return nil
+		// A registry provider stores no per-connection baseUrl, so there is no
+		// upstream to name here. The relay contract is "dial me, forward to
+		// x-relay-target/x-relay-path", and the probe builds the real provider
+		// URL itself — so the target is derived from that request instead of
+		// dropping the relay and dialing the provider from the host's own IP.
+		// See probeRelayRoundTripper.RoundTrip.
+		target = probeRelayTarget{}
 	}
 	return &http.Client{
 		Timeout: connectionProbeTimeout,
@@ -77,6 +84,17 @@ func (t *probeRelayRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 		base = http.DefaultTransport
 	}
 
+	target := t.target
+	if target.origin == "" {
+		// No upstream was known when the client was built: the request's own
+		// URL is the provider endpoint the relay must forward to.
+		derived, ok := splitRelayTarget(req.URL.String())
+		if !ok {
+			return nil, fmt.Errorf("probe relay: cannot derive an upstream from %q", req.URL.String())
+		}
+		target = derived
+	}
+
 	relayed := req.Clone(req.Context())
 	relayed.URL.Scheme = t.relay.Scheme
 	relayed.URL.Host = t.relay.Host
@@ -86,7 +104,7 @@ func (t *probeRelayRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	relayed.URL.RawQuery = ""
 	relayed.Host = t.relay.Host
 	relayed.RequestURI = ""
-	relayed.Header.Set("x-relay-target", t.target.origin)
-	relayed.Header.Set("x-relay-path", t.target.path)
+	relayed.Header.Set("x-relay-target", target.origin)
+	relayed.Header.Set("x-relay-path", target.path)
 	return base.RoundTrip(relayed)
 }

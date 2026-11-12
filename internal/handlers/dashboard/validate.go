@@ -524,10 +524,15 @@ func validateGeneric(ctx context.Context, provider string, cfg providers.Provide
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
 		if looksEdgeBlocked(respBody) {
-			log.Warn("probe", "provider key test blocked by edge, key not evaluated",
-				"provider", provider, "endpoint", modelsURL, "status", status,
-				"body", validateTruncate(string(respBody), 200))
-			return validateOutcome{supported: true, message: validateBlockedMessage(provider, status)}
+			// A 403 on /models means one of two very different things: an edge
+			// refusing the caller, or a provider that simply serves no listing
+			// route (Baidu Qianfan answers `403 AccessDenied` for /v2/models while
+			// its chat route evaluates the key). The chat route is the endpoint
+			// the gateway actually uses, so confirm there before reporting a
+			// network block the operator cannot fix.
+			log.Debug("probe", "provider key test blocked on /models, confirming against chat",
+				"provider", provider, "endpoint", modelsURL, "status", status)
+			return validateChatFallback(ctx, provider, cfg, headers)
 		}
 		log.Info("probe", "provider key test rejected credential",
 			"provider", provider, "endpoint", modelsURL, "status", status)
@@ -542,12 +547,19 @@ func validateGeneric(ctx context.Context, provider string, cfg providers.Provide
 		"provider", provider, "endpoint", modelsURL, "status", status)
 
 	// Ambiguous /models answer (404, 405, 429…) — fall back to a chat probe.
+	return validateChatFallback(ctx, provider, cfg, headers)
+}
+
+// validateChatFallback probes the chat route the gateway actually calls. It is
+// the authoritative credential check when /models cannot decide: 400/429/5xx
+// all prove the key was accepted, only 401/403 mean it was rejected.
+func validateChatFallback(ctx context.Context, provider string, cfg providers.ProviderConfig, headers map[string]string) validateOutcome {
 	payload, _ := json.Marshal(map[string]any{
 		"model":      validateDefaultModel(provider),
 		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
 		"max_tokens": 1,
 	})
-	status, respBody, err = validateProbeDo(ctx, http.MethodPost, cfg.BaseURL, headers, payload)
+	status, respBody, err := validateProbeDo(ctx, http.MethodPost, cfg.BaseURL, headers, payload)
 	if err != nil {
 		log.Debug("probe", "provider key test chat fallback network error",
 			"provider", provider, "endpoint", cfg.BaseURL, "error", err)
