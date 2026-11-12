@@ -112,21 +112,24 @@ type choiceProbe struct {
 }
 
 type messageProbe struct {
-	Content          jsontext.Value `json:"content"`
-	ToolCalls        jsontext.Value `json:"tool_calls"`
-	FunctionCall     jsontext.Value `json:"function_call"`
-	ReasoningContent jsontext.Value `json:"reasoning_content"`
-	Reasoning        jsontext.Value `json:"reasoning"`
-	Refusal          jsontext.Value `json:"refusal"`
+	Content      jsontext.Value `json:"content"`
+	ToolCalls    jsontext.Value `json:"tool_calls"`
+	FunctionCall jsontext.Value `json:"function_call"`
+	Refusal      jsontext.Value `json:"refusal"`
 }
 
-// carriesAnswer reports whether a message holds anything a client can act
-// on. A blank content string is a real answer when the model also returned
-// tool calls or reasoning — the text simply is not the whole reply — so
-// those carriers count.
+// carriesAnswer reports whether a message holds anything a client can act on.
+// Tool calls and a refusal count even when the text is blank — the text simply
+// is not the whole reply.
+//
+// Reasoning alone does NOT count. A model that thinks, aborts and never emits
+// content produces reasoning frames with no answer: Gemini does exactly that
+// when it attempts a native function call the API cannot serialize, and still
+// answers HTTP 200. Reading that as a completed turn makes the combo settle on
+// the model that said nothing and skip the rest of its candidates.
 func (m messageProbe) carriesAnswer() bool {
 	return carriesValue(m.Content) || carriesValue(m.ToolCalls) || carriesValue(m.FunctionCall) ||
-		carriesValue(m.ReasoningContent) || carriesValue(m.Reasoning) || carriesValue(m.Refusal)
+		carriesValue(m.Refusal)
 }
 
 // missingCompletion names the specific gap in a 200 body, or "" when it
@@ -344,7 +347,9 @@ func IsZeroContentResponse(body []byte) bool {
 
 				hasContent := probeHasContent(msg.Content)
 				hasToolCalls := probeHasToolCalls(msg.ToolCalls, msg.FunctionCall)
-				hasReasoning := probeHasReasoning(msg.ReasoningContent) || probeHasReasoning(msg.Reasoning)
+				// Reasoning is deliberately not an answer here either: a turn
+				// that only thought and aborted produced nothing a client can
+				// read, so it must still be treated as zero content.
 
 				var finish string
 				trimmedFR := bytes.TrimSpace(c.FinishReason)
@@ -353,7 +358,7 @@ func IsZeroContentResponse(body []byte) bool {
 				}
 				isNormalFinish := finish == "stop" || finish == "length" || finish == "tool_calls" || finish == "function_call"
 
-				if !hasContent && !hasToolCalls && !hasReasoning && (!isNormalFinish || finish == "in_progress" || finish == "incomplete") {
+				if !hasContent && !hasToolCalls && (!isNormalFinish || finish == "in_progress" || finish == "incomplete") {
 					return true
 				}
 			}
@@ -436,18 +441,6 @@ func probeMessageFallsThroughToDelta(raw jsontext.Value) bool {
 		}
 		return num == 0
 	}
-}
-
-func probeHasReasoning(raw jsontext.Value) bool {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || trimmed[0] != '"' {
-		return false
-	}
-	var s string
-	if err := json.Unmarshal(trimmed, &s, handlerutil.UpstreamBody); err == nil {
-		return strings.TrimSpace(s) != ""
-	}
-	return false
 }
 
 func probeHasContent(raw jsontext.Value) bool {

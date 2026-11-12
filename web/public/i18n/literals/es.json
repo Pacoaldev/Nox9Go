@@ -919,6 +919,8 @@
   "Offline": "Desconectado",
   "OK": "OK",
   "Ollama Host URL": "URL del host de Ollama",
+  "Server Base URL": "URL base del servidor",
+  "Enter the base URL of your self-hosted server (e.g. <code>http://localhost:8880</code>). The key is only sent as a bearer token; a local server can ignore it, so any non-empty value works.": "Introduzca la URL base de su servidor autoalojado (p. ej. <code>http://localhost:8880</code>). La clave solo se envía como token bearer; un servidor local puede ignorarla, así que cualquier valor no vacío sirve.",
   "omp coding agent — register the gateway in ~/.omp/agent/models.yml": "Agente de codificación omp: registre la puerta de enlace en ~/.omp/agent/models.yml",
   "On reset": "Al reiniciar",
   "One client key": "Una clave de cliente",

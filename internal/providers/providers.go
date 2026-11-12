@@ -1162,6 +1162,25 @@ var KnownProviders = map[string]ProviderConfig{
 		BaseURL: "",
 		NoAuth:  true,
 	},
+	// Self-hosted, OpenAI-compatible media servers (Kokoro-FastAPI,
+	// openedai-speech, vLLM-served TTS, faster-whisper-server, any
+	// OpenAI-compatible embedding server). Unlike coqui / tortoise / local-device,
+	// which carry a fixed loopback URL and no credential, these take the host from
+	// the connection: `apikey` auth is what gives the connection a credentials
+	// record, and providerSpecificData.baseUrl lives there. The key is a
+	// formality — a local server ignores it — so any non-empty value works.
+	"selfhosted-embedding": {
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"selfhosted-stt": {
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"selfhosted-tts": {
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
 	"topaz": {
 		BaseURL:    "https://api.topaz.sh",
 		AuthHeader: "Authorization",

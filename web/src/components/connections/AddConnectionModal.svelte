@@ -62,6 +62,14 @@
   // provider take the wrong probe path. Both submit paths read this one value.
   let connectionAuthType = $derived(isCompatible ? 'compatible' : isCookie ? 'cookie' : 'apikey')
   let isOllamaLocal = $derived(providerId === 'ollama-local')
+  // A provider whose host the operator names renders the host URL field. The
+  // self-hosted media providers work the same way Ollama Local does: the host is
+  // stored per connection, and the media lane reads it from there.
+  let needsHostUrl = $derived(isOllamaLocal || catalogItem?.needsHostUrl === true)
+  let hostUrlLabel = $derived(isOllamaLocal ? 'Ollama Host URL' : 'Server Base URL')
+  let hostUrlPlaceholder = $derived(
+    isOllamaLocal ? 'http://localhost:11434' : 'http://localhost:8880'
+  )
   let isXaiApiKey = $derived(providerId === 'xai' && !isCookie)
   let isAzure = $derived(providerId === 'azure')
   let isCloudflareAi = $derived(providerId === 'cloudflare-ai')
@@ -191,7 +199,7 @@
   }
 
   function buildProviderSpecificData(): Record<string, unknown> | undefined {
-    if (isOllamaLocal && formOllamaHostUrl.trim()) {
+    if (needsHostUrl && formOllamaHostUrl.trim()) {
       return { baseUrl: formOllamaHostUrl.trim() }
     }
     if (isAzure) {
@@ -382,6 +390,9 @@
   let saveDisabled = $derived(
     saving ||
       (!isOllamaLocal && !formName.trim()) ||
+      // A self-hosted media provider has no default host: the connection would
+      // have nowhere to send the request.
+      (catalogItem?.needsHostUrl === true && !formOllamaHostUrl.trim()) ||
       (!credentialIsOptional && !formApiKey.trim()) ||
       (isCompatible && !formDefaultModel.trim()) ||
       (isAzure && (!azureData.azureEndpoint || !azureData.deployment || !azureData.organization)) ||
@@ -555,15 +566,15 @@
               />
             </div>
 
-            {#if isOllamaLocal}
+            {#if needsHostUrl}
               <div class="flex gap-2">
                 <div class="flex-1">
-                  <label for="ollamaHost" class={labelCls}>Ollama Host URL</label>
+                  <label for="ollamaHost" class={labelCls}>{hostUrlLabel}</label>
                   <input
                     id="ollamaHost"
                     type="text"
                     bind:value={formOllamaHostUrl}
-                    placeholder="http://localhost:11434"
+                    placeholder={hostUrlPlaceholder}
                     class="{inputCls} font-mono"
                   />
                 </div>
@@ -573,7 +584,8 @@
                   </Button>
                 </div>
               </div>
-            {:else}
+            {/if}
+            {#if !isOllamaLocal}
               <div class="flex gap-2">
                 <div class="flex-1">
                   <label for="connApiKey" class={labelCls}>
@@ -880,6 +892,10 @@
             {#if isOllamaLocal}
               <p class="text-xs text-text-muted">
                 Leave blank to use <code>http://localhost:11434</code>. For remote Ollama, enter the full host URL (e.g. <code>http://192.168.1.10:11434</code>).
+              </p>
+            {:else if catalogItem?.needsHostUrl}
+              <p class="text-xs text-text-muted">
+                Enter the base URL of your self-hosted server (e.g. <code>http://localhost:8880</code>). The key is only sent as a bearer token; a local server can ignore it, so any non-empty value works.
               </p>
             {/if}
 

@@ -122,7 +122,7 @@ func (h *ChatHandler) resolveLiveCatalog(ctx context.Context, conn *models.Provi
 	if accessToken == "" {
 		accessToken = connData.APIKey
 	}
-	if accessToken == "" {
+	if accessToken == "" && githubCopilotToken(connData) == "" {
 		return nil
 	}
 
@@ -139,6 +139,15 @@ func (h *ChatHandler) resolveLiveCatalog(ctx context.Context, conn *models.Provi
 	case providerID == "zed":
 		fetch = func(ctx context.Context, token string) []LiveModel {
 			return h.fetchZedLiveCatalog(ctx, conn, connData, token)
+		}
+	case providerID == "github":
+		// Copilot decides per account which models answer; the static registry
+		// lists models that 400 for this account. resolveLiveCatalog's generic
+		// credential check does not fit here because the credential the
+		// catalogue needs is the minted copilotToken, not the OAuth access
+		// token, so the provider arm returns before that check would matter.
+		fetch = func(ctx context.Context, _ string) []LiveModel {
+			return h.fetchGithubLiveCatalog(ctx, conn, connData)
 		}
 	case isCompatibleProviderID(providerID):
 		// Upstream fetchCompatibleModelIds: custom nodes publish whatever their

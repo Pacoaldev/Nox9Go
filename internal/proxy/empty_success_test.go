@@ -71,9 +71,11 @@ func TestEmptyUpstreamError(t *testing.T) {
 			wantFail: false,
 		},
 		{
-			name:     "content plus reasoning is an answer",
+			// Reasoning alone is a thinking turn that never answered. Treating it
+			// as an answer made the combo settle on the model that said nothing.
+			name:     "reasoning without content or tools is a gap",
 			body:     `{"choices":[{"message":{"content":"","reasoning_content":"step"}}]}`,
-			wantFail: false,
+			wantFail: true,
 		},
 		{
 			name:     "refusal is an answer",

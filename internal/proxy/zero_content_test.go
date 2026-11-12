@@ -51,8 +51,16 @@ func TestIsZeroContentResponse(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "reasoning_content present is not zero content",
+			// A turn that only thought and aborted carries nothing a client can
+			// read, so it is zero content. Gemini produces exactly this when it
+			// attempts a native function call the API cannot serialize.
+			name: "reasoning_content only is zero content",
 			body: `{"choices":[{"message":{"content":"","reasoning_content":"thought process"},"finish_reason":"in_progress"}]}`,
+			want: true,
+		},
+		{
+			name: "reasoning_content with text is not zero content",
+			body: `{"choices":[{"message":{"content":"hello","reasoning_content":"thought process"},"finish_reason":"in_progress"}]}`,
 			want: false,
 		},
 		{

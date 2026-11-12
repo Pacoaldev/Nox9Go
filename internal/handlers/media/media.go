@@ -874,7 +874,7 @@ func (h *MediaHandler) forwardMediaRequest(w http.ResponseWriter, r *http.Reques
 			}
 
 			finalBody := handlerutil.UpdateModelInBody(body, subInfo.Model)
-			targetURL := strings.TrimRight(providerCfg.BaseURL, "/") + endpoint
+			targetURL := mediaTargetURL(providerCfg, connData, endpoint)
 			method := r.Method
 			// Use provider FetchURL for web/fetch when configured (e.g., ollama cloud)
 			if endpoint == "/v1/web/fetch" && providerCfg.FetchURL != "" {
@@ -1110,58 +1110,11 @@ func (h *MediaHandler) forwardMediaRequest(w http.ResponseWriter, r *http.Reques
 		usagetracker.GetTracker().TrackPending(modelInfo.Model, modelInfo.Provider, connID, false, hasErr)
 	}()
 
-	baseURL := strings.TrimRight(providerCfg.BaseURL, "/")
-	if connData != nil && connData.BaseURL != "" {
-		baseURL = strings.TrimRight(connData.BaseURL, "/")
-	}
-	baseURL = strings.TrimSuffix(baseURL, "/chat/completions")
-	baseURL = strings.TrimSuffix(baseURL, "/messages")
-
-	hasCustomBaseURL := connData != nil && connData.BaseURL != "" && connData.BaseURL != providerCfg.BaseURL
-
-	var targetURL string
-	switch endpoint {
-	case "/v1/images/generations", "/images/generations":
-		if !hasCustomBaseURL && providerCfg.ImageURL != "" {
-			targetURL = providerCfg.ImageURL
-		} else {
-			targetURL = strings.TrimSuffix(baseURL, "/v1") + "/v1/images/generations"
-		}
-	case "/v1/audio/speech", "/audio/speech":
-		if !hasCustomBaseURL && providerCfg.TTSURL != "" {
-			targetURL = providerCfg.TTSURL
-		} else {
-			targetURL = strings.TrimSuffix(baseURL, "/v1") + "/v1/audio/speech"
-		}
-	case "/v1/audio/transcriptions", "/audio/transcriptions":
-		if !hasCustomBaseURL && providerCfg.STTURL != "" {
-			targetURL = providerCfg.STTURL
-		} else {
-			targetURL = strings.TrimSuffix(baseURL, "/v1") + "/v1/audio/transcriptions"
-		}
-	case "/v1/videos/generations", "/videos/generations":
-		if !hasCustomBaseURL && providerCfg.VideoURL != "" {
-			if strings.HasSuffix(providerCfg.VideoURL, "/generations") {
-				targetURL = providerCfg.VideoURL
-			} else {
-				targetURL = strings.TrimRight(providerCfg.VideoURL, "/") + "/generations"
-			}
-		} else {
-			targetURL = strings.TrimSuffix(baseURL, "/v1") + "/v1/videos/generations"
-		}
-	case "/v1/systemone", "/systemone":
-		if !hasCustomBaseURL && providerCfg.SystemoneURL != "" {
-			targetURL = providerCfg.SystemoneURL
-		} else {
-			targetURL = strings.TrimSuffix(baseURL, "/v1") + "/v1/systemone"
-		}
-	default:
-		if strings.HasSuffix(baseURL, "/v1") && strings.HasPrefix(endpoint, "/v1/") {
-			targetURL = strings.TrimSuffix(baseURL, "/v1") + endpoint
-		} else {
-			targetURL = baseURL + endpoint
-		}
-	}
+	// One implementation for both lanes: the combo path used to append the
+	// endpoint to providerCfg.BaseURL, which getProviderConfig had already
+	// completed into a chat route, so a connection host produced
+	// "/v1/chat/completions/v1/audio/speech".
+	targetURL := mediaTargetURL(providerCfg, connData, endpoint)
 	method := r.Method
 	if endpoint == "/v1/web/fetch" && providerCfg.FetchURL != "" {
 		targetURL = providerCfg.FetchURL

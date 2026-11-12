@@ -69,11 +69,22 @@ func SetupRoutes(r interface {
 	r.Get("/api/models/*", chatH.HandleModelLookup)
 	r.Get("/api/models/catalog-sync", chatH.HandleCatalogSyncStatus)
 	r.Post("/api/models/catalog-sync", chatH.HandleCatalogSyncTrigger)
+	// Gemini-native inbound surface: a Gemini SDK or Gemini CLI points here
+	// instead of at generativelanguage.googleapis.com. Streaming is chosen by the
+	// URL action suffix, so one wildcard route serves both actions.
+	r.Get("/v1beta/models", chatH.HandleGeminiModelsList)
+	r.HandleFunc("/v1beta/models/*", chatH.HandleGeminiGenerateContent)
 	r.Get("/api/models", chatH.HandleModels)
 	r.Post("/chat/completions", chatH.HandleChatCompletions)
 	r.Post("/messages", chatH.HandleMessages)
 	r.Post("/messages/count_tokens", chatH.HandleCountTokens)
 	r.Post("/api/chat", chatH.HandleOllamaChat)
+	// Ollama clients enumerate models before chatting. Without this listing a
+	// client concludes the host has no models and never sends /api/chat.
+	// HandleFunc answers every method so the browser preflight reaches the same
+	// handler, which answers OPTIONS with 204 itself.
+	r.HandleFunc("/api/tags", chatH.HandleOllamaTags)
+	r.HandleFunc("/v1/api/tags", chatH.HandleOllamaTags)
 
 	// Media, Audio, Video & Web Tools Domain
 	r.Post("/embeddings", mediaH.HandleEmbeddings)

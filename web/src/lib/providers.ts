@@ -43,6 +43,12 @@ export interface ProviderCatalogItem {
    * rejecting a documented setup.
    */
   apiKeyOptionalWith?: string
+  /**
+   * The operator names the provider's host, so the add-connection form renders
+   * a host URL field next to the key. Ollama Local and the self-hosted media
+   * providers need one; a cloud provider does not.
+   */
+  needsHostUrl?: boolean
   /** Upstream registry features.usage: the quota tracker can read this provider. */
   usage?: boolean
   searchConfig?: Record<string, any>
@@ -933,6 +939,51 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "authType": "none",
     "noAuth": true,
     "hidden": true,
+    "serviceKinds": [
+      "tts"
+    ]
+  },
+  {
+    "id": "selfhosted-embedding",
+    "name": "Self-hosted Embedding",
+    "category": "apikey",
+    "alias": "selfhosted-embedding",
+    "color": "#0EA5E9",
+    "icon": "dns",
+    "website": "https://github.com/vllm-project/vllm",
+    "authType": "apikey",
+    "noAuth": false,
+    "needsHostUrl": true,
+    "serviceKinds": [
+      "embedding"
+    ]
+  },
+  {
+    "id": "selfhosted-stt",
+    "name": "Self-hosted STT",
+    "category": "apikey",
+    "alias": "selfhosted-stt",
+    "color": "#0EA5E9",
+    "icon": "dns",
+    "website": "https://github.com/SYSTRAN/faster-whisper",
+    "authType": "apikey",
+    "noAuth": false,
+    "needsHostUrl": true,
+    "serviceKinds": [
+      "stt"
+    ]
+  },
+  {
+    "id": "selfhosted-tts",
+    "name": "Self-hosted TTS",
+    "category": "apikey",
+    "alias": "selfhosted-tts",
+    "color": "#0EA5E9",
+    "icon": "dns",
+    "website": "https://github.com/remsky/Kokoro-FastAPI",
+    "authType": "apikey",
+    "noAuth": false,
+    "needsHostUrl": true,
     "serviceKinds": [
       "tts"
     ]
