@@ -129,6 +129,8 @@ func fetchProviderUsage(ctx context.Context, provider string, data map[string]an
 		return fetchXiaomiMimoUsage(ctx, firstNonEmptyStr(apiKey, accessToken)), true
 	case "zed":
 		return fetchZedUsage(ctx, accessToken, psd), true
+	case "tokenharbor":
+		return fetchTokenHarborUsage(ctx, firstNonEmptyStr(apiKey, accessToken)), true
 	default:
 		return usageResult{}, false
 	}
