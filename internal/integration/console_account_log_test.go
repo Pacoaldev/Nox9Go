@@ -96,6 +96,7 @@ type consoleEntry struct {
 	Time  time.Time `json:"time"`
 	Level string    `json:"level"`
 	Line  string    `json:"line"`
+	Seq   uint64    `json:"seq"`
 }
 
 // consoleLines returns just the rendered lines; use consoleEntries when the

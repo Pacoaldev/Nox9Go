@@ -394,6 +394,7 @@ func SetupConsoleLogRoutes(r chi.Router, repo *db.Repo) {
 		r.Get("/api/translator/console-logs", HandleConsoleLogsGet)
 		r.Delete("/api/translator/console-logs", HandleConsoleLogsDelete)
 		r.Get("/api/translator/console-logs/stream", HandleConsoleLogsStream)
+		r.Get("/api/translator/console-logs/file", HandleConsoleLogsFileDownload)
 		r.Get("/api/translator/console-logs/level", HandleConsoleLogsLevelGet)
 		r.Put("/api/translator/console-logs/level", HandleConsoleLogsLevelPut)
 	})

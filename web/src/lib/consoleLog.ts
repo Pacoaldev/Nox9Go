@@ -13,8 +13,14 @@ export interface ConsoleEntry {
   time: string
   level: LogLevel
   line: string
-  /** Sequence number, so rows sharing a timestamp keep their arrival order. */
+  /** Client sequence number, so rows sharing a timestamp keep their arrival order. */
   seq: number
+  /**
+   * Server-assigned monotonic line number, when the server sent one. A gap
+   * between consecutive serverSeq values proves the viewer missed output.
+   * Null for older servers that only send {time,level,line}.
+   */
+  serverSeq: number | null
 }
 
 /** The raw SSE / REST payload, before display parsing. */
@@ -22,6 +28,7 @@ export interface RawConsoleEntry {
   time?: unknown
   level?: unknown
   line?: unknown
+  seq?: unknown
 }
 
 export interface LevelCounts {
@@ -114,7 +121,13 @@ export function toConsoleEntry(
     level: coerceLevel(raw.level) ?? json?.level ?? levelFromText(line) ?? 'info',
     line,
     seq,
+    serverSeq: coerceSeq(raw.seq),
   }
+}
+
+function coerceSeq(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value
+  return null
 }
 
 export function countByLevel(entries: ConsoleEntry[]): LevelCounts {
@@ -123,10 +136,142 @@ export function countByLevel(entries: ConsoleEntry[]): LevelCounts {
   return counts
 }
 
-export function filterEntries(entries: ConsoleEntry[], query: string): ConsoleEntry[] {
-  const needle = query.trim().toLowerCase()
-  if (!needle) return entries
-  return entries.filter((entry) => entry.line.toLowerCase().includes(needle))
+export interface SearchOptions {
+  query: string
+  /** Match case exactly instead of folding to lower-case. */
+  caseSensitive?: boolean
+  /** Treat the query as a regular expression instead of a literal substring. */
+  regex?: boolean
+}
+
+export interface Matcher {
+  /** True when the matcher can test a line. */
+  test: (line: string) => boolean
+  /** The compiled regex for highlighting, or null for a literal/empty query. */
+  regex: RegExp | null
+  /** Set when regex mode was requested but the pattern is invalid. */
+  invalid: boolean
+}
+
+/**
+ * Compiles a search into a reusable matcher. A literal query is escaped so
+ * characters like `.` or `[` are searched as text; a regex query is used as
+ * written. An invalid regex is reported (invalid: true) instead of thrown, so
+ * the field can show the error while the list keeps the previous results.
+ */
+export function compileSearch(options: SearchOptions | string): Matcher {
+  const opts: SearchOptions = typeof options === 'string' ? { query: options } : options
+  const query = opts.query.trim()
+  if (!query) return { test: () => true, regex: null, invalid: false }
+
+  const caseFlags = opts.caseSensitive ? '' : 'i'
+  const source = opts.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  let globalRegex: RegExp
+  try {
+    // The highlighter needs /g; the tester must not, because RegExp.test is
+    // stateful on a global regex and would skip every other match.
+    globalRegex = new RegExp(source, caseFlags + 'g')
+  } catch {
+    return { test: () => true, regex: null, invalid: true }
+  }
+  const plainRegex = new RegExp(source, caseFlags)
+  return { test: (line: string) => plainRegex.test(line), regex: globalRegex, invalid: false }
+}
+
+/**
+ * Filters entries by a search. Accepts a bare string for the historical
+ * case-insensitive substring behaviour, or SearchOptions for case/regex.
+ */
+export function filterEntries(entries: ConsoleEntry[], search: SearchOptions | string): ConsoleEntry[] {
+  const matcher = compileSearch(search)
+  if (!matcher.regex) return entries
+  return entries.filter((entry) => matcher.test(entry.line))
+}
+
+export interface HighlightPart {
+  text: string
+  hit: boolean
+}
+
+/**
+ * Splits a line into alternating plain/matched segments for rendering with
+ * <mark>. Uses the matcher's global regex, so a highlighted row shows exactly
+ * why it matched instead of forcing the operator to re-scan a long line.
+ */
+export function highlightParts(line: string, matcher: Matcher): HighlightPart[] {
+  const regex = matcher.regex
+  if (!regex) return [{ text: line, hit: false }]
+
+  regex.lastIndex = 0
+  const parts: HighlightPart[] = []
+  let last = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(line)) !== null) {
+    if (match[0] === '') {
+      regex.lastIndex++
+      continue
+    }
+    if (match.index > last) parts.push({ text: line.slice(last, match.index), hit: false })
+    parts.push({ text: match[0], hit: true })
+    last = match.index + match[0].length
+    if (parts.length > 500) break // pathological pattern guard
+  }
+  if (last < line.length) parts.push({ text: line.slice(last), hit: false })
+  return parts.length > 0 ? parts : [{ text: line, hit: false }]
+}
+
+export interface TagCount {
+  tag: string
+  count: number
+}
+
+/**
+ * Collects the subsystem tags ([usage], [auth], ...) present in the buffer,
+ * most frequent first, so the page can offer them as filter chips. Derived
+ * from the rendered line, which is the only place the tag survives.
+ */
+export function collectTags(entries: ConsoleEntry[]): TagCount[] {
+  const counts = new Map<string, number>()
+  for (const entry of entries) {
+    const parsed = splitTag(entry.line)
+    if (!parsed) continue
+    counts.set(parsed.tag, (counts.get(parsed.tag) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+}
+
+// req_id appears either as `req_id=req_ab12` in text format or `"req_id":"req_ab12"`
+// in JSON format (quote, colon, quote). Capturing it lets a click pivot to every
+// line of one request.
+const REQ_ID_RE = /\breq_id"?\s*[=:]\s*"?(req_[0-9a-zA-Z]+)/
+
+export function extractReqId(line: string): string | null {
+  return REQ_ID_RE.exec(line)?.[1] ?? null
+}
+
+/** Reads a [tag] out of a rendered line, or '' when it has none. */
+export function entryTag(line: string): string {
+  return splitTag(line)?.tag ?? ''
+}
+
+/**
+ * Formats a row's time relative to a base instant (the first visible row), for
+ * reading a burst of requests as a timeline instead of absolute clocks.
+ */
+export function formatRelative(iso: string, baseMs: number): string {
+  const parsed = Date.parse(iso)
+  if (Number.isNaN(parsed)) return '--'
+  const deltaMs = parsed - baseMs
+  const sign = deltaMs < 0 ? '-' : '+'
+  const abs = Math.abs(deltaMs)
+  if (abs < 1000) return `${sign}${abs}ms`
+  if (abs < 60_000) return `${sign}${(abs / 1000).toFixed(abs < 10_000 ? 2 : 1)}s`
+  const minutes = Math.floor(abs / 60_000)
+  const seconds = Math.floor((abs % 60_000) / 1000)
+  return `${sign}${minutes}m${String(seconds).padStart(2, '0')}s`
 }
 
 /** HH:MM:SS.mmm — a burst of requests needs sub-second resolution to be readable. */

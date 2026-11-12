@@ -61,6 +61,9 @@
   // form cannot succeed. It gets its own state so the dialog can disable the
   // submit and tell the user what to change instead of offering a retry.
   let conflict = $state<{ message: string; sources: string[]; kinds: string[] } | null>(null)
+  // The id the conflict was reported for. Editing the field to a different id
+  // is the fix, so the warning clears when formId no longer matches this.
+  let conflictId = $state('')
   let result = $state<PromotionResult | null>(null)
 
   function slugOf(value: string): string {
@@ -90,6 +93,7 @@
     result = null
     error = null
     conflict = null
+    conflictId = ''
     formKinds = ['llm']
     promoting = false
     previewing = false
@@ -98,8 +102,7 @@
   // Editing the id is the fix for a conflict, so the warning has to clear as
   // soon as the field changes rather than leaving a stale block on screen.
   $effect(() => {
-    formId
-    conflict = null
+    if (conflict !== null && formId !== conflictId) conflict = null
   })
 
   let payload = $derived({
@@ -144,6 +147,7 @@
         sources: Array.isArray(body.sources) ? body.sources.map(String) : [],
         kinds: Array.isArray(body.kinds) ? body.kinds.map(String) : [],
       }
+      conflictId = formId
       error = null
       return
     }

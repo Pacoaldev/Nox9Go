@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  collectTags,
+  compileSearch,
   countByLevel,
   downloadFilename,
+  entryTag,
+  extractReqId,
   filterEntries,
   formatClock,
+  formatRelative,
+  highlightParts,
   splitTag,
   stripAnsi,
   toConsoleEntry,
@@ -140,6 +146,89 @@ describe('filterEntries', () => {
 
   it('returns nothing when no line matches', () => {
     expect(filterEntries(rows, 'antigravity')).toEqual([])
+  })
+})
+
+describe('compileSearch / filterEntries options', () => {
+  const rows = [
+    entry({ line: 'INF [usage] provider=DeepSeek' }, 0),
+    entry({ line: 'ERR [chat] model=deepseek-v3' }, 1),
+  ]
+
+  it('folds case by default', () => {
+    expect(filterEntries(rows, { query: 'DEEPSEEK' })).toHaveLength(2)
+  })
+
+  it('respects caseSensitive', () => {
+    expect(filterEntries(rows, { query: 'DeepSeek', caseSensitive: true })).toHaveLength(1)
+  })
+
+  it('treats the query literally when regex is off', () => {
+    // A dot must match a dot, not any character.
+    const dotted = [entry({ line: 'a.b' }, 0), entry({ line: 'axb' }, 1)]
+    expect(filterEntries(dotted, { query: 'a.b' })).toHaveLength(1)
+  })
+
+  it('matches by pattern in regex mode', () => {
+    expect(filterEntries(rows, { query: 'provider|model=', regex: true })).toHaveLength(2)
+    expect(filterEntries(rows, { query: 'model=\\w+-v\\d', regex: true })).toHaveLength(1)
+  })
+
+  it('reports an invalid regex instead of throwing', () => {
+    const matcher = compileSearch({ query: '[unclosed', regex: true })
+    expect(matcher.invalid).toBe(true)
+    expect(matcher.regex).toBeNull()
+  })
+})
+
+describe('highlightParts', () => {
+  it('marks every occurrence of the search', () => {
+    const matcher = compileSearch({ query: 'deep' })
+    const parts = highlightParts('deep provider=DeepSeek deep', matcher)
+    const hits = parts.filter((p) => p.hit).map((p) => p.text.toLowerCase())
+    expect(hits).toEqual(['deep', 'deep', 'deep'])
+  })
+
+  it('returns the whole line unmarked for an empty query', () => {
+    const parts = highlightParts('plain line', compileSearch(''))
+    expect(parts).toEqual([{ text: 'plain line', hit: false }])
+  })
+})
+
+describe('collectTags / entryTag', () => {
+  it('counts tags most frequent first', () => {
+    const rows = [
+      entry({ line: 'INF [usage] a' }, 0),
+      entry({ line: 'INF [usage] b' }, 1),
+      entry({ line: 'ERR [chat] c' }, 2),
+      entry({ line: 'no tag here' }, 3),
+    ]
+    expect(collectTags(rows)).toEqual([
+      { tag: 'usage', count: 2 },
+      { tag: 'chat', count: 1 },
+    ])
+    expect(entryTag('INF [usage] a')).toBe('usage')
+    expect(entryTag('no tag here')).toBe('')
+  })
+})
+
+describe('extractReqId', () => {
+  it('reads the id from text and JSON lines', () => {
+    expect(extractReqId('INF [chat] req_id=req_ab12cd done')).toBe('req_ab12cd')
+    expect(extractReqId('{"level":"INF","msg":"x","req_id":"req_ff00"}')).toBe('req_ff00')
+  })
+
+  it('returns null when there is no request id', () => {
+    expect(extractReqId('INF [usage] logged')).toBeNull()
+  })
+})
+
+describe('formatRelative', () => {
+  it('renders a signed delta against the base instant', () => {
+    const base = Date.parse('2026-10-03T07:00:00.000Z')
+    expect(formatRelative('2026-10-03T07:00:00.250Z', base)).toBe('+250ms')
+    expect(formatRelative('2026-10-03T07:00:01.500Z', base)).toBe('+1.50s')
+    expect(formatRelative('2026-10-03T06:59:59.000Z', base)).toBe('-1.00s')
   })
 })
 

@@ -42,10 +42,17 @@ const (
 // no timestamp, so this is what makes rows readable after a page reload. JSON
 // lines keep the authoritative "time" field inside Line, which the dashboard
 // prefers whenever both are present.
+//
+// Seq is a process-monotonic counter stamped on every captured line. The
+// dashboard reads it to tell "this stream is complete" from "lines were lost":
+// a gap between consecutive Seq values is proof the viewer missed output, and
+// the first Seq in a full buffer reveals how many earlier lines were trimmed.
+// It never resets on Clear, so a clear does not look like a loss.
 type ConsoleEntry struct {
 	Time  time.Time
 	Level Level
 	Line  string
+	Seq   uint64
 }
 
 // MarshalJSON emits the compact {time,level,line} shape the dashboard reads.
@@ -62,7 +69,10 @@ func (e ConsoleEntry) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("log.ConsoleEntry.MarshalJSON: %w", err)
 	}
-	return append(append(b, line...), '}'), nil
+	b = append(b, line...)
+	b = append(b, `,"seq":`...)
+	b = strconv.AppendUint(b, e.Seq, 10)
+	return append(b, '}'), nil
 }
 
 type consoleEvent struct {
@@ -81,6 +91,10 @@ var (
 	consoleLogs []ConsoleEntry
 	consoleSubs = map[int]chan consoleEvent{}
 	consoleNext int
+	// consoleSeq is the monotonic line counter handed to every captured entry.
+	// It is never reset by Clear so the dashboard can distinguish "the buffer
+	// was cleared" from "lines were dropped".
+	consoleSeq uint64
 )
 
 // ansiSGR matches ANSI SGR escape sequences emitted when logging to a terminal.
@@ -101,6 +115,8 @@ func stripANSI(line string) string {
 func captureConsole(l Level, raw string) {
 	entry := ConsoleEntry{Time: time.Now(), Level: l, Line: stripANSI(raw)}
 	consoleMu.Lock()
+	consoleSeq++
+	entry.Seq = consoleSeq
 	consoleLogs = append(consoleLogs, entry)
 	if len(consoleLogs) > consoleMaxLines {
 		consoleLogs = consoleLogs[len(consoleLogs)-consoleMaxLines:]
@@ -116,6 +132,7 @@ func captureConsole(l Level, raw string) {
 		default: // drop for slow subscriber, never block logging
 		}
 	}
+	captureConsoleFile(entry)
 }
 
 // ConsoleEntries returns a copy of the buffered console entries.

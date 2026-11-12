@@ -102,6 +102,7 @@ func TestConsoleEntry_JSONWireShape(t *testing.T) {
 		Time:  time.Date(2026, 10, 3, 7, 8, 9, 0, time.UTC),
 		Level: LevelWarn,
 		Line:  `WRN [proxy] quota "nearing"`,
+		Seq:   42,
 	}
 
 	raw, err := json.Marshal(entry)
@@ -113,6 +114,7 @@ func TestConsoleEntry_JSONWireShape(t *testing.T) {
 		Time  string `json:"time"`
 		Level string `json:"level"`
 		Line  string `json:"line"`
+		Seq   uint64 `json:"seq"`
 	}
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -126,6 +128,32 @@ func TestConsoleEntry_JSONWireShape(t *testing.T) {
 	}
 	if got.Time != "2026-10-03T07:08:09Z" {
 		t.Errorf("time = %q, want RFC3339 UTC stamp", got.Time)
+	}
+	if got.Seq != 42 {
+		t.Errorf("seq = %d, want 42", got.Seq)
+	}
+}
+
+// Seq must advance by exactly one per captured line so the dashboard can detect
+// drops by looking for gaps. It must not reset when the buffer is cleared: a
+// clear is not a loss.
+func TestCaptureConsole_SeqIsMonotonicAcrossClear(t *testing.T) {
+	ClearConsoleLogs()
+	Info("test", "before clear")
+	before := ConsoleEntries()
+	if len(before) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(before))
+	}
+
+	ClearConsoleLogs()
+	Info("test", "after clear")
+
+	entries := ConsoleEntries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry after clear, got %d", len(entries))
+	}
+	if entries[0].Seq != before[0].Seq+1 {
+		t.Errorf("seq did not advance across clear: before=%d after=%d", before[0].Seq, entries[0].Seq)
 	}
 }
 

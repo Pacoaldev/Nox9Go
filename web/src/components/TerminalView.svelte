@@ -1,7 +1,8 @@
 <script lang="ts">
   // Console Log page. Owns the authenticated SSE transport, the server log
-  // level, and the buffer window; ConsoleLogStream owns how rows are read.
-  import { Pause, Play, Trash2 } from 'lucide-svelte'
+  // level, the buffer window, and the lost-line accounting; ConsoleLogStream
+  // owns how rows are read and filtered.
+  import { Download, Trash2 } from 'lucide-svelte'
   import ConsoleLogStream from './ConsoleLogStream.svelte'
   import Button from '../lib/ui/Button.svelte'
   import Card from '../lib/ui/Card.svelte'
@@ -12,16 +13,55 @@
   const MAX_LINES = 200
   const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const
 
+  type Connection = 'connecting' | 'live' | 'reconnecting'
+
   let entries = $state<ConsoleEntry[]>([])
   let logLevel = $state<string>('info')
   let levelBusy = $state(false)
+  let connection = $state<Connection>('connecting')
+  // Lines the viewer provably missed: gaps in the server sequence, and lines the
+  // ring buffer trimmed before the snapshot it handed us.
+  let dropped = $state(0)
+  let older = $state(0)
   let seq = 0
+  let lastServerSeq: number | null = null
+
+  const CONNECTION_META: Record<Connection, { label: string; chip: string; dot: string }> = {
+    connecting: {
+      label: 'Connecting',
+      chip: 'border-border text-text-muted',
+      dot: 'bg-text-muted animate-pulse',
+    },
+    live: {
+      label: 'Live',
+      chip: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+      dot: 'bg-emerald-500',
+    },
+    reconnecting: {
+      label: 'Reconnecting',
+      chip: 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-400',
+      dot: 'bg-amber-500 animate-pulse',
+    },
+  }
 
   // A reconnect replays the whole buffer as "init", so the old rows have to go
-  // or the same line would appear twice.
+  // or the same line would appear twice. The snapshot also tells us how many
+  // lines the ring buffer trimmed before it: the first server sequence minus 1.
   function adoptBuffer(raw: unknown[]): void {
     seq = 0
     entries = raw.map((item) => toConsoleEntry(item as Record<string, unknown>, seq++))
+    dropped = 0
+    const seqs = entries.map((e) => e.serverSeq).filter((n): n is number => n !== null)
+    older = seqs.length > 0 ? Math.max(0, Math.min(...seqs) - 1) : 0
+    lastServerSeq = seqs.length > 0 ? Math.max(...seqs) : null
+  }
+
+  function noteServerSeq(entry: ConsoleEntry): void {
+    if (entry.serverSeq === null) return
+    if (lastServerSeq !== null && entry.serverSeq > lastServerSeq + 1) {
+      dropped += entry.serverSeq - lastServerSeq - 1
+    }
+    lastServerSeq = entry.serverSeq
   }
 
   async function fetchLogLevel() {
@@ -75,6 +115,26 @@
     }
   }
 
+  // The persisted log survives a restart. The binary only writes it when
+  // CONSOLE_LOG_FILE is set, so a 404 is an expected, explained answer.
+  async function handleDownloadPersisted() {
+    try {
+      const res = await fetch('/api/translator/console-logs/file', { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error(await responseErrorMessage(res, `HTTP ${res.status}`))
+      const disposition = res.headers.get('Content-Disposition') ?? ''
+      const filename = /filename="?([^"]+)"?/.exec(disposition)?.[1] ?? 'nox9go-console.log'
+      const url = URL.createObjectURL(await res.blob())
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+      notifications.success('Downloaded the persisted console log')
+    } catch (err) {
+      notifications.error(`No persisted log: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
   fetchLogLevel()
 
   $effect(() => {
@@ -118,12 +178,16 @@
 
             if (msg.type === 'init') {
               adoptBuffer(Array.isArray(msg.entries) ? msg.entries : [])
+              connection = 'live'
             } else if (msg.type === 'line') {
-              entries = [...entries, toConsoleEntry(msg.entry as Record<string, unknown>, seq++)].slice(
-                -MAX_LINES
-              )
+              const entry = toConsoleEntry(msg.entry as Record<string, unknown>, seq++)
+              noteServerSeq(entry)
+              entries = [...entries, entry].slice(-MAX_LINES)
+              connection = 'live'
             } else if (msg.type === 'clear') {
               entries = []
+              dropped = 0
+              older = 0
             }
           }
         }
@@ -131,7 +195,10 @@
         // stream closed or aborted — reconnect below
       }
 
-      if (!cancelled) setTimeout(connect, 5000)
+      if (!cancelled) {
+        connection = 'reconnecting'
+        setTimeout(connect, 5000)
+      }
     }
 
     connect()
@@ -141,10 +208,20 @@
       controller?.abort()
     }
   })
+
+  const connMeta = $derived(CONNECTION_META[connection])
 </script>
 
 <Card padding="none" class="flex flex-col">
   <div class="flex flex-wrap items-center gap-2 border-b border-border-subtle px-4 py-2.5">
+    <span
+      class="inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-[11px] font-medium {connMeta.chip}"
+      title={connection === 'live' ? 'Streaming live' : connection === 'reconnecting' ? 'Reconnecting to the stream' : 'Opening the stream'}
+    >
+      <span class="h-1.5 w-1.5 rounded-full {connMeta.dot}"></span>
+      {connMeta.label}
+    </span>
+
     <label class="text-xs text-text-muted" for="console-log-level">Level</label>
     <select
       id="console-log-level"
@@ -161,11 +238,17 @@
       Applies immediately — lines below this level are not buffered.
     </span>
 
-    <Button size="sm" variant="outline" class="ml-auto" onclick={handleClear}>
-      <Trash2 class="h-3.5 w-3.5" />
-      Clear
-    </Button>
+    <div class="ml-auto flex items-center gap-2">
+      <Button size="sm" variant="outline" title="Download the log file persisted to disk (survives restarts)" onclick={handleDownloadPersisted}>
+        <Download class="h-3.5 w-3.5" />
+        Persisted
+      </Button>
+      <Button size="sm" variant="outline" title="Clear the buffer" onclick={handleClear}>
+        <Trash2 class="h-3.5 w-3.5" />
+        Clear
+      </Button>
+    </div>
   </div>
 
-  <ConsoleLogStream {entries} />
+  <ConsoleLogStream {entries} {dropped} {older} />
 </Card>

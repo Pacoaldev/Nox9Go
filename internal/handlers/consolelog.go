@@ -4,6 +4,7 @@ import (
 	json "encoding/json/v2"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -51,6 +52,43 @@ func HandleDebugTraces(w http.ResponseWriter, r *http.Request) {
 func HandleConsoleLogsDelete(w http.ResponseWriter, r *http.Request) {
 	log.ClearConsoleLogs()
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+// HandleConsoleLogsFileDownload streams the persisted console log files as a
+// plain-text attachment, oldest rotation first so the history reads in order.
+//
+// Persistence is opt-in (log.CONSOLE_LOG_FILE). When it is off the operator gets
+// a 404 that names the switch instead of an empty download, because "the file
+// is empty" and "the feature is disabled" need different fixes.
+func HandleConsoleLogsFileDownload(w http.ResponseWriter, r *http.Request) {
+	if !log.ConsoleFileEnabled() {
+		handlerutil.WriteJSONError(w, http.StatusNotFound,
+			"console log persistence is disabled — set CONSOLE_LOG_FILE to a writable path and restart")
+		return
+	}
+	log.FlushConsoleFile()
+	paths := log.ConsoleFilePaths()
+	if len(paths) == 0 {
+		handlerutil.WriteJSONError(w, http.StatusNotFound, "no console log file has been written yet")
+		return
+	}
+
+	filename := "nox9go-console-" + time.Now().Format("20060102-150405") + ".log"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+
+	for _, path := range paths {
+		f, err := os.Open(path)
+		if err != nil {
+			continue // a rotation race dropped this file; keep the rest
+		}
+		_, copyErr := io.Copy(w, f)
+		_ = f.Close()
+		if copyErr != nil {
+			return // client went away mid-download
+		}
+	}
 }
 
 // HandleConsoleLogsLevelGet returns the current server log level so the
