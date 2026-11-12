@@ -47,14 +47,24 @@ func retryWithClampedMaxTokens(req *Request, forwardErr error) (*http.Response, 
 }
 
 func stripUnsupportedPromptCacheKey(body []byte) []byte {
+	return stripUnsupportedFields(body, "prompt_cache_key")
+}
+
+func stripUnsupportedFields(body []byte, fields ...string) []byte {
 	var request map[string]json.RawMessage
 	if err := json.Unmarshal(body, &request); err != nil {
 		return body
 	}
-	if _, exists := request["prompt_cache_key"]; !exists {
+	changed := false
+	for _, field := range fields {
+		if _, exists := request[field]; exists {
+			delete(request, field)
+			changed = true
+		}
+	}
+	if !changed {
 		return body
 	}
-	delete(request, "prompt_cache_key")
 	cleaned, err := json.Marshal(request)
 	if err != nil {
 		return body
@@ -257,6 +267,9 @@ func isGroqGPTOSSModel(model string) bool {
 }
 
 func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
+	if req.Provider == "gemini" {
+		req.Body = stripUnsupportedFields(req.Body, "store")
+	}
 	if req.Provider == "groq" {
 		req.Body = stripUnsupportedPromptCacheKey(req.Body)
 		req.Body = flattenMessagesContent(req.Body)

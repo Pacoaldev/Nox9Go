@@ -152,6 +152,40 @@ func TestForwardOpenAI_GroqFlattensMessageContentArray(t *testing.T) {
 	}
 }
 
+func TestForwardOpenAI_GeminiStripsUnsupportedStoreField(t *testing.T) {
+	var receivedBody atomic.Value
+	receivedBody.Store("")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := make([]byte, r.ContentLength)
+		_, _ = r.Body.Read(body)
+		receivedBody.Store(string(body))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	req := &Request{
+		Ctx:      t.Context(),
+		Provider: "gemini",
+		Client:   srv.Client(),
+		Config:   &providers.ProviderConfig{BaseURL: srv.URL, AuthHeader: "Authorization", AuthScheme: "bearer"},
+		APIKey:   "k",
+		Body:     []byte(`{"model":"gemini-3.6-flash","messages":[{"role":"user","content":"hi"}],"store":false}`),
+	}
+	rec := httptest.NewRecorder()
+	if err := ForwardOpenAI(rec, req); err != nil {
+		t.Fatalf("ForwardOpenAI error = %v", err)
+	}
+	got, _ := receivedBody.Load().(string)
+	if strings.Contains(got, `"store"`) {
+		t.Fatalf("Gemini request still contains unsupported store field: %s", got)
+	}
+	if !strings.Contains(got, `"model":"gemini-3.6-flash"`) {
+		t.Fatalf("Gemini request lost model field: %s", got)
+	}
+}
+
 func TestForwardOpenAI_CloudflareFlattensMessageContentArray(t *testing.T) {
 	var receivedBody atomic.Value
 	receivedBody.Store("")
