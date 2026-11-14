@@ -54,6 +54,7 @@ describe('providers & media separation', () => {
     const embeddingProviders = getProvidersByKind('embedding')
     expect(embeddingProviders.some((p) => p.id === 'voyage-ai')).toBe(true)
     expect(embeddingProviders.some((p) => p.id === 'openai')).toBe(true)
+    expect(new Set(embeddingProviders.map((p) => p.id)).size).toBe(embeddingProviders.length)
 
     expect(MEDIA_PROVIDER_KINDS.length >= 6).toBe(true)
   })

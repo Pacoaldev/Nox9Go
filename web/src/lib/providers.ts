@@ -2868,8 +2868,11 @@ export function isChatProvider(p: ProviderCatalogItem): boolean {
 }
 
 export function getProvidersByKind(kind: string): ProviderCatalogItem[] {
+  const seen = new Set<string>()
   return PROVIDER_CATALOG
     .filter((p) => {
+      if (seen.has(p.id)) return false
+      seen.add(p.id)
       const kinds = p.serviceKinds ?? ['llm']
       if (!kinds.includes(kind)) return false
       if (p.hidden) return false

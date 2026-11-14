@@ -1,19 +1,19 @@
 {
-  "latestVersion": "1.1.1",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-windows-amd64.exe",
+  "latestVersion": "1.1.2",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-windows-amd64.exe",
-    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-linux-amd64",
-    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-linux-arm64",
-    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-darwin-amd64",
-    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.1/nox9go-darwin-arm64"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-windows-amd64.exe",
+    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-linux-amd64",
+    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-linux-arm64",
+    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-darwin-amd64",
+    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-darwin-arm64"
   },
   "sha256": {
-    "windows_amd64": "0c9232dfd024f9d670335d1a80ee29d64c5b4be80f3182cc1cbbbff8be6c174d",
-    "linux_amd64": "977660d1085bd80faf1977dfb8b0a4b15f3f0474144eba631ce076685b43e180",
-    "linux_arm64": "02883d2754a9a72e6d2094b13dd0627b39d797e48b4900d7df890623ff4220ad",
-    "darwin_amd64": "3af495a784838888bd8a95d509b167b810ea74bead3e576115aeb1becd3e6425",
-    "darwin_arm64": "f0c4c52c02621997d10ddca4cbdc9af589f736a62a7345efed41ae0c485faea1"
+    "windows_amd64": "a17cabd8b381d9e444d75f545b0dc64a01fdfa0a0241bee2bec341077981b962",
+    "linux_amd64": "59d682c3f815b3e63336ff6fb5ce0198db1b04c175c5f515152955e54c3f660d",
+    "linux_arm64": "d31b309dee9f083a597c7c851afafa2d3f7ecaf40a27bf1bcb63d12fc65b380b",
+    "darwin_amd64": "d897800280d203a24111932d937acc779d47999af48e538cfa44935120f02afd",
+    "darwin_arm64": "827dd267e505d1acbe4a5647228d20330448335eaae17a86ac0b12da5ef6c16e"
   },
-  "releaseNotes": "Quota tracker cards get a per-card checkbox and a Custom view; NaN.Builders reports its real per-model token quota; providers without a metered endpoint show the traffic the gateway routed. Also: official brand logos, provider capacity observations, and media-modality stripping before dispatch."
+  "releaseNotes": "1.1.2: Copilot live model catalogue, Gemini-native /v1beta, Qoder queue handling, self-hosted media providers, console log persistence, and a fixed Embedding Models page."
 }
