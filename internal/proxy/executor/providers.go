@@ -1,7 +1,6 @@
 package executor
 
 import (
-	"nox9go/proxy/internal/log"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -12,6 +11,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"nox9go/proxy/internal/log"
 	"os"
 	"runtime"
 	"strconv"

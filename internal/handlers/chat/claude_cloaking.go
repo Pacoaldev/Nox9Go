@@ -4,8 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	json "nox9go/proxy/internal/fastjson"
 	"fmt"
+	json "nox9go/proxy/internal/fastjson"
 	"strings"
 
 	"nox9go/proxy/internal/proxy/executor"

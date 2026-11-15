@@ -90,13 +90,13 @@ func TestRetryAfterWait_Extraction(t *testing.T) {
 // seconds, which is what kept it absorbing failing requests.
 func TestRetryableCooldownSec(t *testing.T) {
 	tests := []struct {
-		name   string
+		name     string
 		provider string
-		status int
-		base   time.Duration
-		header http.Header
-		body   string
-		want   int
+		status   int
+		base     time.Duration
+		header   http.Header
+		body     string
+		want     int
 	}{
 		{"429 without a wait falls back to the classifier", "", http.StatusTooManyRequests, 2 * time.Second, nil, rateLimitedBody, 2},
 		{"429 retryinfo window wins", "", http.StatusTooManyRequests, 2 * time.Second, nil, retryInfoBody("120s"), 120},

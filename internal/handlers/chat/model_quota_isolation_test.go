@@ -296,11 +296,11 @@ func TestModelScoped401_UnsupportedModelDoesNotBlockAccount(t *testing.T) {
 
 func TestModelScopedError_NegativeAuthTestsPinAccountCooldown(t *testing.T) {
 	tests := []struct {
-		name        string
-		statusCode  int
-		errorText   string
-		model       string
-		wantScoped  bool
+		name       string
+		statusCode int
+		errorText  string
+		model      string
+		wantScoped bool
 	}{
 		{
 			name:       "401 incorrect api key",

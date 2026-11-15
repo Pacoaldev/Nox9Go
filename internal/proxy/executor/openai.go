@@ -306,6 +306,9 @@ func ForwardOpenAI(w http.ResponseWriter, req *Request) error {
 	// and dropping them turns a throttle into an opaque failure. Applied on
 	// every response path, like upstream upstreamResponseHeaders.
 	forwardUpstreamResponseHeaders(w, resp.Header)
+	if req.UpstreamHeader != nil && resp != nil {
+		*req.UpstreamHeader = resp.Header
+	}
 
 	if req.IsStream {
 		streamBody := io.ReadCloser(resp.Body)

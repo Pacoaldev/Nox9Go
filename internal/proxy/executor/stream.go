@@ -481,7 +481,6 @@ func codexUsageMap(resp map[string]any) map[string]any {
 	return chunkUsage
 }
 
-
 func handleCodexStream(w http.ResponseWriter, req *Request, upstream io.Reader) error {
 	responseID := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 	created := time.Now().Unix()

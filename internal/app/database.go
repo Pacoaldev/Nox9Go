@@ -9,9 +9,10 @@ import (
 	"go.uber.org/fx"
 
 	"nox9go/proxy/internal/config"
-	"nox9go/proxy/internal/handlers/dashboard"
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/handlers/dashboard"
 	"nox9go/proxy/internal/log"
+	"nox9go/proxy/internal/quotalearn"
 	"nox9go/proxy/internal/translator"
 	"nox9go/proxy/internal/vault"
 )
@@ -71,6 +72,15 @@ func ProvideDatabase(lc fx.Lifecycle, cfg *config.Config) (*sql.DB, error) {
 		_, statErr := conn.Exec("SELECT 1")
 		if statErr == nil {
 			return nil, fmt.Errorf("database leases: %w", err)
+		}
+	}
+
+	// Persisted per-key quota learning state. Idempotent and best-effort
+	// like the leases above: a dead test connection must not fail startup.
+	if err := quotalearn.EnsureQuotaState(conn); err != nil {
+		_, statErr := conn.Exec("SELECT 1")
+		if statErr == nil {
+			return nil, fmt.Errorf("database quota_state: %w", err)
 		}
 	}
 

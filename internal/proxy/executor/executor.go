@@ -43,6 +43,7 @@ type Request struct {
 	ResponseBuf    io.Writer         // writer to capture response text for token estimation & logging
 	StartTime      time.Time         // request start time for TTFT tracking
 	TTFT           *int64            // pointer to TTFT metric (ms to first chunk)
+	UpstreamHeader *http.Header      // captured upstream response headers for quota learning & metrics
 }
 
 // Executor forwards a request upstream and writes the response.

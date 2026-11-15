@@ -99,4 +99,3 @@ func TestForwardMinimaxCode_TranslatesClaudeNonStreamForOpenAIClient(t *testing.
 		t.Errorf("expected OpenAI choices with finish_reason:stop, got:\n%s", out)
 	}
 }
-

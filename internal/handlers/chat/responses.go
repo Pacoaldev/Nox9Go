@@ -1,12 +1,12 @@
 package chat
 
 import (
-	json "nox9go/proxy/internal/fastjson"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	json "nox9go/proxy/internal/fastjson"
 	"strings"
 	"time"
 

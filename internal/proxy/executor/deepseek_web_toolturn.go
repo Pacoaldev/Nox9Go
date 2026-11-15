@@ -99,7 +99,6 @@ func deepSeekAccumulate(upstream io.Reader) (*deepSeekStreamAccumulator, error) 
 	return accumulator, nil
 }
 
-
 // deepSeekWriteToolCalls answers with an OpenAI tool_calls message.
 func deepSeekWriteToolCalls(w http.ResponseWriter, req *Request, model string, calls []deepSeekToolRequest, preamble string) error {
 	return deepSeekWriteJSON(w, req, model, deepSeekToolCallMessage(calls, preamble))
@@ -362,4 +361,3 @@ func deepSeekFinishReason(message map[string]any) string {
 	}
 	return "stop"
 }
-

@@ -1,8 +1,8 @@
 package chat
 
 import (
-	json "nox9go/proxy/internal/fastjson"
 	"fmt"
+	json "nox9go/proxy/internal/fastjson"
 )
 
 // repairToolCallIDsInMap ensures every role: "tool" message has a valid tool_call_id (PR #4090).

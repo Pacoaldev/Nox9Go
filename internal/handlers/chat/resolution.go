@@ -1,18 +1,19 @@
 package chat
 
 import (
+	json "encoding/json/v2"
+	"fmt"
+	"net/http"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/middleware"
-	"nox9go/proxy/internal/resilience"
 	"nox9go/proxy/internal/providers"
 	"nox9go/proxy/internal/proxy"
 	"nox9go/proxy/internal/proxy/executor"
 	"nox9go/proxy/internal/proxy/oauth"
-	json "encoding/json/v2"
-	"fmt"
-	"net/http"
+	"nox9go/proxy/internal/quotalearn"
+	"nox9go/proxy/internal/resilience"
 	"strings"
 	"time"
 
@@ -50,16 +51,23 @@ func NewChatHandler(repo *db.Repo, ts ...*shared.TokenSaverConfig) *ChatHandler 
 			SimilarityThreshold: 0.95,
 		}, store, cfg.SemanticCacheEnabled)
 	}
+	// Quota learner: process-local ceilings and cooldowns, persisted to the
+	// same SQLite DB when one is available so a restart keeps what it learned.
+	qLearner := quotalearn.New(quotalearn.Options{})
+	if repo != nil && repo.RawDB() != nil {
+		qLearner.WithPersistence(quotalearn.NewRepo(repo.RawDB()))
+	}
 	return &ChatHandler{
 		Repo: repo,
 		Client: &http.Client{
 			Transport: transport,
 			Timeout:   0, // no timeout for streaming support
 		},
-		TokenSaver:  cfg,
+		TokenSaver:    cfg,
 		SemanticCache: sc,
-		stickyState: make(map[string]*comboStickyState),
-		Breakers:    resilience.NewRegistry(),
+		stickyState:   make(map[string]*comboStickyState),
+		Breakers:      resilience.NewRegistry(),
+		Quota:         qLearner,
 	}
 }
 
@@ -153,7 +161,6 @@ func (h *ChatHandler) resolveModelEntryGuarded(entry string, visiting map[string
 
 	return &ModelInfo{Provider: provider, Model: model}
 }
-
 
 // flattenComboModels recursively expands combo-name entries into concrete
 // "provider/model" leaves, keeping order and deduping consecutive identical

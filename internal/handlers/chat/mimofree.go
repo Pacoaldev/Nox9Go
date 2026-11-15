@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"nox9go/proxy/internal/log"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -10,14 +9,15 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"nox9go/proxy/internal/log"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"nox9go/proxy/internal/constants"
-	"nox9go/proxy/internal/proxy/executor"
 	"nox9go/proxy/internal/providers"
+	"nox9go/proxy/internal/proxy/executor"
 	"nox9go/proxy/internal/translator"
 )
 

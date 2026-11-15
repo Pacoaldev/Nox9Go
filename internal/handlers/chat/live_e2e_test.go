@@ -13,11 +13,10 @@ import (
 	"testing"
 	"time"
 
+	_ "modernc.org/sqlite"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/proxy/executor"
-	_ "modernc.org/sqlite"
 )
-
 
 // getRealUserDB returns a throwaway in-memory database seeded with the
 // operator's real connections and combos, so a live test exercises the same

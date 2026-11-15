@@ -12,14 +12,14 @@ import (
 	"strings"
 	"sync"
 
-	"nox9go/proxy/internal/log"
-	"nox9go/proxy/internal/providers"
-	"nox9go/proxy/internal/proxy"
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/fhttp/http2"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 	tls "github.com/bogdanfinn/utls"
+	"nox9go/proxy/internal/log"
+	"nox9go/proxy/internal/providers"
+	"nox9go/proxy/internal/proxy"
 )
 
 // opencodeStealthClient dials opencode.ai with the Bun/BoringSSL TLS fingerprint

@@ -1,6 +1,13 @@
 package chat
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"nox9go/proxy/internal/changelogfrag"
 	json "nox9go/proxy/internal/fastjson"
 	"nox9go/proxy/internal/handlerutil"
@@ -10,13 +17,6 @@ import (
 	"nox9go/proxy/internal/semanticcache"
 	"nox9go/proxy/internal/translator"
 	"nox9go/proxy/internal/updater"
-	"bytes"
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"

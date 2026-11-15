@@ -10,6 +10,7 @@ import (
 	"nox9go/proxy/internal/guardrails"
 	"nox9go/proxy/internal/handlers/chat"
 	"nox9go/proxy/internal/handlers/dashboard"
+	"nox9go/proxy/internal/handlers/mcp"
 	"nox9go/proxy/internal/handlers/media"
 	"nox9go/proxy/internal/handlers/oauth"
 	"nox9go/proxy/internal/handlers/shared"
@@ -665,6 +666,17 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 	})
 
 	SetupConsoleLogRoutes(r, repo)
+
+	// MCP endpoint (Model Context Protocol): read-only access to the gateway
+	// for MCP clients like ChatGPT. Auth mirrors the dashboard: session cookie,
+	// API key, or local CLI token. A nil quota learner reports the feature
+	// unavailable instead of failing the whole endpoint.
+	mcpH := mcp.NewHandler(repo, engineChatH.Quota)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RequireDashboardAuth(repo))
+		r.HandleFunc("/mcp", mcpH.ServeHTTP)
+	})
+
 	return engineChatH
 }
 

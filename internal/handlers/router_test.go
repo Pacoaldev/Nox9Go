@@ -515,3 +515,42 @@ func TestSetupServerRouter_CodexResetCreditsAreLive(t *testing.T) {
 		t.Errorf("anonymous status = %d, want 401", rec.Code)
 	}
 }
+
+func TestSetupServerRouter_MCPRequiresAuth(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := db.NewRepo(database)
+	r := chi.NewRouter()
+	SetupServerRouter(r, repo, nil)
+
+	// No settings row means requireLogin is on: /mcp without a session or the
+	// local CLI token must be refused before any JSON-RPC work happens.
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous status = %d, want 401", rec.Code)
+	}
+}
+
+func TestSetupServerRouter_MCPServesWithCLIToken(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := db.NewRepo(database)
+	r := chi.NewRouter()
+	SetupServerRouter(r, repo, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
+	req.Header.Set(auth.CLITokenHeader, auth.CLIToken())
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := strings.TrimSpace(rec.Body.String())
+	if !strings.Contains(body, `"jsonrpc":"2.0"`) || !strings.Contains(body, `"result"`) {
+		t.Errorf("body = %s, want a JSON-RPC ping result", body)
+	}
+}

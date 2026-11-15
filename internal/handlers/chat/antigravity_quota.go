@@ -1,16 +1,16 @@
 package chat
 
 import (
-	"nox9go/proxy/internal/log"
-	"nox9go/proxy/internal/providers"
-	"nox9go/proxy/internal/translator"
 	"bytes"
 	"context"
-	json "nox9go/proxy/internal/fastjson"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
+	json "nox9go/proxy/internal/fastjson"
+	"nox9go/proxy/internal/log"
+	"nox9go/proxy/internal/providers"
+	"nox9go/proxy/internal/translator"
 	"strings"
 	"sync"
 	"time"

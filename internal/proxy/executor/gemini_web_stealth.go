@@ -298,4 +298,3 @@ func (s *geminiWebStealthClient) getRotatePage(ctx context.Context) (int, []*fht
 func (s *geminiWebStealthClient) closeIdleConnections() {
 	s.client.CloseIdleConnections()
 }
-

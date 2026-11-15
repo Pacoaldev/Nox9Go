@@ -418,4 +418,3 @@ func TestBuildQoderChatRequest_WithSystemPrompt_LeavesUserTurnUntouched(t *testi
 		t.Errorf("user content = %q, want 'Who are you?'", content)
 	}
 }
-

@@ -501,7 +501,8 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 	var excludeIDs []string
 
 	// 1. Apply combo rotation strategy first
-	models := h.applyComboStrategy(strategy, comboModels, comboName, stickyLimit, detectNewTurn(body))
+	isNewTurn := detectNewTurn(body)
+	models := h.applyComboStrategy(strategy, comboModels, comboName, stickyLimit, isNewTurn)
 
 	// 2. Auto-capability-switch: float models that satisfy the request's required capabilities to the front.
 	// This ensures that if the rotated model lacks required capabilities (e.g., vision), a capable model overrides it.
@@ -511,6 +512,16 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 			log.Info("combo", "auto-switch", "caps", keysString(required), "model", reordered[0])
 		}
 		models = reordered
+	}
+
+	// 2b. Context handoff note: when the serving model changes at a turn
+	// boundary mid-session, inject a compact system note so the thread stays
+	// coherent (S3).
+	if isNewTurn && len(models) > 0 {
+		servingModel := models[0]
+		if prev, switched := h.recordComboTurn(comboName, servingModel); switched {
+			body = injectContextHandoffNote(body, prev, servingModel)
+		}
 	}
 
 	// If every model fails, retry the whole pass once after a bounded
@@ -617,6 +628,18 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 					}
 					if locked {
 						log.Warn("combo", "skip locked connection", "provider", modelInfo.Provider, "model", modelInfo.Model, "lockKey", lockKey, "conn", connID)
+						excludeIDs = append(excludeIDs, connID)
+						continue
+					}
+				}
+
+				// Proactive quota skip: this connection has already consumed its
+				// learned RPM/TPD window or is cooling down from a 429, so dialing
+				// it now would only re-trigger the throttle. Skip it for the rest
+				// of the pass instead of wasting a request proving the obvious.
+				if h.Quota != nil && connID != "" {
+					if blocked, reason := h.Quota.IsBlocked(modelInfo.Provider, modelInfo.Model, connID); blocked {
+						log.Warn("combo", "skip quota-blocked connection", "provider", modelInfo.Provider, "model", modelInfo.Model, "conn", connID, "reason", reason)
 						excludeIDs = append(excludeIDs, connID)
 						continue
 					}
@@ -873,10 +896,21 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 	// Connections that failed with a retryable status this request; remaining
 	// combo models must not re-select them (same account = same 429 quota).
 	var excludeIDs []string
-	models := h.applyComboStrategy(strategy, comboModels, comboName, stickyLimit, detectNewTurn(bodyJSON))
+	isNewTurn := detectNewTurn(bodyJSON)
+	models := h.applyComboStrategy(strategy, comboModels, comboName, stickyLimit, isNewTurn)
 	if required := DetectRequiredCapabilities(bodyJSON); len(required) > 0 {
 		reordered := ReorderByCapabilities(models, required)
 		models = reordered
+	}
+
+	// Context handoff note (S3): a mid-session switch at a turn boundary gets
+	// a compact system note, exactly as the OpenAI combo path does.
+	if isNewTurn && len(models) > 0 {
+		servingModel := models[0]
+		if prev, switched := h.recordComboTurn(comboName, servingModel); switched {
+			translatedReq = injectHandoffNoteMap(translatedReq, prev, servingModel)
+			bodyJSON, _ = json.Marshal(translatedReq)
+		}
 	}
 
 	// If every model fails, retry the whole pass once after a bounded
@@ -975,6 +1009,17 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 					}
 					if locked {
 						log.Warn("combo", "skip locked connection", "provider", modelInfo.Provider, "model", modelInfo.Model, "lockKey", lockKey, "conn", connID)
+						excludeIDs = append(excludeIDs, connID)
+						continue
+					}
+				}
+
+				// Proactive quota skip (see handleComboFallback): a connection that
+				// has consumed its learned quota window or is cooling down must not
+				// be dialed again this pass.
+				if h.Quota != nil && connID != "" {
+					if blocked, reason := h.Quota.IsBlocked(modelInfo.Provider, modelInfo.Model, connID); blocked {
+						log.Warn("combo", "skip quota-blocked connection", "provider", modelInfo.Provider, "model", modelInfo.Model, "conn", connID, "reason", reason)
 						excludeIDs = append(excludeIDs, connID)
 						continue
 					}
@@ -1208,6 +1253,14 @@ func (h *ChatHandler) comboLockRetryable(ctx context.Context, excludeIDs *[]stri
 	if connID == "" {
 		return
 	}
+
+	// Notify the quota learner of the failure so it can update its sliding
+	// windows and apply a proactive cooldown. Headers carry X-RateLimit-*
+	// ceilings when the provider reports them.
+	if h.Quota != nil {
+		h.Quota.RecordOutcome(provider, model, connID, ue.StatusCode, ue.Header, 0)
+	}
+
 	currentLevel := h.Repo.GetConnectionBackoffLevel(connID)
 	cls := providers.ClassifyError(ue.StatusCode, extractErrorText(ue.Body), currentLevel)
 	// Upstream parity (checkFallbackError): request-scoped 4xx (400/404/405/
@@ -1377,4 +1430,86 @@ func (h *ChatHandler) ResetComboState(comboName string) {
 	} else {
 		h.stickyState = make(map[string]*comboStickyState)
 	}
+}
+
+// recordComboTurn records the model serving the current turn of this combo.
+// If the combo was previously served by a different model, it returns that
+// previous model and switched=true.
+func (h *ChatHandler) recordComboTurn(comboName, currentModel string) (prevModel string, switched bool) {
+	h.stickyMu.Lock()
+	defer h.stickyMu.Unlock()
+	if h.stickyState == nil {
+		h.stickyState = make(map[string]*comboStickyState)
+	}
+	key := comboName
+	if key == "" {
+		key = "__default__"
+	}
+	st, exists := h.stickyState[key]
+	if !exists {
+		st = &comboStickyState{}
+		h.stickyState[key] = st
+	}
+	prev := st.LastModel
+	st.LastModel = currentModel
+	if prev != "" && prev != currentModel {
+		return prev, true
+	}
+	return "", false
+}
+
+// injectContextHandoffNote inserts a compact system note when the serving
+// model changes at a turn boundary mid-session, so the thread stays coherent (S3).
+// If the previous model is empty or identical, body is returned unchanged.
+func injectContextHandoffNote(body []byte, prevModel, newModel string) []byte {
+	if prevModel == "" || prevModel == newModel {
+		return body
+	}
+
+	var req map[string]any
+	if err := json.Unmarshal(body, &req); err != nil {
+		return body
+	}
+
+	updated := injectHandoffNoteMap(req, prevModel, newModel)
+	out, err := json.Marshal(updated)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// injectHandoffNoteMap inserts the handoff note into a decoded request map.
+// It is the shared half of injectContextHandoffNote, so the Messages path —
+// which forwards a decoded map rather than raw bytes — injects the identical
+// note. The input is never mutated in place: a fresh message slice is built.
+func injectHandoffNoteMap(req map[string]any, prevModel, newModel string) map[string]any {
+	if prevModel == "" || prevModel == newModel {
+		return req
+	}
+
+	messages, ok := req["messages"].([]any)
+	if !ok || len(messages) == 0 {
+		return req
+	}
+
+	note := fmt.Sprintf("[Context handoff: conversation was previously served by %s, now continuing with %s]", prevModel, newModel)
+	handoffMsg := map[string]any{
+		"role":    "system",
+		"content": note,
+	}
+
+	// Insert right before the last message (typically the new user prompt),
+	// or append if only one message is present.
+	idx := len(messages) - 1
+	if idx < 0 {
+		idx = 0
+	}
+	newMsgs := make([]any, 0, len(messages)+1)
+	newMsgs = append(newMsgs, messages[:idx]...)
+	newMsgs = append(newMsgs, handoffMsg)
+	newMsgs = append(newMsgs, messages[idx:]...)
+
+	req["messages"] = newMsgs
+	return req
 }

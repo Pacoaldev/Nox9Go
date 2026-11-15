@@ -1,12 +1,12 @@
 package executor
 
 import (
-	"nox9go/proxy/internal/providers"
-	"nox9go/proxy/internal/proxy"
 	json "encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"nox9go/proxy/internal/providers"
+	"nox9go/proxy/internal/proxy"
 	"os"
 	"strings"
 	"testing"

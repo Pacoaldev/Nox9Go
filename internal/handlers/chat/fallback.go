@@ -917,6 +917,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 			ResponseBuf:    &metrics.ResponseBuf,
 			StartTime:      start,
 			TTFT:           &metrics.TTFT,
+			UpstreamHeader: &metrics.UpstreamHeader,
 		}
 		// client_id cloaking: hand the connection's providerSpecificData
 		// (fingerprintId) to executors that mimic an official client.
@@ -974,6 +975,7 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 					ResponseBuf:    &metrics.ResponseBuf,
 					StartTime:      start,
 					TTFT:           &metrics.TTFT,
+					UpstreamHeader: &metrics.UpstreamHeader,
 				}
 				// Same client_id cloaking as the first attempt: a refreshed
 				// retry without ConnData would fall back to a random id and
@@ -1042,6 +1044,13 @@ func (h *ChatHandler) tryForwardWithConnection(f forwardRequestParams) error {
 	usage := translator.GetAndClearUsage(ctx)
 	if completed {
 		h.recordProviderHeaderObservations(ctx, provider, model, http.StatusOK, metrics.UpstreamHeader)
+		if h.Quota != nil && connectionID != "" {
+			totalTokens := 0
+			if usage != nil {
+				totalTokens = usage.PromptTokens + usage.CompletionTokens
+			}
+			h.Quota.RecordOutcome(provider, model, connectionID, http.StatusOK, metrics.UpstreamHeader, totalTokens)
+		}
 		// A dashboard "Test" probe (POST /api/models/test) is dispatched into
 		// this very handler, and it reaches the provider for real — but it is
 		// not operator traffic. Recording it wrote a usageHistory row and a

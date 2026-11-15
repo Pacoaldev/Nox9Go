@@ -237,6 +237,18 @@ Combo state, provider connection state, health, and some settings are persisted 
 
 Retryable upstream errors are classified from status and text. Capacity/rate-limit/overload conditions use exponential backoff; selected authentication/not-found conditions use longer cooldowns. Connection/model locks and backoff levels are written into `providerConnections.data`, and a success clears the selected lock. Exact thresholds are implementation policy, not a general upstream guarantee.
 
+### Quota learning
+
+`internal/quotalearn` keeps per-`(provider, model, connection)` RPM/RPD/TPM/TPD sliding-window counters and a cooldown. Ceilings are learned from provider-reported rate-limit response headers (`X-RateLimit-Limit-*`) and from explicit `429 Retry-After` windows; learned ceilings and active cooldowns persist to SQLite through `persist.go`. Combo candidate selection consults the learner first (`combo.go`): a connection at its learned ceiling or in cooldown is excluded, so the router does not retry a key the provider already throttled. A `429` that names no window is left to the combo's bounded retry and the DB locks, so the learner never starves that path.
+
+### MCP endpoint
+
+`/mcp` (`internal/handlers/mcp`) speaks MCP JSON-RPC 2.0 over plain JSON or SSE framing (`Accept: text/event-stream`). It answers `initialize`, `ping`, `tools/list` and `tools/call`, and exposes read-only tools (`list_models`, `provider_health`, `combo_strategy`, `quota_state`). Auth mirrors the dashboard group (`middleware.RequireDashboardAuth`): session cookie, client API key, or the local CLI token.
+
+### Sticky context handoff
+
+When a sticky combo changes the serving model at a turn boundary mid-session, `combo.go` injects a compact `system` note naming the previous and new model into the outbound message list (`injectContextHandoffNote` / `injectHandoffNoteMap`), on both the OpenAI and translated Claude-Messages combo paths. When the serving model is unchanged, messages pass through untouched.
+
 ## SQLite compatibility and bootstrap limitation
 
 `internal/db.OpenDatabase`:

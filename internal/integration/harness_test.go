@@ -18,6 +18,7 @@ import (
 	"nox9go/proxy/internal/auth"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlers"
+	"nox9go/proxy/internal/quotalearn"
 )
 
 // testAPIKey is the client key seeded into every Env. The engine routes are
@@ -87,14 +88,17 @@ func newEnvWithTokenSaver(t *testing.T, build func(*db.Repo) *handlers.TokenSave
 		}
 	})
 
-	// The same two schema calls app.ProvideDatabase makes on a real boot, so a
-	// column the gateway relies on but the test schema lacks is a failure here
-	// rather than a mystery in production.
+	// The same three schema calls app.ProvideDatabase makes on a real boot, so
+	// a column the gateway relies on but the test schema lacks is a failure
+	// here rather than a mystery in production.
 	if err := db.EnsureCoreSchema(conn); err != nil {
 		t.Fatalf("ensure core schema: %v", err)
 	}
 	if err := db.EnsureUpstreamLeases(conn); err != nil {
 		t.Fatalf("ensure upstream leases: %v", err)
+	}
+	if err := quotalearn.EnsureQuotaState(conn); err != nil {
+		t.Fatalf("ensure quota_state: %v", err)
 	}
 
 	repo := db.NewRepo(conn)

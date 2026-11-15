@@ -10,9 +10,10 @@ import (
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/middleware"
-	"nox9go/proxy/internal/resilience"
 	"nox9go/proxy/internal/models"
 	"nox9go/proxy/internal/proxy"
+	"nox9go/proxy/internal/quotalearn"
+	"nox9go/proxy/internal/resilience"
 	"nox9go/proxy/internal/semanticcache"
 )
 
@@ -23,6 +24,10 @@ type comboStickyState struct {
 	// requests reuse it so a tool-use sequence stays on the same provider,
 	// even after Index has advanced for the next turn.
 	ServingIndex int
+	// LastModel is the model that served the previous turn of this combo,
+	// so a mid-session switch at a turn boundary can inject a compact
+	// context handoff note (S3).
+	LastModel string
 }
 
 // ChatHandler handles /v1/chat/completions (OpenAI) and /v1/messages (Claude) endpoints.
@@ -39,8 +44,12 @@ type ChatHandler struct {
 	// Breakers holds the per-provider circuit breakers. Nil on a handler built
 	// without NewChatHandler, which disables the gate.
 	Breakers *resilience.Registry
-	stickyMu      sync.Mutex
-	stickyState   map[string]*comboStickyState
+	// Quota learns per-(provider, model, connection) rate-limit ceilings and
+	// applies proactive cooldowns so combo fallback skips a key the provider
+	// has already throttled. Nil on a handler built without NewChatHandler.
+	Quota       *quotalearn.Learner
+	stickyMu    sync.Mutex
+	stickyState map[string]*comboStickyState
 	// oauthRefreshFlight collapses concurrent OAuth token refreshes for the
 	// same connection, so an expired token triggers one upstream round-trip
 	// instead of one per in-flight request.

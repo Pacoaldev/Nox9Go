@@ -248,7 +248,9 @@ func (a *pplxAccumulator) failure() error {
 	}
 	return proxy.UpstreamFailure(http.StatusBadGateway, msg)
 }
-func (a *pplxAccumulator) answered() bool { return strings.TrimSpace(a.fullAnswer) != "" || len(a.thinking) > 0 }
+func (a *pplxAccumulator) answered() bool {
+	return strings.TrimSpace(a.fullAnswer) != "" || len(a.thinking) > 0
+}
 func (a *pplxAccumulator) finish() {
 	cleaned := cleanPplxResponse(a.fullAnswer, true)
 	globalPplxSessions.Store(a.parsed.history, a.parsed.currentMsg, cleaned, a.backendUUID)

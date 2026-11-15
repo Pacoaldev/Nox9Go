@@ -9,28 +9,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 )
 
 // PerplexityWeb protocol constants.
 const (
-	pplxWebEndpoint  = "https://www.perplexity.ai/rest/sse/perplexity_ask"
-	pplxUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
-	pplxCookieName = "__Secure-next-auth.session-token"
+	pplxWebEndpoint   = "https://www.perplexity.ai/rest/sse/perplexity_ask"
+	pplxUserAgent     = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+	pplxCookieName    = "__Secure-next-auth.session-token"
 	pplxAPIVersion    = "2.18"
 	pplxSessionTTL    = time.Hour
-	pplxSessionMax  = 200
+	pplxSessionMax    = 200
 	pplxMaxQueryChars = 96000
 )
 
 var (
-	pplxCitationRE  = regexp.MustCompile(`\[\d+\]`)
-	pplxGrokTagRE   = regexp.MustCompile(`(?s)<grok:[^>]*>.*?</grok:[^>]*>`)
-	pplxGrokSelfRE  = regexp.MustCompile(`<grok:[^>]*/>`)
-	pplxXMLDeclRE   = regexp.MustCompile(`<\?xml[^?]*\?>`)
+	pplxCitationRE    = regexp.MustCompile(`\[\d+\]`)
+	pplxGrokTagRE     = regexp.MustCompile(`(?s)<grok:[^>]*>.*?</grok:[^>]*>`)
+	pplxGrokSelfRE    = regexp.MustCompile(`<grok:[^>]*/>`)
+	pplxXMLDeclRE     = regexp.MustCompile(`<\?xml[^?]*\?>`)
 	pplxResponseTagRE = regexp.MustCompile(`(?i)</?response\b[^>]*>`)
-	pplxMultiSpaceRE = regexp.MustCompile(` {2,}`)
-	pplxMultiNLRE    = regexp.MustCompile(`\n{3,}`)
+	pplxMultiSpaceRE  = regexp.MustCompile(` {2,}`)
+	pplxMultiNLRE     = regexp.MustCompile(`\n{3,}`)
 )
 
 // Model map for Perplexity Web (parity: decolua/9router open-sse/executors/perplexity-web.js)
@@ -69,12 +68,12 @@ type pplxInboundTool struct {
 }
 
 type pplxInboundRequest struct {
-	Model           string              `json:"model"`
+	Model           string               `json:"model"`
 	Messages        []pplxInboundMessage `json:"messages"`
-	Stream          bool                `json:"stream"`
-	Thinking        *bool               `json:"thinking"`
-	ReasoningEffort string              `json:"reasoning_effort"`
-	Tools           []pplxInboundTool   `json:"tools"`
+	Stream          bool                 `json:"stream"`
+	Thinking        *bool                `json:"thinking"`
+	ReasoningEffort string               `json:"reasoning_effort"`
+	Tools           []pplxInboundTool    `json:"tools"`
 }
 
 // --- Outbound request shapes ---
