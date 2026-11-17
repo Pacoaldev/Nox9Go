@@ -8,6 +8,8 @@
 - **MCP endpoint at `/mcp` (Model Context Protocol), ported from FreeLLMAPI.** JSON-RPC 2.0 over plain JSON or SSE framing (negotiated via `Accept: text/event-stream`), with `initialize`/`ping`/`tools/list`/`tools/call`. The tools are read-only: `list_models` (models the gateway can route to, grouped by provider), `provider_health`, `combo_strategy` (active combos and their routing strategy, optionally filtered by name), and `quota_state` (learned ceilings/cooldowns per provider/model/connection). Auth mirrors the dashboard: session cookie, client API key, or local CLI token (`RequireDashboardAuth`). New package `internal/handlers/mcp`.
 ### Context handoff
 - **Sticky-combo context handoff note (S3), ported from FreeLLMAPI.** When a sticky combo switches the serving model at a turn boundary mid-session, the gateway injects a compact `system` note — `[Context handoff: conversation was previously served by <old>, now continuing with <new>]` — into the outbound message list, so the thread stays coherent. When the serving model does not change, messages pass through untouched. Applied on both the OpenAI and the translated Claude-Messages combo paths.
+### Dashboard
+- **The Providers grid keeps its status filter across reloads.** All / Connected / Error / Disabled / Not connected now round-trips through `localStorage` (`web/src/lib/providerFilterPrefs.ts`), next to the display preferences, so an operator who filtered the grid does not have to re-select the filter after every reload. A stale or hand-edited stored value falls back to All.
 
 
 ## [1.1.2] - 2026-11-14

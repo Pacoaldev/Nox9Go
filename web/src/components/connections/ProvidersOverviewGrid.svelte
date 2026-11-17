@@ -5,6 +5,11 @@
   import { PROVIDER_CATALOG, isChatProvider } from '../../lib/providers'
   import ProviderCard from './ProviderCard.svelte'
   import { getProviderStats, matchesFilter, matchesSearch, providerAuthTypes } from './types'
+  import {
+    loadProviderStatusFilter,
+    saveProviderStatusFilter,
+    type ProviderStatusFilter,
+  } from '../../lib/providerFilterPrefs'
 
   interface Props {
     connections: ProviderConnection[]
@@ -27,8 +32,14 @@
   }: Props = $props()
 
   let searchQuery = $state('')
-  let statusFilter = $state<'all' | 'connected' | 'error' | 'disabled' | 'not_connected'>('all')
+  let statusFilter = $state<ProviderStatusFilter>(loadProviderStatusFilter())
   let showAllApikey = $state(true)
+
+  // The operator picks this filter once and expects it after a reload, so it
+  // round-trips through localStorage like the display preferences.
+  $effect(() => {
+    saveProviderStatusFilter(statusFilter)
+  })
   // The "Mover a Catálogo" dialog needs a concrete node; with more than one
   // custom provider the header button has no obvious target, so it asks.
   let promotePickerOpen = $state(false)
