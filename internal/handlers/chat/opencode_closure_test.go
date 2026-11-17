@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestOpencodeClosureError_ClassifiesVariants(t *testing.T) {
@@ -42,7 +43,10 @@ func TestOpencodeClosureError_ClassifiesVariants(t *testing.T) {
 			upstreamBody:   `{"error":{"type":"FreeTierError","message":"FreeUsageLimitError: rate limit exceeded for today"}}`,
 			wantStatus:     http.StatusTooManyRequests,
 			wantType:       "free_tier_quota_exhausted",
-			wantRetryAfter: "60",
+			// A FreeUsageLimitError names a daily window; with no announced
+			// reset the closure holds for the daily fallback, not a fixed 60s
+			// that walks the client back into the same spent quota.
+			wantRetryAfter: itoa(int(dailyLimitFallbackCooldown / time.Second)),
 		},
 		{
 			name:           "upgrade required",

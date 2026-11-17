@@ -348,7 +348,16 @@ type opencodeRefusalDetail struct {
 	RetryAfter int
 }
 
-func classifyOpencodeFreeTierRefusal(provider string, body []byte) opencodeRefusalDetail {
+// classifyOpencodeFreeTierRefusal turns a free-tier refusal into the
+// client-facing detail. The upstream error is passed whole (not just its body)
+// because the quota case must read the reset the gate announces in headers:
+// a FreeUsageLimitError with Retry-After / retry-after-ms names a daily window,
+// and pinning Retry-After to a fixed 60s sent clients back into a spent quota.
+func classifyOpencodeFreeTierRefusal(provider string, ue *upstreamError) opencodeRefusalDetail {
+	var body []byte
+	if ue != nil {
+		body = ue.Body
+	}
 	msg := extractErrorText(body)
 	lower := strings.ToLower(msg)
 
@@ -367,11 +376,17 @@ func classifyOpencodeFreeTierRefusal(provider string, body []byte) opencodeRefus
 		strings.Contains(lower, "too many requests") ||
 		strings.Contains(lower, "freeusagelimiterror") ||
 		strings.Contains(lower, "quota"):
+		retryAfter := 60
+		if wait, ok := retryAfterWait(ue); ok {
+			retryAfter = ceilSeconds(wait)
+		} else if isDailyLimitError(lower) {
+			retryAfter = int(dailyLimitFallbackCooldown / time.Second)
+		}
 		return opencodeRefusalDetail{
 			StatusCode: http.StatusTooManyRequests,
 			ErrorType:  "free_tier_quota_exhausted",
-			Message:    fmt.Sprintf("OpenCode free tier rate limit or quota exceeded for this egress. Retry in about 60s, rotate proxy pool, or use a paid %s key.", provider),
-			RetryAfter: 60,
+			Message:    fmt.Sprintf("OpenCode free tier rate limit or quota exceeded for this egress. Retry in about %s, rotate proxy pool, or use a paid %s key.", humanizeCooldown(retryAfter), provider),
+			RetryAfter: retryAfter,
 		}
 
 	case strings.Contains(lower, "upgrade required") ||
@@ -407,12 +422,25 @@ func classifyOpencodeFreeTierRefusal(provider string, body []byte) opencodeRefus
 	}
 }
 
+// humanizeCooldown words a cooldown window for an error message: seconds under
+// a minute, minutes under an hour, hours for a daily window.
+func humanizeCooldown(seconds int) string {
+	switch {
+	case seconds >= 3600:
+		return fmt.Sprintf("~%dh", (seconds+1800)/3600)
+	case seconds >= 60:
+		return fmt.Sprintf("~%dm", (seconds+30)/60)
+	default:
+		return fmt.Sprintf("%ds", seconds)
+	}
+}
+
 func opencodeClosureError(provider, model string, err error) error {
 	var ue *upstreamError
 	if !errors.As(err, &ue) || !isOpencodeFreeTierRefusal(provider, ue) {
 		return err
 	}
-	detail := classifyOpencodeFreeTierRefusal(provider, ue.Body)
+	detail := classifyOpencodeFreeTierRefusal(provider, ue)
 	body, _ := json.Marshal(map[string]any{
 		"error": map[string]any{
 			"message": detail.Message,
@@ -1406,6 +1434,7 @@ func extractErrorText(body []byte) string {
 	var parsed struct {
 		Error struct {
 			Message string `json:"message"`
+			Type    string `json:"type"`
 			Status  string `json:"status"`
 			Details []struct {
 				Reason string `json:"reason"`
@@ -1431,6 +1460,9 @@ func extractErrorText(body []byte) string {
 					parts = append(parts, e.Message)
 				}
 			}
+		}
+		if parsed.Error.Type != "" {
+			parts = append(parts, parsed.Error.Type)
 		}
 		if parsed.Error.Status != "" {
 			parts = append(parts, parsed.Error.Status)
@@ -1495,6 +1527,16 @@ var (
 const (
 	minResetCooldown = 5 * time.Second
 	maxResetCooldown = 2 * time.Hour
+
+	// dailyLimitFallbackCooldown is how long a daily free-tier 429 parks when the
+	// upstream announced no reset at all (OpenRouter/OpenCode sometimes answer a
+	// bare "rate limit exceeded"). The window resets once a day, so the honest
+	// answer is a full day rather than the backoff ladder's minutes — the
+	// "minutes lockdown" the operator reported came from that mismatch.
+	dailyLimitFallbackCooldown = 24 * time.Hour
+	// maxDailyResetCooldown bounds a daily window that did announce its reset,
+	// leaving room for a next-midnight reset measured late in the day.
+	maxDailyResetCooldown = 26 * time.Hour
 )
 
 // maxConsecutive429PerTurn is how many different accounts may answer 429 in one

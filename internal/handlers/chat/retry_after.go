@@ -3,6 +3,7 @@ package chat
 import (
 	json "encoding/json/v2"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -75,6 +76,10 @@ const mistral429CooldownFloor = 10 * time.Second
 // scoped without touching other providers.
 func retryableCooldownSec(provider string, statusCode int, base time.Duration, ue *upstreamError) int {
 	cooldown := base
+	dailyLimit := false
+	if ue != nil && len(ue.Body) > 0 {
+		dailyLimit = isDailyLimitError(extractErrorText(ue.Body)) || isDailyLimitError(string(ue.Body))
+	}
 	if statusCode == http.StatusTooManyRequests {
 		if wait, ok := retryAfterWait(ue); ok {
 			cooldown = wait
@@ -84,6 +89,10 @@ func retryableCooldownSec(provider string, statusCode int, base time.Duration, u
 			// burst that earned the 429, which is how one account kept
 			// absorbing the next request and earning another one.
 			cooldown = mistral429CooldownFloor
+		} else if dailyLimit {
+			// A daily free-tier window announced no reset: park for a full
+			// day instead of the backoff ladder's minutes.
+			cooldown = dailyLimitFallbackCooldown
 		}
 	} else if dur, ok := extractResetDuration(ue.Body); ok {
 		cooldown = dur
@@ -94,6 +103,11 @@ func retryableCooldownSec(provider string, statusCode int, base time.Duration, u
 		if resetAt, ok := codebuddyResetAt(ue.Body); ok && resetAt.After(time.Now()) {
 			return ceilSeconds(time.Until(resetAt))
 		}
+	}
+	// A daily window is legitimately longer than the 2h clamp that guards
+	// against a hostile duration; only daily limits earn the wider cap.
+	if dailyLimit {
+		return ceilSeconds(min(cooldown, maxDailyResetCooldown))
 	}
 	return ceilSeconds(min(cooldown, maxResetCooldown))
 }
@@ -192,12 +206,146 @@ func retryAfterWait(ue *upstreamError) (time.Duration, bool) {
 		}
 	}
 	note(parseRetryAfterHeader(ue.Header.Get("Retry-After")))
+	note(parseRetryAfterMS(ue.Header.Get("retry-after-ms")))
+	note(parseRateLimitReset(ue.Header.Get("X-RateLimit-Reset")))
+	note(rateLimitResetInBody(ue.Body))
+	note(resetsAtClock(ue.Body))
 	note(retryInfoDelay(ue.Body))
 	// extractRetryAfter already resolves quotaResetDelay, "Resets in X" and the
 	// retryAfter/retry_after/resetsAt/resets_at fields; re-reading its string
 	// keeps one owner of the field names.
 	note(parseRetryAfterValue(extractRetryAfter(ue.Body)))
 	return longest, found
+}
+
+// parseRetryAfterMS reads a Retry-After expressed in milliseconds
+// (retry-after-ms). OpenCode's free-tier gate announces its window this way;
+// the seconds-based Retry-After header is parsed separately.
+func parseRetryAfterMS(v string) (time.Duration, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	ms, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || ms <= 0 {
+		return 0, false
+	}
+	return time.Duration(ms) * time.Millisecond, true
+}
+
+// parseRateLimitReset reads an X-RateLimit-Reset value, which upstreams spell as
+// a unix epoch in seconds (10 digits) or milliseconds (13 digits). OpenRouter's
+// daily-limit 429 carries the reset this way (~00:00 UTC of the next day) both
+// as an HTTP header and inside error.metadata.headers, which is why a plain
+// Retry-After reading left the pair to the backoff ladder's minutes.
+func parseRateLimitReset(v string) (time.Duration, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	var reset time.Time
+	if n >= 1e12 {
+		reset = time.UnixMilli(n)
+	} else {
+		reset = time.Unix(n, 0)
+	}
+	d := time.Until(reset)
+	if d <= 0 {
+		return 0, false
+	}
+	return d, true
+}
+
+// rateLimitResetInBody reads the reset OpenRouter nests under
+// error.metadata.headers.X-RateLimit-Reset.
+func rateLimitResetInBody(body []byte) (time.Duration, bool) {
+	if len(body) == 0 {
+		return 0, false
+	}
+	var parsed struct {
+		Error struct {
+			Metadata struct {
+				Headers struct {
+					XRateLimitReset string `json:"X-RateLimit-Reset"`
+				} `json:"headers"`
+			} `json:"metadata"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return 0, false
+	}
+	return parseRateLimitReset(parsed.Error.Metadata.Headers.XRateLimitReset)
+}
+
+// resetsAtClock handles the "They reset at 21:00" notice OpenCode's session
+// message shows when the reset is named as a wall-clock time rather than an
+// epoch. The time is read as UTC and rolled to the next day when it has already
+// passed today. CodeBuddy's "reset at <date> <time>" is not matched: its time
+// is preceded by a date, not the bare HH:MM this pattern requires.
+var resetsAtClockRegex = regexp.MustCompile(`(?i)resets?\s+at\s+(\d{1,2}):(\d{2})`)
+
+func resetsAtClock(body []byte) (time.Duration, bool) {
+	if len(body) == 0 {
+		return 0, false
+	}
+	matches := resetsAtClockRegex.FindStringSubmatch(extractErrorText(body))
+	if len(matches) < 3 {
+		return 0, false
+	}
+	hh, err1 := strconv.Atoi(matches[1])
+	mm, err2 := strconv.Atoi(matches[2])
+	if err1 != nil || err2 != nil || hh < 0 || hh > 23 || mm < 0 || mm > 59 {
+		return 0, false
+	}
+	now := time.Now().UTC()
+	next := time.Date(now.Year(), now.Month(), now.Day(), hh, mm, 0, 0, time.UTC)
+	if !next.After(now) {
+		next = next.Add(24 * time.Hour)
+	}
+	d := time.Until(next)
+	if d <= 0 {
+		return 0, false
+	}
+	return d, true
+}
+
+// isDailyLimitError reports whether the error text names a spent daily free-tier
+// window. OpenRouter spells it "free-models-per-day" and OpenCode
+// "FreeUsageLimitError" / "rate limit exceeded for today"; both reset after
+// roughly a day, so the router must not treat them like the per-second burst
+// limit the backoff ladder is built for.
+func isDailyLimitError(errorText string) bool {
+	if errorText == "" {
+		return false
+	}
+	lower := strings.ToLower(errorText)
+	for _, marker := range dailyLimitMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// dailyLimitMarkers are the phrases that mark a daily quota. Deliberately
+// specific: "rate limit" and "too many requests" alone must NOT qualify, or the
+// per-second burst limits those name would be parked for a day.
+var dailyLimitMarkers = []string{
+	"free-models-per-day",
+	"freeusagelimiterror",
+	"free usage limit",
+	"daily limit",
+	"daily quota",
+	"per day",
+	"usage limit reached",
+	"usage limit has been reached",
+	"free allowance",
+	"resets at",
+	"reset at",
 }
 
 // retryInfoDelay reads the google.rpc.RetryInfo detail a rate-limited Gemini

@@ -2,11 +2,13 @@
 
 ## [1.1.3] - Unreleased
 ### Quota learning & routing
+- **Daily free-tier 429s respect the upstream reset instead of minutes-long backoff.** OpenRouter's `free-models-per-day` response carries `X-RateLimit-Reset` inside `error.metadata.headers`; OpenCode may provide `Retry-After`, `retry-after-ms`, or a `resets at HH:MM` message. The cooldown now reads those reset signals and keeps daily limits locked until the announced reset, capped at 26 hours. When a daily limit has no usable reset signal, it falls back to 24 hours rather than the short exponential retry ladder. Non-daily 429s retain the existing two-hour cap.
 - **Per-key quota learning (`internal/quotalearn`), ported from FreeLLMAPI.** RPM/RPD/TPM/TPD sliding-window counters per `(provider, model, connection)` learn provider-reported ceilings from rate-limit response headers (`X-RateLimit-Limit-*`) and from explicit `429 Retry-After` windows, and persist learned ceilings and active cooldowns to SQLite (`persist.go`). Combo fallback consults the learner before rotating candidates: a connection at its learned ceiling or inside a cooldown is excluded from the candidate order (`combo.go`), so the router stops retrying a key the provider has already throttled. Successful turns also feed the counters, so ceilings converge from observation instead of only from failures. The 429-with-no-window case is deliberately left to the combo's own bounded retry and the DB locks, so the learner never starves that path.
 ### MCP server
 - **MCP endpoint at `/mcp` (Model Context Protocol), ported from FreeLLMAPI.** JSON-RPC 2.0 over plain JSON or SSE framing (negotiated via `Accept: text/event-stream`), with `initialize`/`ping`/`tools/list`/`tools/call`. The tools are read-only: `list_models` (models the gateway can route to, grouped by provider), `provider_health`, `combo_strategy` (active combos and their routing strategy, optionally filtered by name), and `quota_state` (learned ceilings/cooldowns per provider/model/connection). Auth mirrors the dashboard: session cookie, client API key, or local CLI token (`RequireDashboardAuth`). New package `internal/handlers/mcp`.
 ### Context handoff
 - **Sticky-combo context handoff note (S3), ported from FreeLLMAPI.** When a sticky combo switches the serving model at a turn boundary mid-session, the gateway injects a compact `system` note — `[Context handoff: conversation was previously served by <old>, now continuing with <new>]` — into the outbound message list, so the thread stays coherent. When the serving model does not change, messages pass through untouched. Applied on both the OpenAI and the translated Claude-Messages combo paths.
+
 
 ## [1.1.2] - 2026-11-14
 
