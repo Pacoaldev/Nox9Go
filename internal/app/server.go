@@ -21,6 +21,7 @@ import (
 	"nox9go/proxy/internal/proxy/oauth"
 	"nox9go/proxy/internal/schedule"
 	"nox9go/proxy/internal/shutdown"
+	"nox9go/proxy/internal/tunnel/cloudflare"
 	"nox9go/proxy/internal/updater"
 )
 
@@ -118,6 +119,24 @@ func ProvideServer(p ServerParams) *http.Server {
 			startAutoPingScheduler(shutdown.Context(), p.Repo, p.ChatHandler)
 			startModelHealthLoop(shutdown.Context(), p.Repo, p.ChatHandler)
 			startCatalogSweepLoop(shutdown.Context(), p.Repo)
+			// A tunnel the operator left enabled comes back after a restart.
+			// Without this, settings said "enabled" while nothing was
+			// spawning cloudflared, and the dashboard parked on "Tunnel
+			// checking..." until the tunnel was power-cycled by hand.
+			if p.Repo != nil {
+				repo := p.Repo
+				cloudflare.StartAutoResume(shutdown.Context(), repo.GetSettingsRaw, p.Config.Port,
+					func(res cloudflare.EnableResult) {
+						// Persist what the spawn produced: Enable leaves
+						// settings to its caller, and the status endpoint
+						// reads the stored URL.
+						_ = repo.UpdateSettingsRaw(map[string]any{
+							"tunnelEnabled":   true,
+							"tunnelUrl":       res.TunnelURL,
+							"tunnelPublicUrl": res.PublicURL,
+						})
+					})
+			}
 
 			log.Printf("NOX9GO Proxy (%s) starting on port %d", updater.CurrentVersion, p.Config.Port)
 
