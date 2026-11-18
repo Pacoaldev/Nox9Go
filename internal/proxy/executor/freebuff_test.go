@@ -154,6 +154,9 @@ func TestForwardFreebuff_FullCycle(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
+			if got := r.Header.Get("x-freebuff-model"); got != "deepseek/deepseek-v4-flash" {
+				t.Errorf("session model header = %q, want requested model", got)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.MarshalWrite(w, map[string]any{
 				"status":     "active",
@@ -179,6 +182,9 @@ func TestForwardFreebuff_FullCycle(t *testing.T) {
 
 		case strings.HasSuffix(r.URL.Path, "/chat/completions"):
 			atomic.AddInt64(&chatCalls, 1)
+			if got := r.Header.Get("User-Agent"); got != "ai-sdk/openai-compatible/0.0.0-test/codebuff ai-sdk/provider-utils/3.0.20 runtime/browser" {
+				t.Errorf("chat User-Agent = %q, want Freebuff-compatible SDK identity", got)
+			}
 			bodyBytes, _ := io.ReadAll(r.Body)
 			var body map[string]any
 			_ = json.Unmarshal(bodyBytes, &body)
@@ -246,6 +252,10 @@ func TestForwardFreebuff_FullCycle(t *testing.T) {
 		Client: ts.Client(),
 		Config: &providers.ProviderConfig{
 			BaseURL: ts.URL + "/chat/completions",
+			// The registry's StaticHeaders override the executor's default UA in
+			// ForwardFreebuff's doChat, so the real provider config must reach the
+			// wire with the Freebuff-compatible identity, not a stale one.
+			StaticHeaders: providers.KnownProviders["freebuff"].StaticHeaders,
 		},
 		APIKey:   "test-fb-token",
 		Body:     reqBody,

@@ -54,7 +54,7 @@ const (
 	// makes — a 401/403 is the only invalid answer. This is the Muse Code
 	// subscription's connection probe as well as the pasted API key's: both
 	// store the minted Model API key as the bearer token.
-	museProbeURL    = "https://api.meta.ai/v1/models"
+	museProbeURL = "https://api.meta.ai/v1/models"
 	// v1m has no /models endpoint; the cheapest call that proves a key is a
 	// single-token System One evaluation (upstream validateUrl defaults to
 	// the provider's chat base URL).
@@ -237,10 +237,10 @@ var oauthProbeConfigs = map[string]oauthProbeConfig{
 	"codebuddy-intl": {tokenExists: true},
 	// The stored credential only authorizes the account API; model access
 	// needs a minted LLM token, so the test walks both layers (probeZed).
-	"windsurf":       {tokenExists: true},
-	"trae":           {tokenExists: true},
-	"devin":          {tokenExists: true},
-	"devin-cli":      {tokenExists: true},
+	"windsurf":  {tokenExists: true},
+	"trae":      {tokenExists: true},
+	"devin":     {tokenExists: true},
+	"devin-cli": {tokenExists: true},
 	"kimchi": {
 		url: kimchiProbeURL, method: http.MethodGet,
 		authHeader: "Authorization", authPrefix: "Bearer ",
@@ -779,7 +779,7 @@ func (h *DashboardHandler) probeFreebuff(ctx context.Context, _ *models.Provider
 		return probeOutcome{message: fmt.Sprintf("create probe request failed: %v", err)}
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "codebuff-cli/0.0.138")
+	req.Header.Set("User-Agent", "codebuff-cli/0.2.36")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := executor.DoFreebuffHTTP(ctx, client, req)

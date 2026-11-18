@@ -20,7 +20,7 @@ import (
 const (
 	freebuffSessionPath  = "/api/v1/freebuff/session"
 	freebuffSessionTTL   = 60 * time.Minute
-	freebuffCLIUserAgent = "codebuff-cli/0.0.138"
+	freebuffCLIUserAgent = "codebuff-cli/0.2.36"
 
 	// freebuffInstanceHeader names the session a release (DELETE) targets. The
 	// CLI sends the same header only on GET and DELETE — POST takes the model.

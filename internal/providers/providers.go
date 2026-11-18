@@ -233,7 +233,7 @@ var modelsListURL = map[string]string{
 // route.js), which sets headers per entry — the flat Go map only has room for
 // the ones that actually differ.
 var modelsListHeaders = map[string]map[string]string{
-	"muse": {"x-api-version": "1.0.0", "Content-Type": "application/json"},
+	"muse":     {"x-api-version": "1.0.0", "Content-Type": "application/json"},
 	"requesty": {"Content-Type": "application/json"},
 }
 
@@ -414,10 +414,10 @@ var KnownProviders = map[string]ProviderConfig{
 	// chat completions with 60+ models across Claude, Gemini, GPT, DeepSeek,
 	// Qwen, GLM, Kimi, MiniMax, Seed, Grok, Hy and Mimo.
 	"hcnsec": {
-		BaseURL:        "https://api.hcnsec.cn/v1/chat/completions",
-		AuthHeader:     "Authorization",
-		AuthScheme:     "bearer",
-		TTSURL:         "https://api.hcnsec.cn/v1/audio/speech",
+		BaseURL:    "https://api.hcnsec.cn/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+		TTSURL:     "https://api.hcnsec.cn/v1/audio/speech",
 	},
 	"sumopod": {
 		BaseURL:    "https://ai.sumopod.com/v1/chat/completions",
@@ -980,7 +980,7 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 		StaticHeaders: map[string]string{
-			"User-Agent": "ai-sdk/openai-compatible/1.0/codebuff",
+			"User-Agent": "ai-sdk/openai-compatible/0.0.0-test/codebuff ai-sdk/provider-utils/3.0.20 runtime/browser",
 		},
 	},
 

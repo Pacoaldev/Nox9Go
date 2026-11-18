@@ -21,7 +21,7 @@ import (
 const (
 	freebuffRunPath       = "/api/v1/agent-runs"
 	freebuffSystemMarker  = "You are Buffy, the strategic coding assistant."
-	freebuffChatUserAgent = "ai-sdk/openai-compatible/1.0/codebuff"
+	freebuffChatUserAgent = "ai-sdk/openai-compatible/0.0.0-test/codebuff ai-sdk/provider-utils/3.0.20 runtime/browser"
 )
 
 var freebuffRootAgentByModel = map[string]string{
