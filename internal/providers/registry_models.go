@@ -86,6 +86,12 @@ var ProviderModels = map[string][]string{
 	// API-key `deepseek` row above: a request naming one of them must reach the
 	// browser-login provider, never the API-key one.
 	"deepseek-web": {"deepseek-v4-pro", "deepseek-v4-pro-think", "deepseek-v4-pro-search", "deepseek-v4-pro-think-search", "deepseek-v4-flash", "deepseek-v4-flash-think", "deepseek-v4-flash-search", "deepseek-v4-flash-think-search", "deepseek-chat", "deepseek-reasoner", "DeepSeek-R1", "DeepSeek-R1-Search", "DeepSeek-V3.2", "DeepSeek-Search"},
+	// The ids the `devin` CLI itself publishes (`devin models`), hyphenated the
+	// way it spells them. The old upstream list carried dots and versions the
+	// CLI never serves (swe-1.6-fast, swe-1.5*), so a dashboard row requested a
+	// model the ACP bridge could not forward and the turn silently fell back to
+	// the agent's default. Only add an id here after `devin models` lists it.
+	"devin-cli": {"swe-1-6", "swe-1-6-slow", "swe-2-high", "swe-2-medium", "swe-2-max", "swe-2-flash-medium", "swe-2-flash-high", "swe-2-flash-max", "adaptive"},
 	"hcnsec": {
 		"auto",
 		"DeepSeek-V4-Flash",

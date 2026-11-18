@@ -428,6 +428,17 @@ func validateProviderKey(ctx context.Context, provider string, cfg providers.Pro
 		if provider == "gemini-web" && strings.TrimSpace(apiKey) != "" {
 			return validateGeminiWeb(ctx, apiKey)
 		}
+		// Devin CLI's credential lives in the CLI itself, so "no key needed"
+		// is not the same as "ready": the bridge cannot serve a turn unless
+		// the executable resolves and `devin auth login` has run. Check has to
+		// say so here, or the provider card reports a provider as valid that
+		// fails on the first request.
+		if provider == "devin-cli" {
+			if err := executor.ProbeDevinCLI(ctx); err != nil {
+				return validateOutcome{supported: true, message: err.Error()}
+			}
+			return validateOutcome{valid: true, supported: true}
+		}
 		return validateOutcome{valid: true, supported: true}
 	}
 

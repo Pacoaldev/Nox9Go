@@ -1237,9 +1237,14 @@ var KnownProviders = map[string]ProviderConfig{
 		Hidden:     true,
 	},
 	"devin-cli": {
-		BaseURL:    "devin://acp/stdio",
-		AuthHeader: "Authorization",
-		AuthScheme: "bearer",
+		// Served by the locally installed `devin` CLI through the ACP bridge
+		// (internal/proxy/executor/devin_cli.go); the URL is never dialed.
+		// NoAuth because the credential lives in the CLI's own login
+		// (`devin auth login`), not in a stored connection — the dashboard
+		// offers this provider without a key and the router injects the
+		// virtual no-auth connection for it.
+		BaseURL: "devin://acp/stdio",
+		NoAuth:  true,
 	},
 	"kilo-gateway": {
 		BaseURL:    "https://api.kilo.ai/api/gateway/chat/completions",

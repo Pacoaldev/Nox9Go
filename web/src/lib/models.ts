@@ -1918,144 +1918,40 @@ export const BUILTIN_MODELS_BY_PROVIDER: Record<string, ProviderModel[]> = {
   ],
   "devin-cli": [
     {
-      "id": "swe-1.6-fast",
-      "name": "SWE 1.6 Fast"
-    },
-    {
-      "id": "swe-1.6",
+      "id": "swe-1-6",
       "name": "SWE 1.6"
     },
     {
-      "id": "swe-1.5-fast",
-      "name": "SWE 1.5 Fast"
+      "id": "swe-1-6-slow",
+      "name": "SWE 1.6 Slow"
     },
     {
-      "id": "swe-1.5",
-      "name": "SWE 1.5"
+      "id": "swe-2-high",
+      "name": "SWE 2 High"
     },
     {
-      "id": "claude-opus-4.7-max",
-      "name": "Claude Opus 4.7 Max"
+      "id": "swe-2-medium",
+      "name": "SWE 2 Medium"
     },
     {
-      "id": "claude-opus-4.7-high",
-      "name": "Claude Opus 4.7 High"
+      "id": "swe-2-max",
+      "name": "SWE 2 Max"
     },
     {
-      "id": "claude-opus-4.7-medium",
-      "name": "Claude Opus 4.7 Medium"
+      "id": "swe-2-flash-medium",
+      "name": "SWE 2 Flash Medium"
     },
     {
-      "id": "claude-opus-4.7-low",
-      "name": "Claude Opus 4.7 Low"
+      "id": "swe-2-flash-high",
+      "name": "SWE 2 Flash High"
     },
     {
-      "id": "claude-sonnet-4.6-thinking-1m",
-      "name": "Claude Sonnet 4.6 Thinking 1M"
+      "id": "swe-2-flash-max",
+      "name": "SWE 2 Flash Max"
     },
     {
-      "id": "claude-sonnet-4.6-thinking",
-      "name": "Claude Sonnet 4.6 Thinking"
-    },
-    {
-      "id": "claude-sonnet-4.6",
-      "name": "Claude Sonnet 4.6"
-    },
-    {
-      "id": "claude-opus-4.6-thinking",
-      "name": "Claude Opus 4.6 Thinking"
-    },
-    {
-      "id": "claude-opus-4.6",
-      "name": "Claude Opus 4.6"
-    },
-    {
-      "id": "claude-sonnet-4.5",
-      "name": "Claude Sonnet 4.5"
-    },
-    {
-      "id": "claude-haiku-4.5",
-      "name": "Claude Haiku 4.5"
-    },
-    {
-      "id": "gpt-5.5-xhigh",
-      "name": "GPT 5.5 XHigh"
-    },
-    {
-      "id": "gpt-5.5-high",
-      "name": "GPT 5.5 High"
-    },
-    {
-      "id": "gpt-5.5-medium",
-      "name": "GPT 5.5 Medium"
-    },
-    {
-      "id": "gpt-5.5-low",
-      "name": "GPT 5.5 Low"
-    },
-    {
-      "id": "gpt-5.4-high",
-      "name": "GPT 5.4 High"
-    },
-    {
-      "id": "gpt-5.4-medium",
-      "name": "GPT 5.4 Medium"
-    },
-    {
-      "id": "gpt-5.4-low",
-      "name": "GPT 5.4 Low"
-    },
-    {
-      "id": "gpt-5.3-codex-high",
-      "name": "GPT 5.3 Codex High"
-    },
-    {
-      "id": "gpt-5.3-codex-medium",
-      "name": "GPT 5.3 Codex Medium"
-    },
-    {
-      "id": "gpt-5.3-codex-low",
-      "name": "GPT 5.3 Codex Low"
-    },
-    {
-      "id": "gpt-5.2-high",
-      "name": "GPT 5.2 High"
-    },
-    {
-      "id": "gpt-5.2-medium",
-      "name": "GPT 5.2 Medium"
-    },
-    {
-      "id": "gpt-5.2-low",
-      "name": "GPT 5.2 Low"
-    },
-    {
-      "id": "gemini-3.1-pro-high",
-      "name": "Gemini 3.1 Pro High"
-    },
-    {
-      "id": "gemini-3.1-pro-low",
-      "name": "Gemini 3.1 Pro Low"
-    },
-    {
-      "id": "gemini-3.0-flash-high",
-      "name": "Gemini 3.0 Flash High"
-    },
-    {
-      "id": "gemini-2.5-pro",
-      "name": "Gemini 2.5 Pro"
-    },
-    {
-      "id": "deepseek-v4",
-      "name": "DeepSeek V4"
-    },
-    {
-      "id": "kimi-k2.6",
-      "name": "Kimi K2.6"
-    },
-    {
-      "id": "glm-5.1",
-      "name": "GLM 5.1"
+      "id": "adaptive",
+      "name": "Adaptive"
     }
   ],
   "fal-ai": [

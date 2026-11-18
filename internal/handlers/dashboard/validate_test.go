@@ -358,6 +358,25 @@ func TestHandleValidateProvider_NoAuthProviderSkipsProbe(t *testing.T) {
 	}
 }
 
+// Devin CLI needs no key, but it is not "valid" unless the local CLI is
+// installed: the bridge cannot serve a turn without it. An empty PATH makes the
+// lookup deterministic without touching the real installation.
+func TestHandleValidateProvider_DevinCLIRequiresInstalledCLI(t *testing.T) {
+	t.Setenv("PATH", "")
+
+	rec, out := postValidate(t, `{"provider":"devin-cli","apiKey":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if out["valid"] != false {
+		t.Errorf("expected valid=false when the devin executable is absent, got %v", out["valid"])
+	}
+	msg, _ := out["error"].(string)
+	if !strings.Contains(msg, "devin auth login") {
+		t.Errorf("error should be actionable, got %q", msg)
+	}
+}
+
 func TestHandleValidateProvider_ProbeFailureIsReportedAsInvalid(t *testing.T) {
 	withProbeStub(t, func(_ int, _ capturedProbe) (int, []byte, error) {
 		return 0, nil, context.DeadlineExceeded

@@ -130,6 +130,31 @@ func TestResolveProviderProxyPoolID_CrossAlias(t *testing.T) {
 	}
 }
 
+func TestGetBestConnection_DevinCLI_NoAuthVirtualConnection(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+
+	repo := db.NewRepo(database)
+	h := NewChatHandler(repo)
+
+	// Devin's credential lives in the local `devin` CLI (`devin auth login`),
+	// never in a stored connection, so the provider must be served through the
+	// injected virtual connection exactly like the other no-auth providers.
+	conn, connData, err := h.GetBestConnection("devin-cli", "", nil, "")
+	if err != nil {
+		t.Fatalf("GetBestConnection(devin-cli) failed: %v", err)
+	}
+	if conn == nil || connData == nil {
+		t.Fatal("expected virtual connection for no-auth provider devin-cli")
+	}
+	if conn.Provider != "devin-cli" {
+		t.Errorf("provider = %q, want devin-cli", conn.Provider)
+	}
+	if connData.AccessToken != "public" {
+		t.Errorf("AccessToken = %q, want the virtual connection's 'public'", connData.AccessToken)
+	}
+}
+
 func TestGetBestConnection_Opencode_InheritsProxyFromStrategy(t *testing.T) {
 	database, cleanup := setupChatTestDB(t)
 	defer cleanup()
