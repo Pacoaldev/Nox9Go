@@ -116,6 +116,9 @@ func devinCLIAuthenticated(ctx context.Context, path string) error {
 		devinAuthCache.path = ""
 		devinAuthCache.okUntil = time.Time{}
 		devinAuthCache.mu.Unlock()
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("devin-cli: authenticate: %w", ctxErr)
+		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			return proxy.UpstreamFailure(http.StatusBadGateway, fmt.Sprintf(
