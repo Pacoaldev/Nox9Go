@@ -1,8 +1,31 @@
 package tokensaver
 
-import (
-	"testing"
-)
+import "testing"
+
+func TestNewRTKFilters_ShellFindWindowsPaths(t *testing.T) {
+	cfg := DefaultRTKConfig()
+	input := ".\\src\\a.ts\n.\\src\\b.ts\n.\\node_modules\\pkg\\index.js\n"
+	res := CompressTextDetailedWithCommand(input, "find", cfg)
+	if !contains(res.Text, ".\\src\\a.ts") || !contains(res.Text, ".\\node_modules\\pkg\\index.js") {
+		t.Fatalf("Windows find output was not preserved: %q", res.Text)
+	}
+
+	drivePaths := "C:\\src\\a.ts\nC:\\src\\b.ts\n"
+	if got := MatchFilter(drivePaths, "", cfg); got == nil || got.ID != "shell-find" {
+		t.Fatalf("drive-letter paths matched filter %v, want shell-find", got)
+	}
+}
+
+func TestNewRTKFilters_GitLogKeepsAuthorAndDate(t *testing.T) {
+	cfg := DefaultRTKConfig()
+	input := "commit abcdef1234567890\nAuthor: Dev <dev@example.com>\nDate: today\n\n    feat: add rtk\n"
+	res := CompressTextDetailedWithCommand(input, "git log", cfg)
+	for _, want := range []string{"commit abcdef1234567890", "Author: Dev <dev@example.com>", "Date: today", "    feat: add rtk"} {
+		if !contains(res.Text, want) {
+			t.Errorf("git log output %q missing %q", res.Text, want)
+		}
+	}
+}
 
 func TestNewRTKFilters_Oxlint(t *testing.T) {
 	cfg := DefaultRTKConfig()
@@ -55,4 +78,3 @@ func containsAnywhere(s, substr string) bool {
 	}
 	return false
 }
-

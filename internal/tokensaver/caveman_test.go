@@ -6,6 +6,17 @@ import (
 	"testing"
 )
 
+func TestCavemanPromptCarriesASDSTE100Doctrine(t *testing.T) {
+	for _, level := range []string{"lite", "full", "ultra"} {
+		prompt := GetCavemanPrompt(level)
+		for _, want := range []string{"ASD-STE100", "20 words max", "active voice", "imperative for instructions"} {
+			if !strings.Contains(prompt, want) {
+				t.Errorf("level %q missing doctrine %q", level, want)
+			}
+		}
+	}
+}
+
 func TestCaveman_PromptLanguages(t *testing.T) {
 	en := GetCavemanPromptWithLang("full", "en")
 	if !strings.Contains(en, "terse caveman") {

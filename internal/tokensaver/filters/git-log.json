@@ -10,8 +10,8 @@
     "patterns": ["^commit [0-9a-f]{7,40}", "^Author: "]
   },
   "rules": {
-    "includePatterns": ["^commit [0-9a-f]{7,40}", "^\\s{4}\\S"],
-    "dropPatterns": ["^Author: ", "^Date: ", "^\\s*$"],
+    "includePatterns": ["^commit [0-9a-f]{7,40}", "^\\s{4}\\S", "^Author: ", "^Date: "],
+    "dropPatterns": ["^\\s*$"],
     "collapsePatterns": [],
     "deduplicate": false,
     "maxLines": 120,
@@ -27,7 +27,7 @@
       "name": "inline sample",
       "command": "git log",
       "input": "commit abcdef1234567890\nAuthor: Dev <dev@example.com>\nDate: today\n\n    feat: add rtk\n",
-      "expected": "commit abcdef1234567890\n    feat: add rtk"
+      "expected": "commit abcdef1234567890\nAuthor: Dev <dev@example.com>\nDate: today\n    feat: add rtk"
     }
   ]
 }

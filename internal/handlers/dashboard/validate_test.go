@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/base64"
 	json "encoding/json/v2"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // capturedProbe records one stubbed outbound probe.
@@ -911,5 +913,55 @@ func TestValidateDefaultModel_NaraRouter(t *testing.T) {
 	}
 	if got := validateDefaultModel("nara"); got != "laguna-s-2.1" {
 		t.Errorf("validateDefaultModel(nara) = %q, want laguna-s-2.1", got)
+	}
+}
+
+// TestQoderProbeTimeoutIsUpstreamParity pins the Qoder probe budget to upstream
+// parity: one catalogue call is bounded at FETCH_TIMEOUT_MS = 15_000 upstream,
+// and it must stay strictly above the generic 8s probe every other provider uses.
+func TestQoderProbeTimeoutIsUpstreamParity(t *testing.T) {
+	if qoderProbeTimeout < 15*time.Second {
+		t.Fatalf("qoderProbeTimeout = %v, want >= 15s (upstream FETCH_TIMEOUT_MS = 15_000)", qoderProbeTimeout)
+	}
+	if qoderProbeTimeout <= validateProbeTimeout {
+		t.Fatalf("qoderProbeTimeout = %v, want strictly greater than validateProbeTimeout %v", qoderProbeTimeout, validateProbeTimeout)
+	}
+}
+
+// TestQoderProbeHonorsItsOwnBudget proves the Qoder chain resolves its own
+// budget, not the 8s default, and that the resolved value becomes an enforced
+// deadline on a real request.
+func TestQoderProbeHonorsItsOwnBudget(t *testing.T) {
+	// Shrink the Qoder budget so the deadline is observable in milliseconds
+	// instead of waiting on the real 15s.
+	orig := qoderProbeTimeout
+	qoderProbeTimeout = 30 * time.Millisecond
+	t.Cleanup(func() { qoderProbeTimeout = orig })
+
+	// The override must resolve to the Qoder budget, not the 8s default.
+	got := probeTimeoutFor(withProbeTimeout(context.Background(), qoderProbeTimeout))
+	if got != 30*time.Millisecond {
+		t.Fatalf("probeTimeoutFor = %v, want %v", got, 30*time.Millisecond)
+	}
+	if d := probeTimeoutFor(context.Background()); d != validateProbeTimeout {
+		t.Fatalf("probeTimeoutFor without override = %v, want the %v default", d, validateProbeTimeout)
+	}
+
+	// The resolved budget must produce a real, enforced deadline: a server that
+	// answers slower than the budget must lose the race.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(120 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), got)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext: %v", err)
+	}
+	if _, err := http.DefaultClient.Do(req); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("request error = %v, want context deadline exceeded", err)
 	}
 }

@@ -7,7 +7,7 @@
   "match": {
     "outputTypes": ["shell-find"],
     "commands": ["^find\\b"],
-    "patterns": ["^(?:\\./|/|[A-Za-z0-9_.-]+/)"]
+    "patterns": ["^(?:\\./|/|[A-Za-z]:[\\\\/]|[A-Za-z0-9_.-]+[\\\\/])"]
   },
   "rules": {
     "stripAnsi": true,
@@ -28,6 +28,12 @@
       "command": "find",
       "input": "./src/a.ts\n./src/b.ts\n./node_modules/pkg/index.js\n",
       "expected": "./src/a.ts\n./src/b.ts\n./node_modules/pkg/index.js"
+    },
+    {
+      "name": "windows find output",
+      "command": "find",
+      "input": ".\\src\\a.ts\n.\\src\\b.ts\n.\\node_modules\\pkg\\index.js\n",
+      "expected": ".\\src\\a.ts\n.\\src\\b.ts\n.\\node_modules\\pkg\\index.js"
     }
   ]
 }

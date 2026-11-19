@@ -56,6 +56,26 @@ func ClassifyUpstreamNetworkError(err error) (int, string, string) {
 // validateProbeTimeout mirrors upstream's AbortSignal.timeout(8000) on probes.
 const validateProbeTimeout = 8 * time.Second
 
+// qoderProbeTimeout bounds the dashboard's sequential Qoder COSY requests.
+// Upstream uses FETCH_TIMEOUT_MS = 15_000 for each catalogue request.
+var qoderProbeTimeout = 15 * time.Second
+
+type probeTimeoutKey struct{}
+
+func withProbeTimeout(ctx context.Context, timeout time.Duration) context.Context {
+	if timeout <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, probeTimeoutKey{}, timeout)
+}
+
+func probeTimeoutFor(ctx context.Context) time.Duration {
+	if timeout, ok := ctx.Value(probeTimeoutKey{}).(time.Duration); ok && timeout > 0 {
+		return timeout
+	}
+	return validateProbeTimeout
+}
+
 // probeClientKey carries the *http.Client a probe should use (e.g. the
 // connection's proxy-bound client during a dashboard connection test).
 type probeClientKey struct{}
@@ -94,7 +114,7 @@ func isProxyFailure(err error, resp *http.Response) bool {
 // plus the (truncated) response body. Package-level so tests can stub the
 // upstream call instead of hitting the network.
 var validateProbeDo = func(ctx context.Context, method, rawURL string, headers map[string]string, body []byte) (int, []byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, validateProbeTimeout)
+	ctx, cancel := context.WithTimeout(ctx, probeTimeoutFor(ctx))
 	defer cancel()
 	var reader io.Reader
 	if len(body) > 0 {
@@ -969,7 +989,7 @@ func validateQoder(ctx context.Context, provider, apiKey string, psd map[string]
 // stubbed in tests).
 func qoderProbeDoer(_ context.Context) executor.QoderDoer {
 	return func(innerCtx context.Context, method, rawURL string, headers map[string]string, body []byte) (int, []byte, error) {
-		return validateProbeDo(innerCtx, method, rawURL, headers, body)
+		return validateProbeDo(withProbeTimeout(innerCtx, qoderProbeTimeout), method, rawURL, headers, body)
 	}
 }
 

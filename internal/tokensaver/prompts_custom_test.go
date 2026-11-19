@@ -6,6 +6,27 @@ import (
 	"testing"
 )
 
+func TestPonytailLevelsShareTheUpstreamDoctrine(t *testing.T) {
+	for _, level := range []string{"lite", "full", "ultra"} {
+		got := GetPonytailPrompt(level)
+		for _, want := range []string{
+			"shortcut: <the limit>, <when to upgrade>",
+			"That is scope. Extra features are not.",
+			"what you skipped or did not check",
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("level %q lost %q", level, want)
+			}
+		}
+	}
+	if GetPonytailPrompt("ultra") == GetPonytailPrompt("full") {
+		t.Error("ultra level lost its push-back line")
+	}
+	if GetPonytailPrompt("lite") == GetPonytailPrompt("full") {
+		t.Error("lite level lost its smaller-option line")
+	}
+}
+
 func TestInjectPrefixSystemPrompt(t *testing.T) {
 	tests := []struct {
 		name         string

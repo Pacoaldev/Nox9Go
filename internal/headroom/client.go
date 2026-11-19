@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"nox9go/proxy/internal/handlerutil"
 	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/proxy"
 )
@@ -122,6 +123,11 @@ func (c *HeadroomClient) Compress(ctx context.Context, body []byte, model string
 	httpReq.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	// Upstream Headroom v0.44.0 uses x-headroom-session-id to isolate prefix
+	// cache trackers across parallel Claude Code subagent lineages (#2085).
+	if sessID := handlerutil.GetSessionID(ctx); sessID != "" {
+		httpReq.Header.Set("x-headroom-session-id", sessID)
 	}
 
 	resp, err := c.httpClient.Do(httpReq)
