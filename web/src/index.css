@@ -872,3 +872,29 @@ body {
 .cf-legend span[data-kind='locked']::before {
   background: #f59e0b;
 }
+
+/* Provider alert pulse (bell → Providers & Endpoints cards).
+   An affected provider's card border breathes while its alert is active.
+   Animates border-color only, like the topology rule above: a box-shadow
+   animation would re-rasterise a blurred shadow every frame on the same
+   1 vCPU box (AGENTS.md §4.G). */
+@keyframes provider-alert-pulse {
+  0%, 100% {
+    border-color: rgba(239, 68, 68, 0.7);
+    background-color: rgba(239, 68, 68, 0.06);
+  }
+  50% {
+    border-color: rgba(239, 68, 68, 0.25);
+    background-color: rgba(239, 68, 68, 0.02);
+  }
+}
+.provider-alert-pulse {
+  animation: provider-alert-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .provider-alert-pulse {
+    animation: none;
+    border-color: rgba(239, 68, 68, 0.7);
+    background-color: rgba(239, 68, 68, 0.05);
+  }
+}

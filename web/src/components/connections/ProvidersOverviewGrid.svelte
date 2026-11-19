@@ -5,6 +5,7 @@
   import { PROVIDER_CATALOG, isChatProvider } from '../../lib/providers'
   import ProviderCard from './ProviderCard.svelte'
   import { getProviderStats, matchesFilter, matchesSearch, providerAuthTypes } from './types'
+  import { providerAlertPulse } from '../../lib/providerAlertPulse.svelte'
   import {
     loadProviderStatusFilter,
     saveProviderStatusFilter,
@@ -34,6 +35,11 @@
   let searchQuery = $state('')
   let statusFilter = $state<ProviderStatusFilter>(loadProviderStatusFilter())
   let showAllApikey = $state(true)
+
+  // Provider ids with an active alert (the bell's panel): their cards pulse
+  // their border so the operator sees which provider the notification is
+  // about without opening the panel.
+  const alertedProviders = $derived(providerAlertPulse())
 
   // The operator picks this filter once and expects it after a reload, so it
   // round-trips through localStorage like the display preferences.
@@ -159,6 +165,7 @@
             stats={node.stats}
             onClick={() => onSelectProvider(node.id)}
             onToggleAll={(active) => onToggleAll(node.id, active)}
+            alertPulse={alertedProviders.has(node.id)}
           />
         {/each}
       </div>
@@ -182,6 +189,7 @@
             stats={p.stats}
             onClick={() => onSelectProvider(p.id)}
             onToggleAll={(active) => onToggleAll(p.id, active)}
+            alertPulse={alertedProviders.has(p.id)}
           />
         {/each}
       </div>
@@ -206,6 +214,7 @@
             noAuth={p.noAuth}
             onClick={() => onSelectProvider(p.id)}
             onToggleAll={(active) => onToggleAll(p.id, active)}
+            alertPulse={alertedProviders.has(p.id)}
           />
         {/each}
       </div>
@@ -229,6 +238,7 @@
             stats={p.stats}
             onClick={() => onSelectProvider(p.id)}
             onToggleAll={(active) => onToggleAll(p.id, active)}
+            alertPulse={alertedProviders.has(p.id)}
           />
         {/each}
       </div>

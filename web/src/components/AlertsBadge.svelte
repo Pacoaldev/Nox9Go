@@ -21,6 +21,7 @@
   import { PROVIDER_CATALOG_MAP } from '../lib/providers'
   import { portal } from '../lib/ui/portal'
   import { maxPanelWidth, placePanel, placementStyle } from '../lib/ui/menuPosition'
+  import { clearProviderAlertPulse, syncProviderAlertPulse } from '../lib/providerAlertPulse.svelte'
 
   interface Props {
     onClick?: () => void
@@ -46,7 +47,24 @@
     loading = true
     details = await api.getDashboardAlerts()
     loading = false
+    syncProviderAlertPulse(details.alerts)
   }
+
+  // While the status poll reports active alerts, fetch the detail once per
+  // cycle to name the affected providers; the pulse on the Providers &
+  // Endpoints cards reads this store, so it lights up without opening the
+  // panel. When the count returns to zero the highlight clears without any
+  // request.
+  $effect(() => {
+    if (totalAlerts === 0) {
+      clearProviderAlertPulse()
+      return
+    }
+    void api
+      .getDashboardAlerts()
+      .then((res) => syncProviderAlertPulse(res.alerts))
+      .catch(() => clearProviderAlertPulse())
+  })
 
   function toggle(): void {
     open = !open

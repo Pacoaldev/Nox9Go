@@ -14,6 +14,8 @@
     noAuth?: boolean
     onClick: () => void
     onToggleAll?: (active: boolean) => void
+    /** The bell reports an active alert for this provider: pulse the border. */
+    alertPulse?: boolean
   }
 
   let {
@@ -24,6 +26,7 @@
     noAuth = false,
     onClick,
     onToggleAll,
+    alertPulse = false,
   }: Props = $props()
 
   let isAllDisabled = $derived(stats.allDisabled)
@@ -50,7 +53,7 @@
         ? 'border-red-500/50 bg-red-500/[0.02]'
         : stats.connected > 0 || noAuth
           ? 'border-emerald-500/40 bg-emerald-500/[0.02]'
-          : 'border-border bg-surface'}"
+          : 'border-border bg-surface'} {alertPulse ? 'provider-alert-pulse' : ''}"
   >
     <div class="flex min-w-0 items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-3">
