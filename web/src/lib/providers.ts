@@ -2858,6 +2858,22 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
       "llm"
     ],
     "modelsFetcher": {"url": "https://api.longcat.chat/openai/v1/models", "type": "openai"}
+  },
+  {
+    "id": "hetzner",
+    "name": "Hetzner Inference API",
+    "category": "freeTier",
+    "alias": "hetzner",
+    "color": "#D50C2D",
+    "icon": "dns",
+    "website": "https://experiments.hetzner.com/inference",
+    "notice": {"text": "Free during Hetzner's experimental phase, no billing yet, no SLA. OpenAI-compatible endpoint.", "apiKeyUrl": "https://console.hetzner.cloud"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://inference.hetzner.com/api/v1/models", "type": "openai"}
   }
 ]
 

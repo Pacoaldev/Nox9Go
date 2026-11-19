@@ -221,10 +221,14 @@ var modelsListURL = map[string]string{
 	"any":          "https://api.anyapi.ai/v1/models",
 	"ovhcloud":     "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models",
 	"ovh":          "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models",
-	"sealion":      "https://api.sea-lion.ai/v1/models",
+	"sealion":     "https://api.sea-lion.ai/v1/models",
 	"sl":           "https://api.sea-lion.ai/v1/models",
 	"longcat":      "https://api.longcat.chat/openai/v1/models",
 	"lc":           "https://api.longcat.chat/openai/v1/models",
+	// Hetzner serves the standard OpenAI /v1/models catalogue but validates
+	// the bearer token (401 with no header), so live discovery needs a stored
+	// key; the static snapshot above stays the pre-key view.
+	"hetzner":      "https://inference.hetzner.com/api/v1/models",
 }
 
 // modelsListHeaders carries the extra headers one live-catalogue endpoint
@@ -1271,6 +1275,16 @@ var KnownProviders = map[string]ProviderConfig{
 		SystemoneURL: "https://console.nace.ai/v1/systemone",
 		AuthHeader:   "Authorization",
 		AuthScheme:   "bearer",
+	},
+	// Hetzner Inference API (https://experiments.hetzner.com/inference):
+	// free during Hetzner's experimental phase, no billing yet, no SLA
+	// (OmniRoute freeNote). OpenAI-compatible chat behind a bearer token; the
+	// live /v1/models catalogue validates the credential (401 without one),
+	// so discovery only works once a key is stored.
+	"hetzner": {
+		BaseURL:    "https://inference.hetzner.com/api/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
 	},
 	"runcrate": {
 		BaseURL:    "https://api.runcrate.ai/v1/chat/completions",

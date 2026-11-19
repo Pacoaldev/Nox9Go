@@ -148,6 +148,9 @@ var ProviderAliasMap = map[string]string{
 	"ovh":            "ovhcloud",
 	"sl":             "sealion",
 	"lc":             "longcat",
+	// Hetzner publishes no short alias upstream (OmniRoute alias: "hetzner").
+	// ProviderAliasMap must not map hetzner to itself
+	// (TestProviderAliasMap_NoSelfCycle); ResolveAlias passes the id through.
 }
 
 // ResolveAlias returns the canonical provider ID for an alias, or the alias itself if not found.

@@ -100,4 +100,5 @@ var RegistryAliases = map[string]string{
 	"ovhcloud":            "ovh",
 	"sealion":             "sl",
 	"longcat":             "lc",
+	"hetzner":             "hetzner",
 }

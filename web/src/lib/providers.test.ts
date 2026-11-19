@@ -218,6 +218,20 @@ describe('providers & media separation', () => {
     expect(missing).toEqual([])
   })
 
+  it('wires the Hetzner Inference API free-tier provider end-to-end', () => {
+    const p = PROVIDER_CATALOG.find((e) => e.id === 'hetzner')
+    expect(p).toBeDefined()
+    if (!p) throw new Error('missing hetzner')
+    expect(p.category).toBe('freeTier')
+    expect(p.alias).toBe('hetzner')
+    expect(isChatProvider(p)).toBe(true)
+    expect(p.modelsFetcher?.url).toBe('https://inference.hetzner.com/api/v1/models')
+    // OmniRoute serves one open model on the experimental endpoint; the
+    // static fallback must carry the vendor-prefixed wire id verbatim.
+    const models = getModelsByProviderId('hetzner').map((m) => m.id)
+    expect(models).toEqual(['Qwen/Qwen3.6-35B-A3B-FP8'])
+  })
+
   it('files NaN.Builders under the OAuth overview section without changing its auth', () => {
     // The operator wants it listed with the OAuth providers, but the provider
     // authenticates with a bearer API key: `category` must stay freeTier so the

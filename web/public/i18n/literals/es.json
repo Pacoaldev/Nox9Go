@@ -584,6 +584,7 @@
   "Free tier: 100GB bandwidth/month, 500K edge invocations": "Nivel gratuito: 100 GB de ancho de banda/mes, 500 000 invocaciones perimetrales",
   "Free tier: 125,000 function invocations and 100GB bandwidth per month": "Nivel gratuito: 125.000 invocaciones de funciones y 100 GB de ancho de banda por mes",
   "Free tier: 1M requests & 100GiB outbound traffic per month": "Nivel gratuito: 1 millón de solicitudes y 100 GiB de tráfico saliente por mes",
+  "Free during Hetzner's experimental phase, no billing yet, no SLA. OpenAI-compatible endpoint.": "Gratis durante la fase experimental de Hetzner, sin facturación todavía, sin SLA. Endpoint compatible con OpenAI.",
   "freebuff (Codebuff)": "Freebuff (Codebuff)",
   "From cached responses": "De respuestas almacenadas en caché",
   "Full": "Completo",

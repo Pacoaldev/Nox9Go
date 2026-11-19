@@ -763,6 +763,14 @@ func init() {
 	}
 	providerCapabilities["lc"] = providerCapabilities["longcat"]
 
+	// Hetzner Inference API — Qwen3.6-35B-A3B is the same MoE the openrouter
+	// free lane serves as qwen/qwen3.6-35b-a3b:free: hybrid thinking in the
+	// OpenAI shape, tools, 262k window. Vision is unverified for the Hetzner
+	// endpoint, so it stays off until the experimental API documents it.
+	providerCapabilities["hetzner"] = map[string]Capabilities{
+		"Qwen/Qwen3.6-35B-A3B-FP8": {Reasoning: true, Tools: true, ThinkingFormat: "openai", ContextWindow: 262144, MaxOutput: 65536},
+	}
+
 	initPatternIndex()
 }
 

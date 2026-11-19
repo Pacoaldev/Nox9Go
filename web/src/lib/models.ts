@@ -160,6 +160,7 @@ export const PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "sl": "sl",
   "longcat": "lc",
   "lc": "lc",
+  "hetzner": "hetzner",
 };
 
 const FREEBUFF_MODELS: ProviderModel[] = [
@@ -7367,6 +7368,14 @@ export const BUILTIN_MODELS_BY_PROVIDER: Record<string, ProviderModel[]> = {
       "id": "LongCat-Pro",
       "name": "LongCat Pro",
       "capabilities": ["reasoning"]
+    }
+  ],
+  "hetzner": [
+    {
+      "id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "name": "Qwen3.6 35B A3B FP8",
+      "capabilities": ["reasoning"],
+      "isFree": true
     }
   ],
 };
