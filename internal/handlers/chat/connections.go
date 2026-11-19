@@ -363,6 +363,16 @@ func (h *ChatHandler) getBestConnectionWithContext(ctx context.Context, provider
 			excludeSet[id] = true
 		}
 
+		// A conversation that already answered on one account stays there while
+		// its pin is live: the provider's prompt cache lives per account, so
+		// rotating mid-conversation re-sends the whole prefix to a cold shard.
+		pinKey := sessionPinKey(provider, handlerutil.GetSessionID(ctx))
+		if pinKey != "" && !isProbe {
+			if pinnedID, ok := h.sessionPins.lookup(pinKey); ok {
+				connections = promotePinnedConnection(connections, pinnedID)
+			}
+		}
+
 		conn = nil
 		var cooldownUntil time.Time
 		var inCooldown []*models.ProviderConnection
@@ -432,6 +442,10 @@ func (h *ChatHandler) getBestConnectionWithContext(ctx context.Context, provider
 			}
 			return nil, nil, fmt.Errorf("no available connections for provider: %s (all excluded)", provider)
 		}
+	}
+
+	if pinKey := sessionPinKey(provider, handlerutil.GetSessionID(ctx)); pinKey != "" && !isProbe && connectionID == "" {
+		h.sessionPins.record(pinKey, conn.ID)
 	}
 
 	var connData ConnectionData

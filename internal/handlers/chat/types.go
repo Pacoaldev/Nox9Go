@@ -50,6 +50,10 @@ type ChatHandler struct {
 	Quota       *quotalearn.Learner
 	stickyMu    sync.Mutex
 	stickyState map[string]*comboStickyState
+	// sessionPins keeps a conversation on the account that served its first
+	// turn, so the provider's per-account prompt cache stays warm
+	// (session_affinity.go).
+	sessionPins sessionPinState
 	// oauthRefreshFlight collapses concurrent OAuth token refreshes for the
 	// same connection, so an expired token triggers one upstream round-trip
 	// instead of one per in-flight request.

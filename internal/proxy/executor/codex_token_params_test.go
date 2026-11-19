@@ -133,6 +133,9 @@ func TestForwardCodex_UpstreamNeverSeesTokenParams(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data, _ := io.ReadAll(r.Body)
 		var m map[string]any
+		if r.Header.Get("session_id") != "session-1" {
+			t.Errorf("upstream session_id = %q, want session-1", r.Header.Get("session_id"))
+		}
 		if err := json.Unmarshal(data, &m); err != nil {
 			t.Errorf("upstream got non-JSON: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
@@ -156,11 +159,12 @@ func TestForwardCodex_UpstreamNeverSeesTokenParams(t *testing.T) {
 	// A 400 here means the parameter still reached the backend — the reported
 	// bug, and the only thing this test exists to catch.
 	if err := ForwardCodex(rec, &Request{
-		Client:   srv.Client(),
-		Config:   cfg,
-		APIKey:   "test-token",
-		Body:     body,
-		IsStream: true,
+		Client:    srv.Client(),
+		Config:    cfg,
+		APIKey:    "test-token",
+		Body:      body,
+		IsStream:  true,
+		SessionID: "session-1",
 	}); err != nil {
 		t.Fatalf("ForwardCodex errored: %v", err)
 	}
@@ -172,6 +176,64 @@ func TestForwardCodex_UpstreamNeverSeesTokenParams(t *testing.T) {
 // The Codex backend's reasoning models answer 400 "Unsupported parameter:
 // temperature" (and the same for top_p). Zed sends temperature on every turn,
 // so both sampling knobs must be dropped on the Codex path.
+func TestResolveCodexSessionID(t *testing.T) {
+	tests := []struct {
+		name    string
+		session string
+		body    string
+		want    string
+	}{
+		{name: "request session wins", session: " header-session ", body: `{"session_id":"body-session"}`, want: "header-session"},
+		{name: "body session id", body: `{"session_id":"body-session"}`, want: "body-session"},
+		{name: "body prompt cache key", body: `{"prompt_cache_key":"cache-key"}`, want: "cache-key"},
+		{name: "body conversation id", body: `{"conversation_id":"conversation"}`, want: "conversation"},
+		{name: "message text alone is not a conversation identity", body: `{"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}]}`, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveCodexSessionID(tt.session, []byte(tt.body)); got != tt.want {
+				t.Fatalf("resolveCodexSessionID() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A conversation the client did not label still needs one stable
+// prompt_cache_key, or every turn opens a new cache shard. A key the client
+// already sent is the caller's identity and must survive untouched.
+func TestInjectCodexPromptCacheKey(t *testing.T) {
+	const native = `{"model":"gpt-6-luna","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]}`
+	withClientKey := `{"model":"gpt-6-luna","prompt_cache_key":"client-key","input":[]}`
+
+	tests := []struct {
+		name     string
+		session  string
+		body     string
+		wantKey  string
+		wantSame bool
+	}{
+		{name: "injects a key from the session", session: "sess-1", body: native, wantKey: stableConversationUUID("codex:sess-1")},
+		{name: "same session yields the same key", session: "sess-1", body: native, wantKey: stableConversationUUID("codex:sess-1")},
+		{name: "other session yields another key", session: "sess-2", body: native, wantKey: stableConversationUUID("codex:sess-2")},
+		{name: "client key is preserved", session: "sess-1", body: withClientKey, wantKey: "client-key"},
+		{name: "no session leaves the body untouched", session: "", body: native, wantSame: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := injectCodexPromptCacheKey([]byte(tt.body), tt.session)
+			if tt.wantSame {
+				if string(out) != tt.body {
+					t.Fatalf("body changed without a session: %s", out)
+				}
+				return
+			}
+			if got := decodeBody(t, out)["prompt_cache_key"]; got != tt.wantKey {
+				t.Fatalf("prompt_cache_key = %v, want %q", got, tt.wantKey)
+			}
+		})
+	}
+}
+
 func TestStripCodexUnsupportedTokenParams_DropsSamplingParams(t *testing.T) {
 	raw := []byte(`{
 		"model": "gpt-6-astra",

@@ -88,7 +88,9 @@ func ForwardCodex(w http.ResponseWriter, req *Request) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	resp, err := proxy.ForwardCodex(ctx, req.Client, cfg, req.APIKey, transformedBody, req.IsStream, req.ConnData, codexResponsesLiteBody(transformedBody))
+	sessionID := resolveCodexSessionID(req.SessionID, transformedBody)
+	transformedBody = injectCodexPromptCacheKey(transformedBody, sessionID)
+	resp, err := proxy.ForwardCodex(ctx, req.Client, cfg, req.APIKey, transformedBody, req.IsStream, req.ConnData, codexResponsesLiteBody(transformedBody), sessionID)
 	if err != nil {
 		return fmt.Errorf("ForwardCodex: %w", err)
 	}

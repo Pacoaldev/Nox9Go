@@ -71,9 +71,12 @@ const codexResponsesLiteHeader = "x-openai-internal-codex-responses-lite"
 // responsesLite is the caller's answer rather than a decision made here: the
 // executor owns which shape a body ended up in, and the package boundary keeps
 // this one from importing that back.
-func ForwardCodex(ctx context.Context, client *http.Client, cfg *providers.ProviderConfig, apiKey string, body []byte, isStream bool, psd map[string]any, responsesLite bool) (*http.Response, error) {
+func ForwardCodex(ctx context.Context, client *http.Client, cfg *providers.ProviderConfig, apiKey string, body []byte, isStream bool, psd map[string]any, responsesLite bool, sessionID string) (*http.Response, error) {
 	headers := map[string]string{
 		"originator": "codex_cli_rs",
+	}
+	if sessionID != "" {
+		headers["session_id"] = sessionID
 	}
 	if responsesLite {
 		cfg = providers.WithStaticHeader(cfg, codexResponsesLiteHeader, "true")
