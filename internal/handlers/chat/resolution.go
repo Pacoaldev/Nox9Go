@@ -89,6 +89,14 @@ func (h *ChatHandler) ResolveModel(modelStr string) (*ModelInfo, error) {
 	return h.resolveModel(modelStr)
 }
 
+// normalizeProviderModel maps legacy or misnamed model IDs to their canonical upstream name.
+func normalizeProviderModel(provider, model string) string {
+	if (provider == "nararouter" || provider == "nara" || provider == "bynara" || provider == "nanarouter") && model == "minimax-m3-free" {
+		return "minimax-m3"
+	}
+	return model
+}
+
 // resolveProviderAlias resolves a provider alias to its canonical ID.
 func resolveProviderAlias(alias string) string {
 	if canonical, ok := providers.ProviderAliasMap[alias]; ok {
@@ -159,6 +167,7 @@ func (h *ChatHandler) resolveModelEntryGuarded(entry string, visiting map[string
 		}
 	}
 
+	model = normalizeProviderModel(provider, model)
 	return &ModelInfo{Provider: provider, Model: model}
 }
 
@@ -263,6 +272,7 @@ func (h *ChatHandler) resolveModel(modelStr string) (*ModelInfo, error) {
 				}
 			}
 		}
+		model = normalizeProviderModel(provider, model)
 		return &ModelInfo{Provider: provider, Model: model}, nil
 	}
 

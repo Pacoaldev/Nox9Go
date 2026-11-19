@@ -157,7 +157,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "color": "#22C55E",
     "icon": "bolt",
     "website": "https://xkiro.com",
-    "notice": {"text":"Unified AI gateway (api.xkiro.com) with 100+ LLM models, image generation, TTS, and 300M free tokens/day. Accepts a bearer token (sk-xt-...) or x-api-key header.", "apiKeyUrl":"https://xkiro.com"},
+    "notice": {"text":"Unified AI gateway (api.xkiro.com) with 100+ LLM models, image generation, TTS, and 1M free tokens/day (resets every 24h). Accepts a bearer token (sk-xt-...) or x-api-key header.", "apiKeyUrl":"https://xkiro.com"},
     "modelsFetcher": {"url": "https://api.xkiro.com/v1/models", "type": "openai"},
     "authType": "apikey",
     "noAuth": false,

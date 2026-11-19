@@ -103,7 +103,7 @@ func TestAggregatorProviders(t *testing.T) {
 				"gpt-5.6-terra",
 				"agnes-2.0-flash",
 				"agnes-2.5-flash",
-				"minimax-m3-free",
+				"minimax-m3",
 				"mistral-large",
 				"mistral-medium-3-5",
 				"qwen3.8-27b",

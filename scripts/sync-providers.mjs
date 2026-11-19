@@ -9,7 +9,10 @@
 //
 //   decolua/9router              open-sse/providers/registry/*.js
 //   cheaper-inference/OmniRoute  open-sse/config/providers/registry/*/index.ts
+//                                 src/shared/constants/providers/apikey/*.ts
+//                                 docs/reference/FREE_TIERS.md
 //                                 config/quality/free-catalog-evidence.json
+//   Documentation repo: https://github.com/cheaper-inference/OmniRoute#-documentation
 //
 // Filter: API-key auth only. OAuth-only providers, web-cookie/session
 // providers and localhost endpoints are dropped — a provider that needs a
@@ -188,6 +191,43 @@ async function collectOmniRoute() {
     }
   }
 
+  // Documented free tiers in OmniRoute docs/reference/FREE_TIERS.md
+  const freeTiersSet = new Set();
+  const freeTiersRaw = await raw(REPOS.omniroute, "docs/reference/FREE_TIERS.md");
+  if (freeTiersRaw) {
+    for (const m of freeTiersRaw.matchAll(/\*\*`([^`]+)`\*\*/g)) {
+      freeTiersSet.add(m[1]);
+    }
+  }
+
+  // Provider metadata (website, apiKeyUrl, name, hasFree) from OmniRoute constants
+  const apikeyFiles = tree.tree
+    .filter(
+      (e) =>
+        e.type === "blob" &&
+        e.path.startsWith("src/shared/constants/providers/apikey/") &&
+        e.path.endsWith(".ts") &&
+        !e.path.endsWith("index.ts"),
+    )
+    .map((e) => e.path);
+
+  const apikeyBodies = await mapLimit(apikeyFiles, 8, async (p) => raw(REPOS.omniroute, p));
+  const meta = {};
+
+  for (const body of apikeyBodies) {
+    if (!body) continue;
+    const blocks = body.split(/\n\s*([a-zA-Z0-9_-]+):\s*\{/);
+    for (let i = 1; i < blocks.length; i += 2) {
+      const pid = blocks[i];
+      const b = blocks[i + 1];
+      const website = (/website:\s*"([^"]+)"/.exec(b) || [])[1] || "";
+      const apiKeyUrl = (/apiKeyUrl:\s*"([^"]+)"/.exec(b) || [])[1] || "";
+      const name = (/name:\s*"([^"]+)"/.exec(b) || [])[1] || "";
+      const hasFree = /hasFree:\s*true/.test(b);
+      meta[pid] = { website, apiKeyUrl, name, hasFree };
+    }
+  }
+
   const bodies = await mapLimit(paths, 16, async (p) => raw(REPOS.omniroute, p));
   const out = [];
 
@@ -216,16 +256,20 @@ async function collectOmniRoute() {
     if (authType !== "apikey" && authType !== "optional") continue;
     if (localish(base)) continue;
 
+    const mInfo = meta[id] || {};
+    const keyUrl = mInfo.apiKeyUrl || mInfo.website || "";
+    const name = mInfo.name || displayName(body, id);
+
     let tier = "api-key";
-    if (evidence[id]) tier = "free";
+    if (evidence[id] || freeTiersSet.has(id)) tier = "free";
     else if (/id\s*:\s*"[^"]*-free"/.test(body)) tier = "free";
-    else if (authType === "optional") tier = "free";
+    else if (authType === "optional" || mInfo.hasFree) tier = "free-tier";
 
     out.push({
       id,
-      name: displayName(body, id),
+      name,
       base,
-      key: "",
+      key: keyUrl,
       tier,
       src: "omniroute",
     });
@@ -279,7 +323,7 @@ function renderMarkdown(rows, stamp) {
     "",
     "> Extraído directamente de los repositorios upstream oficiales:",
     "> - `decolua/9router` (`open-sse/providers/registry/*.js`)",
-    "> - `cheaper-inference/OmniRoute` (`open-sse/config/providers/registry/*/index.ts` + evidencia)",
+    "> - `cheaper-inference/OmniRoute` (`open-sse/config/providers/registry/*/index.ts`, `src/shared/constants/providers/apikey/`, `docs/reference/FREE_TIERS.md` — https://github.com/cheaper-inference/OmniRoute#-documentation)",
     ">",
     `> **Total proveedores**: ${rows.length} | **Fecha**: ${stamp}`,
     "> **Filtro**: Solo autenticación por API Key / HTTP endpoints. Excluidos flujos OAuth, sesiones por cookie y servidores locales.",

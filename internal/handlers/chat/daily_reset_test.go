@@ -218,3 +218,48 @@ func TestOpencodeClosureError_DailyLimitRetryAfter(t *testing.T) {
 	}
 }
 
+func TestRetryableCooldownSec_XKiroDailyLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		provider   string
+		statusCode int
+		body       string
+		want       int
+	}{
+		{
+			name:       "xkiro 429 without explicit reset parks for 24h",
+			provider:   "xkiro",
+			statusCode: http.StatusTooManyRequests,
+			body:       `{"error":{"message":"quota exceeded"}}`,
+			want:       int(dailyLimitFallbackCooldown / time.Second),
+		},
+		{
+			name:       "xk alias 429 without explicit reset parks for 24h",
+			provider:   "xk",
+			statusCode: http.StatusTooManyRequests,
+			body:       `{"error":{"message":"rate limit reached"}}`,
+			want:       int(dailyLimitFallbackCooldown / time.Second),
+		},
+		{
+			name:       "xkiro 402 payment required parks for 24h",
+			provider:   "xkiro",
+			statusCode: http.StatusPaymentRequired,
+			body:       `{"error":{"message":"insufficient quota"}}`,
+			want:       int(dailyLimitFallbackCooldown / time.Second),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ue := &upstreamError{
+				StatusCode: tt.statusCode,
+				Body:       []byte(tt.body),
+			}
+			got := retryableCooldownSec(tt.provider, tt.statusCode, 2*time.Second, ue)
+			if got != tt.want {
+				t.Errorf("retryableCooldownSec(%q) = %ds, want %ds", tt.provider, got, tt.want)
+			}
+		})
+	}
+}
+

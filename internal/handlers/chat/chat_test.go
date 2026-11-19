@@ -1543,6 +1543,9 @@ func TestResolveModel_NaraRouter(t *testing.T) {
 		{"nanarouter/laguna-s-2.1", "nararouter", "laguna-s-2.1"},
 		{"nararouter/laguna-s-2.1", "nararouter", "laguna-s-2.1"},
 		{"bynara/laguna-s-2.1", "nararouter", "laguna-s-2.1"},
+		{"nara/minimax-m3-free", "nararouter", "minimax-m3"},
+		{"nararouter/minimax-m3-free", "nararouter", "minimax-m3"},
+		{"nara/minimax-m3", "nararouter", "minimax-m3"},
 	}
 
 	for _, tt := range tests {

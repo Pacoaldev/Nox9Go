@@ -80,7 +80,16 @@ func retryableCooldownSec(provider string, statusCode int, base time.Duration, u
 	if ue != nil && len(ue.Body) > 0 {
 		dailyLimit = isDailyLimitError(extractErrorText(ue.Body)) || isDailyLimitError(string(ue.Body))
 	}
-	if statusCode == http.StatusTooManyRequests {
+	if isXKiroProvider(provider) && (statusCode == http.StatusTooManyRequests || statusCode == http.StatusPaymentRequired || dailyLimit) {
+		dailyLimit = true
+		if wait, ok := retryAfterWait(ue); ok {
+			cooldown = wait
+		} else if dur, ok := extractResetDuration(ue.Body); ok {
+			cooldown = dur
+		} else {
+			cooldown = dailyLimitFallbackCooldown
+		}
+	} else if statusCode == http.StatusTooManyRequests {
 		if wait, ok := retryAfterWait(ue); ok {
 			cooldown = wait
 		} else if isMistralProvider(provider) && cooldown < mistral429CooldownFloor {
@@ -117,6 +126,11 @@ func retryableCooldownSec(provider string, statusCode int, base time.Duration, u
 // error; there is no cross-provider aliasing here, only" mistral" itself.
 func isMistralProvider(provider string) bool {
 	return strings.EqualFold(provider, "mistral")
+}
+
+// isXKiroProvider reports whether provider is xKiro (xkiro or xk).
+func isXKiroProvider(provider string) bool {
+	return strings.EqualFold(provider, "xkiro") || strings.EqualFold(provider, "xk")
 }
 
 // passRetry is the rate-limit bookkeeping for one combo pass. The OpenAI and
@@ -346,6 +360,8 @@ var dailyLimitMarkers = []string{
 	"free allowance",
 	"resets at",
 	"reset at",
+	"1m token",
+	"daily token",
 }
 
 // retryInfoDelay reads the google.rpc.RetryInfo detail a rate-limited Gemini

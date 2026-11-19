@@ -3612,7 +3612,7 @@ export const BUILTIN_MODELS_BY_PROVIDER: Record<string, ProviderModel[]> = {
     { "id": "gpt-5.6-terra", "name": "GPT 5.6 Terra", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
     { "id": "agnes-2.0-flash", "name": "Agnes 2.0 Flash", "contextLength": 262144, "capabilities": ["reasoning", "tools"] },
     { "id": "agnes-2.5-flash", "name": "Agnes 2.5 Flash", "contextLength": 524288, "capabilities": ["reasoning", "tools"] },
-    { "id": "minimax-m3-free", "name": "MiniMax M3 Free", "contextLength": 1000000, "capabilities": ["reasoning"] },
+    { "id": "minimax-m3", "name": "MiniMax M3", "contextLength": 1000000, "capabilities": ["reasoning"] },
     { "id": "mistral-large", "name": "Mistral Large", "contextLength": 252000, "capabilities": ["tools"] },
     { "id": "mistral-medium-3-5", "name": "Mistral Medium 3.5", "contextLength": 256000, "capabilities": ["tools"] },
     { "id": "qwen3.8-27b", "name": "Qwen 3.8 27B", "capabilities": ["tools"] }

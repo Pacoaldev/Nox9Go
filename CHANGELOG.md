@@ -2,6 +2,18 @@
 
 ## [1.1.4] - Unreleased
 
+### Providers
+
+- **Nara Router serves `minimax-m3`, not `minimax-m3-free`.** The static catalog carried the `-free` spelling for both `nararouter` and `nara`, but the live catalogue (`GET https://router.bynara.id/v1/models`) does not publish it, so every request to that id was answered with HTTP 404 and the provider looked broken from the dashboard. `registry_models.go` and `web/src/lib/models.ts` now carry the canonical `minimax-m3` row, and `normalizeProviderModel` (`internal/handlers/chat/resolution.go`) remaps a client still sending `minimax-m3-free` for `nararouter`, `nara`, `bynara` or `nanarouter`, on both resolution paths. Covered by `TestResolveModel_NaraRouter` and `TestAggregatorProviders`.
+
+### Quota learning & routing
+
+- **xKiro's daily token quota parks the connection for its real 24-hour window.** xKiro allows 1M tokens per day (`free_tokens.limit_per_day` on `GET https://api.xkiro.com/v1/usage`), but every 429/402 fell into the generic retry ladder and was capped at `maxResetCooldown` (2h), so the gateway kept retrying a key that could not answer until the next day. `retryableCooldownSec` now treats `xkiro`/`xk` as a daily-limit provider: a 429, a 402 or a daily-limit body sets `dailyLimit` and holds the connection for the announced reset (`Retry-After` or the reset duration extracted from the body) or `dailyLimitFallbackCooldown` (24h) when the response carries none. `"1m token"` and `"daily token"` joined `dailyLimitMarkers`. Covered by `TestRetryableCooldownSec_XKiroDailyLimit`. The dashboard notice now reads "1M free tokens/day (resets every 24h)" instead of the stale 300M figure.
+
+### Tooling
+
+- **The provider sync reads OmniRoute's own metadata and free-tier reference.** `scripts/sync-providers.mjs` derived every OmniRoute row from `open-sse/config/providers/registry/*/index.ts`, which names a provider but carries no website or key page, so most rows shipped a blank signup link. It now also reads `src/shared/constants/providers/apikey/*.ts` for `website`/`apiKeyUrl`/`name`/`hasFree` and `docs/reference/FREE_TIERS.md` for the documented free tiers, which fills the key URL, keeps the provider's own display name, and classifies a documented free tier as `free`/`free-tier` instead of a bare `api-key`. The header and `check-providers` command cite the OmniRoute documentation (`https://github.com/cheaper-inference/OmniRoute#-documentation`).
+
 ### Dashboard
 
 - **Qoder model verification gets its own 15-second probe budget.** The dashboard's model probe bounded every upstream call with a single 8-second timeout (`validateProbeTimeout`, mirroring upstream's `AbortSignal.timeout(8000)`). Qoder's catalogue check is a sequence of signed COSY requests, not one listing fetch, so a slow round trip blew the 8-second budget and the provider was reported unreachable while it was in fact answering. The timeout is now carried on the probe context (`withProbeTimeout` / `probeTimeoutFor` in `internal/handlers/dashboard/validate.go`), and the Qoder probe doer sets it to 15 seconds — upstream's own `FETCH_TIMEOUT_MS = 15_000` for the same requests — while `validateProbeDo` reads the deadline from the context instead of the constant. Every other provider keeps the 8-second bound, and `validate_test.go` pins both the Qoder budget and the unchanged generic one.
