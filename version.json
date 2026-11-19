@@ -1,19 +1,19 @@
 {
-  "latestVersion": "1.1.2",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-windows-amd64.exe",
+  "latestVersion": "1.1.3",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.3/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-windows-amd64.exe",
-    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-linux-amd64",
-    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-linux-arm64",
-    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-darwin-amd64",
-    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.2/nox9go-darwin-arm64"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.3/nox9go-windows-amd64.exe",
+    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.3/nox9go-linux-amd64",
+    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.3/nox9go-linux-arm64",
+    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.3/nox9go-darwin-amd64",
+    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.3/nox9go-darwin-arm64"
   },
   "sha256": {
-    "windows_amd64": "a17cabd8b381d9e444d75f545b0dc64a01fdfa0a0241bee2bec341077981b962",
-    "linux_amd64": "59d682c3f815b3e63336ff6fb5ce0198db1b04c175c5f515152955e54c3f660d",
-    "linux_arm64": "d31b309dee9f083a597c7c851afafa2d3f7ecaf40a27bf1bcb63d12fc65b380b",
-    "darwin_amd64": "d897800280d203a24111932d937acc779d47999af48e538cfa44935120f02afd",
-    "darwin_arm64": "827dd267e505d1acbe4a5647228d20330448335eaae17a86ac0b12da5ef6c16e"
+    "windows_amd64": "f657a33c6560a6775e527565c10b0abd350f35ac27c34a1ef9aec79ac9260de9",
+    "linux_amd64": "dc6eb4c2306aaf59c5a42ccb1ae491c67ee973fce92367bcb481da395556242a",
+    "linux_arm64": "70f74995884f22c3a95a5e6d19b9c0752c884c16512c6ba5153af26717d121b1",
+    "darwin_amd64": "305de2ee42e9d8484fc21968873e8e9dd4bbfaef18ec3ebf64a5e2adce7f0f5f",
+    "darwin_arm64": "550e6388ea84082161eaf58db774e0f80bb179e78ef16ec8f020463c5e06bf02"
   },
-  "releaseNotes": "1.1.2: Copilot live model catalogue, Gemini-native /v1beta, Qoder queue handling, self-hosted media providers, console log persistence, and a fixed Embedding Models page."
+  "releaseNotes": "Hetzner free-tier provider, Devin CLI through its own ACP agent, per-key quota learning with daily free-tier reset handling, MCP endpoint at /mcp, sticky-combo context handoff, provider status filter persistence, and Cloudflare tunnel auto-resume."
 }
