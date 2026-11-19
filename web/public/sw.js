@@ -23,14 +23,19 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
-  // Never intercept non-GET requests or backend proxy / API / SSE routes
+  // Never intercept non-GET requests or backend proxy / API / SSE routes.
+  // /callback is excluded too: the OAuth popup navigation must reach the
+  // gateway directly — if the SW fetch ever fails there it would answer the
+  // popup with the static 503 text below and kill a login that the gateway
+  // would otherwise complete.
   if (
     event.request.method !== 'GET' ||
     url.pathname.startsWith('/api') ||
     url.pathname.startsWith('/v1') ||
     url.pathname.startsWith('/usage') ||
     url.pathname.startsWith('/translator') ||
-    url.pathname.startsWith('/debug')
+    url.pathname.startsWith('/debug') ||
+    url.pathname.startsWith('/callback')
   ) {
     return
   }

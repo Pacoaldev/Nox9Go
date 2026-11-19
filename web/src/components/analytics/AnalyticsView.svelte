@@ -27,6 +27,9 @@
   import ProviderTopologyCard from './ProviderTopologyCard.svelte'
   import { usageBlocks, isPanelVisible } from '../../lib/usagePanel.svelte'
   import Card from '../../lib/ui/Card.svelte'
+  import Menu from '../../lib/ui/Menu.svelte'
+  import MenuItem from '../../lib/ui/MenuItem.svelte'
+  import { notifications } from '../../lib/notifications'
   import { emailPrivacy, formatEmailLabel } from '../../lib/privacy'
   interface Props {
     connections?: ProviderConnection[]
@@ -89,6 +92,40 @@
   let pulseProvider = $state<string>('')
   let lastProvider = $state<string>('')
   let errorProvider = $state<string>('')
+
+  function downloadExport(content: string, type: string, filename: string) {
+    const url = URL.createObjectURL(new Blob([content], { type }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportJSON() {
+    downloadExport(JSON.stringify(stats, null, 2), 'application/json', `usage-overview-${period}.json`)
+    notifications.success('Exported JSON successfully')
+  }
+
+  function exportCSV() {
+    const lines = ['Category,Name,TotalRequests,PromptTokens,CompletionTokens,CachedTokens,Cost']
+    const categories = [
+      ['Provider', stats.byProvider],
+      ['Model', stats.byModel],
+      ['Account', stats.byAccount],
+      ['API Key', stats.byApiKey],
+      ['Endpoint', stats.byEndpoint],
+    ] as const
+    for (const [category, items] of categories) {
+      for (const [name, item] of Object.entries(items ?? {})) {
+        const cells = [category, name, item.requests ?? 0, item.promptTokens ?? 0,
+          item.completionTokens ?? 0, item.cachedTokens ?? 0, item.cost ?? 0]
+        lines.push(cells.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      }
+    }
+    downloadExport(lines.join('\n'), 'text/csv', `usage-overview-${period}.csv`)
+    notifications.success('Exported CSV successfully')
+  }
 
   // A failed stats read leaves the previous period's numbers on screen, and
   // those read as live. Since #148 the server answers 500 instead of a zeroed
@@ -458,9 +495,16 @@
        so no number here changes meaning silently. -->
   {#if section === 'overview' || section === 'details'}
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      {@render sectionMenu()}
-
-      <PeriodSelect value={period} busy={isFetching} onChange={(next) => (period = next)} />
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        {@render sectionMenu()}
+        <PeriodSelect value={period} busy={isFetching} onChange={(next) => (period = next)} />
+      </div>
+      {#if section === 'overview'}
+        <Menu label="Usage overview actions" minWidth="14rem">
+          <MenuItem label="Export CSV" icon="download" onSelect={exportCSV} />
+          <MenuItem label="Export JSON" icon="data_object" onSelect={exportJSON} />
+        </Menu>
+      {/if}
     </div>
   {/if}
 
