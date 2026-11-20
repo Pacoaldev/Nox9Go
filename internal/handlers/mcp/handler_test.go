@@ -11,9 +11,9 @@ import (
 	"nox9go/proxy/internal/db"
 )
 
-// newTestHandler builds an MCP handler over a temporary SQLite file with no
+// newTestRepo opens a temporary SQLite file with the core schema and no
 // connections, which is the honest empty-gateway baseline.
-func newTestHandler(t *testing.T) (*Handler, *db.Repo) {
+func newTestRepo(t *testing.T) *db.Repo {
 	t.Helper()
 	tmp, err := os.CreateTemp("", "mcp_handlers_*.sqlite")
 	if err != nil {
@@ -37,7 +37,15 @@ func newTestHandler(t *testing.T) (*Handler, *db.Repo) {
 		os.Remove(tmp.Name())
 		t.Fatalf("ensure schema: %v", err)
 	}
-	return NewHandler(repo, nil), repo
+	return repo
+}
+
+// newTestHandler builds an MCP handler over that baseline. Both optional
+// dependencies are absent, which is how a build without them is wired.
+func newTestHandler(t *testing.T) (*Handler, *db.Repo) {
+	t.Helper()
+	repo := newTestRepo(t)
+	return NewHandler(repo, nil, nil), repo
 }
 
 // post sends one JSON body to the handler and returns the recorded response.
@@ -135,7 +143,7 @@ func TestMCPToolsList(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{"list_models", "provider_health", "usage", "combo_strategy", "quota_state"} {
+	for _, want := range []string{"list_models", "provider_health", "usage", "combo_strategy", "quota_state", "generate_image"} {
 		if !names[want] {
 			t.Errorf("tools/list missing %q", want)
 		}
@@ -307,5 +315,45 @@ func TestMCPGetReturnsEmptyStream(t *testing.T) {
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
 		t.Errorf("Content-Type = %q, want text/event-stream", ct)
+	}
+}
+
+// TestMCPTextResultsAreUnchangedEveryTextToolKept is the S6 guard: the image
+// fields added to Content must not appear in a text result, so every tool that
+// existed before generate_image serialises byte for byte as it did.
+func TestMCPTextResultsAreUnchangedEveryTextToolKept(t *testing.T) {
+	h, _ := newTestHandler(t)
+
+	tests := []struct {
+		name string
+		body string
+		// wantText is a fragment the unchanged answer must still carry.
+		wantText string
+	}{
+		{name: "list_models on an empty gateway", body: `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"list_models"}}`, wantText: "No active provider connections are configured."},
+		{name: "provider_health on an empty gateway", body: `{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"provider_health"}}`, wantText: "[]"},
+		{name: "combo_strategy with no combos", body: `{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"combo_strategy"}}`, wantText: "No combos are configured"},
+		{name: "quota_state without a learner", body: `{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"quota_state","arguments":{"provider":"openai","model":"gpt-4.1"}}}`, wantText: "quota learning is not enabled"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := post(t, h, tt.body, "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+			}
+			raw := rec.Body.String()
+			if !strings.Contains(raw, tt.wantText) {
+				t.Errorf("body %q is missing %q", raw, tt.wantText)
+			}
+			if !strings.Contains(raw, `"content":[{"type":"text","text":`) {
+				t.Errorf("text result no longer serialises as a bare text block: %s", raw)
+			}
+			for _, absent := range []string{`"data"`, `"mimeType"`} {
+				if strings.Contains(raw, absent) {
+					t.Errorf("text result carries %s: %s", absent, raw)
+				}
+			}
+		})
 	}
 }

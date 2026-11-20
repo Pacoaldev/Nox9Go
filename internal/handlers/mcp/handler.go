@@ -12,20 +12,23 @@ import (
 	"nox9go/proxy/internal/quotalearn"
 )
 
-// Handler answers MCP JSON-RPC 2.0 requests. Every tool it exposes is
+// Handler answers MCP JSON-RPC 2.0 requests. Most tools it exposes are
 // read-only: an MCP client inspects the gateway, it never mutates routing.
-// Mutating routing from a language model would be a control-plane action and
-// belongs to the dashboard, behind the operator's own session.
+// generate_image is the exception — it is an ordinary gateway request on the
+// operator's own connected account, so it spends that provider's quota. It
+// changes no routing state, which is why the control plane still belongs to the
+// dashboard, behind the operator's own session.
 type Handler struct {
-	repo  *db.Repo
-	quota *quotalearn.Learner
+	repo     *db.Repo
+	quota    *quotalearn.Learner
+	imageGen ImageLane
 }
 
-// NewHandler builds an MCP handler over the gateway's repository. quota may be
-// nil: the quota tool then reports the feature as unavailable instead of
-// failing the whole endpoint.
-func NewHandler(repo *db.Repo, quota *quotalearn.Learner) *Handler {
-	return &Handler{repo: repo, quota: quota}
+// NewHandler builds an MCP handler over the gateway's repository. quota and
+// imageGen may each be nil: the tool that needs it then reports the feature as
+// unavailable instead of failing the whole endpoint.
+func NewHandler(repo *db.Repo, quota *quotalearn.Learner, imageGen ImageLane) *Handler {
+	return &Handler{repo: repo, quota: quota, imageGen: imageGen}
 }
 
 // ServeHTTP accepts one JSON-RPC message and returns one response. A request

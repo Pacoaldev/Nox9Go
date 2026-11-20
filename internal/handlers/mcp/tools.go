@@ -9,8 +9,10 @@ import (
 	"nox9go/proxy/internal/usagetracker"
 )
 
-// tools returns the MCP tool catalog. Every tool is read-only: an MCP client
-// inspects the gateway, it never changes routing from inside a model turn.
+// tools returns the MCP tool catalog. Every tool but generate_image is
+// read-only: an MCP client inspects the gateway, it never changes routing from
+// inside a model turn. generate_image asks a connected provider for an image,
+// which spends that provider's own quota; it still changes no routing state.
 func (h *Handler) tools() []Tool {
 	emptySchema := map[string]any{"type": "object", "properties": map[string]any{}}
 	return []Tool{
@@ -55,6 +57,7 @@ func (h *Handler) tools() []Tool {
 				},
 			},
 		},
+		imageTool(),
 	}
 }
 
@@ -72,6 +75,8 @@ func (h *Handler) callTool(name string, args map[string]any) CallToolResult {
 		return h.comboStrategy(args)
 	case "quota_state":
 		return h.quotaState(args)
+	case "generate_image":
+		return h.generateImage(args)
 	default:
 		return errorResult(fmt.Sprintf("unknown tool: %s", name))
 	}

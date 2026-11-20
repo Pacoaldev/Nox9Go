@@ -668,10 +668,14 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 	SetupConsoleLogRoutes(r, repo)
 
 	// MCP endpoint (Model Context Protocol): read-only access to the gateway
-	// for MCP clients like ChatGPT. Auth mirrors the dashboard: session cookie,
-	// API key, or local CLI token. A nil quota learner reports the feature
-	// unavailable instead of failing the whole endpoint.
-	mcpH := mcp.NewHandler(repo, engineChatH.Quota)
+	// for MCP clients like ChatGPT, plus generate_image, which asks a connected
+	// provider for an image and so spends that provider's own quota. Auth
+	// mirrors the dashboard: session cookie, API key, or local CLI token. A nil
+	// quota learner or image lane reports that one feature unavailable instead
+	// of failing the whole endpoint.
+	// The image lane is the gateway's own /v1/images/generations handler, called
+	// in process: the tool needs no engine API key and opens no socket.
+	mcpH := mcp.NewHandler(repo, engineChatH.Quota, media.NewMediaHandler(repo, ts, engineChatH))
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RequireDashboardAuth(repo))
 		r.HandleFunc("/mcp", mcpH.ServeHTTP)

@@ -1,7 +1,8 @@
 // Package mcp exposes a Model Context Protocol server over JSON-RPC 2.0,
 // following the FreeLLMAPI router design: an MCP client can discover the
-// gateway's read-only state (usable models, provider health, learned quota,
-// active combo strategy) through one endpoint.
+// gateway's state (usable models, provider health, learned quota, active combo
+// strategy) through one endpoint, and ask the gateway to generate an image
+// with the operator's own connected account.
 //
 // The transport here is deliberately the simplest one that every MCP client
 // understands: a single POST carrying one JSON-RPC message, answered by a
@@ -54,10 +55,14 @@ type Tool struct {
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
-// Content is one entry of a tool call result payload.
+// Content is one entry of a tool call result payload. Data and MimeType are
+// carried only by image blocks, so a text result serialises exactly as it did
+// before image generation existed.
 type Content struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Data     string `json:"data,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 // CallToolResult is the result shape MCP defines for tools/call.
@@ -69,6 +74,12 @@ type CallToolResult struct {
 // textResult is the convenience constructor for a single text block result.
 func textResult(s string) CallToolResult {
 	return CallToolResult{Content: []Content{{Type: "text", Text: s}}}
+}
+
+// imageResult is the convenience constructor for a single image block. MCP
+// carries the image itself as base64 in data, with the media type alongside.
+func imageResult(mimeType, data string) CallToolResult {
+	return CallToolResult{Content: []Content{{Type: "image", Data: data, MimeType: mimeType}}}
 }
 
 // errorResult builds a tool-level failure: MCP reports tool failures inside a
