@@ -381,10 +381,13 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "x-api-key",
 		AuthScheme: "raw",
 	},
+	// Hidden: inference.dahl.global no longer resolves (DNS NXDOMAIN). The entry
+	// stays so a stored connection keeps a name, but nothing offers it.
 	"dahl": {
 		BaseURL:    "https://inference.dahl.global/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
+		Hidden:     true,
 	},
 	"bai": {
 		BaseURL:    "https://api.b.ai/v1/chat/completions",
@@ -1271,10 +1274,12 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthScheme: "bearer",
 	},
 
+	// Hidden: the upstream answers 503 and the entry declares no models.
 	"nace": {
 		SystemoneURL: "https://console.nace.ai/v1/systemone",
 		AuthHeader:   "Authorization",
 		AuthScheme:   "bearer",
+		Hidden:       true,
 	},
 	// Hetzner Inference API (https://experiments.hetzner.com/inference):
 	// free during Hetzner's experimental phase, no billing yet, no SLA
@@ -1419,10 +1424,13 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},
+	// Hidden: no static models and no working catalogue — it stays reachable
+	// for a stored connection, but nothing offers it.
 	"gonkabroker": {
 		BaseURL:    "https://proxy.gonkabroker.com/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
+		Hidden:     true,
 	},
 	"mixlayer": {
 		BaseURL:    "https://mixlayer.ai/v1/chat/completions",
@@ -1439,10 +1447,13 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},
+	// Hidden: bare /v1/models answers 401 with no catalogue behind it, so the
+	// provider can be dialed but not offered.
 	"onomeo": {
 		BaseURL:    "https://onomeo.com/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
+		Hidden:     true,
 	},
 	// Replicate is not OpenAI-shaped: it creates a prediction and polls it.
 	// BaseURL is the API root rather than a completions path, because there is
@@ -1500,11 +1511,15 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},
+	// Hidden: navyai and navy are the same upstream and `navy` is navyai's
+	// alias, so only the alias is offered. Keeping the canonical id hidden
+	// avoids listing one provider twice.
 	"navyai": {
 		BaseURL:       "https://api.navy/v1/chat/completions",
 		AuthHeader:    "Authorization",
 		AuthScheme:    "bearer",
 		StaticHeaders: map[string]string{"User-Agent": "NOX9GO/1.0"},
+		Hidden:        true,
 	},
 	"navy": {
 		BaseURL:       "https://api.navy/v1/chat/completions",
