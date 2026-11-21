@@ -102,6 +102,7 @@ stitch-screenshots/
 /docs/report.md
 /docs/tabla_saldos.md
 /scripts/audit-ci.ps1
+/scripts/sync-providers.mjs
 *.code-workspace
 # Per-machine tooling: a prompt-filter list that belongs to whoever installed it.
 /.rtk/
