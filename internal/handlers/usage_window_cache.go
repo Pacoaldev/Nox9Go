@@ -361,7 +361,7 @@ type rawWindowEntry struct {
 	fetchedAt time.Time
 }
 
-// rawWindowCache caches one aggregate per window shape.
+// rawWindowCache caches one aggregate per window shape and backing database.
 //
 // Entries are mutex-guarded because the dashboard's five-second poll and a
 // manual refresh overlap in practice, and two goroutines folding the same delta
@@ -386,6 +386,12 @@ func (c *rawWindowCache) getRawWindow(repo *db.Repo, window usagePeriod) (*rawAg
 	if key == "" {
 		return nil, fmt.Errorf("raw window cache: window %q is not a raw-history window", window.shape.key())
 	}
+	// The window shape alone does not identify the data: the cache is package
+	// level, so two repos (production's restart, tests' per-test temp files)
+	// would otherwise read each other's aggregates verbatim through the
+	// watermark/cutoff fast path. The repo's *sql.DB pointer is a stable,
+	// comparable identity for the lifetime of the connection.
+	key = fmt.Sprintf("%p:%s", repo.RawDB(), key)
 	now := time.Now()
 	cutoff := window.since.UTC().Format(time.RFC3339)
 
