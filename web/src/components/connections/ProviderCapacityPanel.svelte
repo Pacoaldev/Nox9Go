@@ -46,6 +46,7 @@
       tpm: count(limits.tpm),
       concurrency: count(limits.concurrency),
       dailyRequests: count(limits.dailyRequests),
+      dailyTokens: count(limits.dailyTokens),
       tokenQuota: count(limits.tokenQuota),
       queueTimeoutMs: count(limits.queueTimeoutMs),
       contractExpiresAt: expires,
@@ -106,6 +107,7 @@
     if (s.tpm > 0) draft.tpm = String(s.tpm)
     if (s.concurrency > 0) draft.concurrency = String(s.concurrency)
     if (s.dailyRequests > 0) draft.dailyRequests = String(s.dailyRequests)
+    if (s.dailyTokens > 0) draft.dailyTokens = String(s.dailyTokens)
     if (s.tokenQuota > 0) draft.tokenQuota = String(s.tokenQuota)
   }
 
@@ -124,6 +126,9 @@
         break
       case 'rpd':
         draft.dailyRequests = String(v)
+        break
+      case 'tpd':
+        draft.dailyTokens = String(v)
         break
     }
   }
@@ -197,6 +202,7 @@
       (capacity?.suggestions.tpm ?? 0) > 0 ||
       (capacity?.suggestions.concurrency ?? 0) > 0 ||
       (capacity?.suggestions.dailyRequests ?? 0) > 0 ||
+      (capacity?.suggestions.dailyTokens ?? 0) > 0 ||
       (capacity?.suggestions.tokenQuota ?? 0) > 0,
   )
 
@@ -237,6 +243,15 @@
             type="number"
             min="0"
             bind:value={draft.dailyRequests}
+            placeholder="0"
+            hint="A fixed daily budget. It resets at 00:00 UTC, not one minute after the first request."
+          />
+          <Input
+            id="provider-capacity-daily-tokens"
+            label="Tokens / day"
+            type="number"
+            min="0"
+            bind:value={draft.dailyTokens}
             placeholder="0"
             hint="A fixed daily budget. It resets at 00:00 UTC, not one minute after the first request."
           />

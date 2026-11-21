@@ -43,12 +43,15 @@ type ProviderCapacityResponse struct {
 
 // ProviderCapacityLimits is the editable policy shape.
 type ProviderCapacityLimits struct {
-	RPM               int `json:"rpm"`
-	TPM               int `json:"tpm"`
-	Concurrency       int `json:"concurrency"`
-	DailyRequests     int `json:"dailyRequests"`
-	QueueTimeoutMs    int `json:"queueTimeoutMs"`
-	TokenQuota        int `json:"tokenQuota"`
+	RPM           int `json:"rpm"`
+	TPM           int `json:"tpm"`
+	Concurrency   int `json:"concurrency"`
+	DailyRequests int `json:"dailyRequests"`
+	// DailyTokens caps prompt+completion tokens per UTC day, the token counterpart
+	// of DailyRequests. 0 = unlimited.
+	DailyTokens       int    `json:"dailyTokens"`
+	QueueTimeoutMs    int    `json:"queueTimeoutMs"`
+	TokenQuota        int    `json:"tokenQuota"`
 	ContractExpiresAt string `json:"contractExpiresAt,omitempty"`
 	UpdatedAt         string `json:"updatedAt,omitempty"`
 }
@@ -59,6 +62,7 @@ type ProviderCapacitySuggestions struct {
 	TPM           int `json:"tpm"`
 	Concurrency   int `json:"concurrency"`
 	DailyRequests int `json:"dailyRequests"`
+	DailyTokens   int `json:"dailyTokens"`
 	TokenQuota    int `json:"tokenQuota"`
 }
 
@@ -69,6 +73,7 @@ func capacityLimitsFrom(c db.ProviderCapacity) ProviderCapacityLimits {
 		TPM:               c.TPM,
 		Concurrency:       c.Concurrency,
 		DailyRequests:     c.DailyRequests,
+		DailyTokens:       c.DailyTokens,
 		QueueTimeoutMs:    c.QueueTimeoutMs,
 		TokenQuota:        c.TokenQuota,
 		ContractExpiresAt: c.ContractExpiresAt,
@@ -98,6 +103,8 @@ func suggestCapacity(observations []db.ProviderObservation) ProviderCapacitySugg
 			s.Concurrency = max(s.Concurrency, o.LimitValue)
 		case "rpd":
 			s.DailyRequests = max(s.DailyRequests, o.LimitValue)
+		case "tpd":
+			s.DailyTokens = max(s.DailyTokens, o.LimitValue)
 		}
 	}
 	return s
@@ -188,6 +195,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 		TPM               *int    `json:"tpm"`
 		Concurrency       *int    `json:"concurrency"`
 		DailyRequests     *int    `json:"dailyRequests"`
+		DailyTokens       *int    `json:"dailyTokens"`
 		TokenQuota        *int    `json:"tokenQuota"`
 		QueueTimeoutMs    *int    `json:"queueTimeoutMs"`
 		ContractExpiresAt *string `json:"contractExpiresAt"`
@@ -214,6 +222,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 		{"tpm", patch.TPM, &merged.TPM},
 		{"concurrency", patch.Concurrency, &merged.Concurrency},
 		{"dailyRequests", patch.DailyRequests, &merged.DailyRequests},
+		{"dailyTokens", patch.DailyTokens, &merged.DailyTokens},
 		{"tokenQuota", patch.TokenQuota, &merged.TokenQuota},
 		{"queueTimeoutMs", patch.QueueTimeoutMs, &merged.QueueTimeoutMs},
 	}

@@ -1460,6 +1460,7 @@
   "文 Lite": "文 Lite",
   "文 Ultra": "文 Ultra",
   "Requests / day": "Solicitudes / día",
+  "Tokens / day": "Tokens / día",
   "A fixed daily budget. It resets at 00:00 UTC, not one minute after the first request.": "Un presupuesto diario fijo. Se reinicia a las 00:00 UTC, no un minuto después de la primera solicitud.",
   "Save limits": "Guardar límites",
   "Apply observed values": "Aplicar valores observados",

@@ -91,8 +91,12 @@ type tokenBucket struct {
 // a counter that survives midnight is recognised as belonging to yesterday and
 // restarts.
 type dailyWindow struct {
-	day  string
-	used int
+	day    string
+	used   int
+	// tokens is the prompt+completion spend the same UTC day has accumulated
+	// against DailyTokens. It rides the same counter as used so both axes share
+	// one reset boundary and one eviction entry.
+	tokens int
 }
 
 // NewRateLimiter creates a new rate limiter with the given window size.
@@ -834,6 +838,11 @@ type ProviderSlot struct {
 	tpm      int
 	reserved int
 	held     bool
+	// dailyTokens is the provider's daily token budget, and dailyTokensCharged is
+	// the prompt estimate already added to today's spend. Both are zero when the
+	// provider declares no daily token budget.
+	dailyTokens        int
+	dailyTokensCharged int
 }
 
 // Settle reconciles the TPM charge with what the turn actually cost. Only an
@@ -847,6 +856,14 @@ func (s *ProviderSlot) Settle(actual int) {
 		s.rl.SettleTokenUsage(s.key, s.tpm, s.reserved, actual)
 	}
 	s.reserved = 0
+	// The daily token budget is settled against the turn's real total, not the
+	// prompt estimate charged at admission: a streaming response only knows its
+	// completion tokens once it has finished. Only the difference is charged, so
+	// the estimate is corrected rather than counted twice.
+	if s.dailyTokens > 0 {
+		s.rl.chargeDailyTokens(s.key, actual-s.dailyTokensCharged, time.Now())
+		s.dailyTokensCharged = 0
+	}
 }
 
 // Release gives back whatever the attempt still holds: the concurrency slot, and
@@ -866,6 +883,12 @@ func (s *ProviderSlot) Release() {
 		s.rl.RefundTPM(s.key, s.tpm, s.reserved)
 		s.reserved = 0
 	}
+	// An attempt that never produced a usage reading never spent the prompt it
+	// was charged for either, so the whole daily charge goes back.
+	if s.dailyTokens > 0 && s.dailyTokensCharged > 0 {
+		s.rl.chargeDailyTokens(s.key, -s.dailyTokensCharged, time.Now())
+		s.dailyTokensCharged = 0
+	}
 }
 
 // AcquireProvider admits one attempt against a provider's limits.
@@ -881,11 +904,11 @@ func (rl *RateLimiter) AcquireProvider(ctx context.Context, providerID string, l
 	if rl == nil || providerID == "" {
 		return nil, nil
 	}
-	if limits.RPM <= 0 && limits.TPM <= 0 && limits.Concurrency <= 0 && limits.DailyRequests <= 0 {
+	if limits.RPM <= 0 && limits.TPM <= 0 && limits.Concurrency <= 0 && limits.DailyRequests <= 0 && limits.DailyTokens <= 0 {
 		return nil, nil
 	}
 	key := ProviderScopeKey(providerID)
-	slot := &ProviderSlot{rl: rl, key: key, tpm: limits.TPM}
+	slot := &ProviderSlot{rl: rl, key: key, tpm: limits.TPM, dailyTokens: limits.DailyTokens}
 
 	// The daily budget is charged first and is NOT queueable: a daily allowance
 	// does not refill while a request waits, so parking a caller for it would
@@ -904,6 +927,27 @@ func (rl *RateLimiter) AcquireProvider(ctx context.Context, providerID string, l
 		}
 		dailyCharged = true
 	}
+
+	// The daily token budget is charged second and is likewise not queueable: a
+	// day that has spent its tokens does not refill while a caller waits. The
+	// charge is the prompt estimate; ProviderSlot.Settle adds the completion
+	// tokens once the turn ends.
+	dailyTokensCharged := 0
+	if limits.DailyTokens > 0 {
+		ok, retryAfter := rl.reserveDailyTokens(key, limits.DailyTokens, promptTokens, time.Now())
+		if !ok {
+			if dailyCharged {
+				rl.refundDaily(key)
+			}
+			return nil, &ProviderRefusal{
+				Axis:       axisTokensPerDay,
+				Limit:      limits.DailyTokens,
+				RetryAfter: retryAfter,
+			}
+		}
+		dailyTokensCharged = promptTokens
+	}
+	slot.dailyTokensCharged = dailyTokensCharged
 
 	// TPM first, and not queueable: a token bucket refills continuously, so a
 	// request parked for one could be admitted and immediately re-refused.
@@ -948,6 +992,9 @@ func (rl *RateLimiter) AcquireProvider(ctx context.Context, providerID string, l
 // axisRequestsPerDay names the daily request budget in a refusal.
 const axisRequestsPerDay = "rpd"
 
+// axisTokensPerDay names the daily token budget in a refusal.
+const axisTokensPerDay = "tpd"
+
 // reserveDaily charges one request against a provider's daily budget.
 //
 // It returns false when the budget for the current UTC day is already spent, with
@@ -976,6 +1023,88 @@ func (rl *RateLimiter) reserveDaily(key string, limit int, now time.Time) (bool,
 	}
 	counter.used++
 	return true, 0
+}
+
+// reserveDailyTokens charges a prompt estimate against a provider's daily token
+// budget.
+//
+// It returns false when today's spend already sits at or above the budget, with
+// the time left until the next UTC midnight as the retry delay. Unlike
+// reserveDaily it does not decide the turn's cost: the prompt estimate is charged
+// up front so a request cannot slip past a budget that has almost nothing left,
+// and ProviderSlot.Settle adds the completion tokens the turn actually produced.
+func (rl *RateLimiter) reserveDailyTokens(key string, limit, promptTokens int, now time.Time) (bool, time.Duration) {
+	if rl == nil || limit <= 0 {
+		return true, 0
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	counter := rl.dailyWindowLocked(key, now)
+	if counter.tokens >= limit {
+		return false, timeUntilUTCMidnight(now)
+	}
+	if promptTokens > 0 {
+		counter.tokens += promptTokens
+	}
+	return true, 0
+}
+
+// chargeDailyTokens adds tokens a turn actually spent to the same UTC-day counter
+// the reservation charged.
+//
+// It is the settle half of the daily token budget: a streaming response has no
+// completion count at admission time, so the real total arrives here once the
+// turn ends. delta may be negative, which is how an over-estimate is corrected
+// without ever refunding real spend beyond it.
+func (rl *RateLimiter) chargeDailyTokens(key string, delta int, now time.Time) {
+	if rl == nil || delta == 0 {
+		return
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	counter := rl.dailyWindowLocked(key, now)
+	counter.tokens += delta
+	if counter.tokens < 0 {
+		counter.tokens = 0
+	}
+}
+
+// SnapshotDailyTokens reports how many tokens the scope has spent today against
+// its daily budget. It reads 0 for a scope that has never spent one.
+func (rl *RateLimiter) SnapshotDailyTokens(keyID string) int {
+	return rl.SnapshotDailyTokensAt(keyID, time.Now())
+}
+
+// SnapshotDailyTokensAt is SnapshotDailyTokens evaluated at a specific moment.
+func (rl *RateLimiter) SnapshotDailyTokensAt(keyID string, now time.Time) int {
+	if rl == nil {
+		return 0
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	counter, ok := rl.daily[keyID]
+	if !ok || counter.day != now.UTC().Format("2006-01-02") {
+		return 0
+	}
+	return counter.tokens
+}
+
+// dailyWindowLocked returns the scope's counter for now, creating it or resetting
+// it across a UTC day boundary. The caller must hold rl.mu.
+func (rl *RateLimiter) dailyWindowLocked(key string, now time.Time) *dailyWindow {
+	counter, exists := rl.daily[key]
+	if !exists {
+		counter = &dailyWindow{}
+		rl.daily[key] = counter
+	}
+	today := now.UTC().Format("2006-01-02")
+	if counter.day != today {
+		// A counter from a previous day is yesterday's budget: it resets.
+		counter.day = today
+		counter.used = 0
+		counter.tokens = 0
+	}
+	return counter
 }
 
 // refundDaily hands a daily reservation back.
@@ -1206,6 +1335,15 @@ type Limits struct {
 	// It is provider-scope only: the per-key limits are a caller's own allowance,
 	// and a caller's daily allowance is not a thing the gateway meters.
 	DailyRequests int
+	// DailyTokens caps the prompt+completion tokens one scope may spend per UTC
+	// day. It is the token counterpart of DailyRequests: the same fixed-window
+	// budget at the same midnight-UTC boundary, not a sliding one. 0 = unlimited.
+	//
+	// Unlike DailyRequests it cannot be charged atomically up front, because a
+	// turn's real cost is only known once the response ends. The reservation
+	// charges the prompt estimate and ProviderSlot.Settle adds the completion
+	// tokens actually produced.
+	DailyTokens int
 	// TokenQuota caps the key's cumulative prompt+completion tokens. It is
 	// enforced before dispatch and is not a per-window rate: it only ever
 	// decreases the key's remaining budget.

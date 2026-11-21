@@ -51,6 +51,10 @@ type ProviderLimits struct {
 	// fixed-window budget, not a sliding one: it refills at midnight UTC, the
 	// boundary a provider that publishes a daily allowance names. 0 = unlimited.
 	DailyRequests int
+	// DailyTokens caps the prompt+completion tokens the node may spend per UTC day.
+	// It is the token counterpart of DailyRequests: the same fixed-window budget at
+	// the same midnight-UTC boundary, not a sliding one. 0 = unlimited.
+	DailyTokens int
 	// QueueTimeoutMs is how long a request may wait for an RPM or concurrency
 	// slot before it gives up and is refused. 0 = do not wait at all.
 	QueueTimeoutMs int
@@ -65,12 +69,12 @@ type ProviderLimits struct {
 }
 
 // providerLimitColumns is the shared column list for every provider limit read.
-const providerLimitColumns = `rpmLimit, tpmLimit, concurrencyLimit, dailyRequests, tokenQuota, queueTimeoutMs, quotaResetId, COALESCE(contractExpiresAt, '')`
+const providerLimitColumns = `rpmLimit, tpmLimit, concurrencyLimit, dailyRequests, dailyTokens, tokenQuota, queueTimeoutMs, quotaResetId, COALESCE(contractExpiresAt, '')`
 
 // scanProviderLimits fills limits from a row shaped like providerLimitColumns.
 func scanProviderLimits(scan func(dest ...any) error, limits *ProviderLimits) error {
 	return scan(
-		&limits.RPM, &limits.TPM, &limits.Concurrency, &limits.DailyRequests, &limits.TokenQuota,
+		&limits.RPM, &limits.TPM, &limits.Concurrency, &limits.DailyRequests, &limits.DailyTokens, &limits.TokenQuota,
 		&limits.QueueTimeoutMs, &limits.QuotaResetID, &limits.ContractExpiresAt,
 	)
 }
@@ -170,7 +174,7 @@ func (r *Repo) SetProviderLimits(ctx context.Context, nodeID string, limits Prov
 		return fmt.Errorf("set provider limits: empty node id")
 	}
 	if limits.RPM < 0 || limits.TPM < 0 || limits.Concurrency < 0 || limits.DailyRequests < 0 ||
-		limits.TokenQuota < 0 || limits.QueueTimeoutMs < 0 {
+		limits.DailyTokens < 0 || limits.TokenQuota < 0 || limits.QueueTimeoutMs < 0 {
 		return fmt.Errorf("set provider limits %s: limits are counts and cannot be negative", nodeID)
 	}
 	expiresAt := strings.TrimSpace(limits.ContractExpiresAt)
@@ -183,10 +187,10 @@ func (r *Repo) SetProviderLimits(ctx context.Context, nodeID string, limits Prov
 	}
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE providerNodes
-		   SET rpmLimit = ?, tpmLimit = ?, concurrencyLimit = ?, dailyRequests = ?,
+		   SET rpmLimit = ?, tpmLimit = ?, concurrencyLimit = ?, dailyRequests = ?, dailyTokens = ?,
 		       tokenQuota = ?, queueTimeoutMs = ?, contractExpiresAt = ?
 		 WHERE id = ?`,
-		limits.RPM, limits.TPM, limits.Concurrency, limits.DailyRequests, limits.TokenQuota,
+		limits.RPM, limits.TPM, limits.Concurrency, limits.DailyRequests, limits.DailyTokens, limits.TokenQuota,
 		limits.QueueTimeoutMs, expiresAt, nodeID,
 	)
 	if err != nil {

@@ -21,6 +21,7 @@ export interface NodeLimitsDraft {
   tpm: string | number | null
   concurrency: string | number | null
   dailyRequests: string | number | null
+  dailyTokens: string | number | null
   tokenQuota: string | number | null
   queueTimeoutMs: string | number | null
   contractExpiresAt: string
@@ -32,6 +33,7 @@ export const EMPTY_NODE_LIMITS: NodeLimitsDraft = {
   tpm: '',
   concurrency: '',
   dailyRequests: '',
+  dailyTokens: '',
   tokenQuota: '',
   queueTimeoutMs: '',
   contractExpiresAt: '',
@@ -51,6 +53,7 @@ export function nodeLimitsDraftOf(limits?: ProviderNodeLimits | null): NodeLimit
     tpm: count(limits.tpm),
     concurrency: count(limits.concurrency),
     dailyRequests: count(limits.dailyRequests),
+    dailyTokens: count(limits.dailyTokens),
     tokenQuota: count(limits.tokenQuota),
     queueTimeoutMs: count(limits.queueTimeoutMs),
     contractExpiresAt: expires,
@@ -74,6 +77,7 @@ export function nodeLimitsPatchOf(draft: NodeLimitsDraft): ProviderNodeLimitsPat
     tpm: countOf(draft.tpm),
     concurrency: countOf(draft.concurrency),
     dailyRequests: countOf(draft.dailyRequests),
+    dailyTokens: countOf(draft.dailyTokens),
     tokenQuota: countOf(draft.tokenQuota),
     queueTimeoutMs: countOf(draft.queueTimeoutMs),
     contractExpiresAt: draft.contractExpiresAt ? `${draft.contractExpiresAt}T23:59:59Z` : '',
@@ -91,6 +95,7 @@ export function hasAnyNodeLimit(draft: NodeLimitsDraft): boolean {
     countOf(draft.tpm) > 0 ||
     countOf(draft.concurrency) > 0 ||
     countOf(draft.dailyRequests) > 0 ||
+    countOf(draft.dailyTokens) > 0 ||
     countOf(draft.tokenQuota) > 0 ||
     countOf(draft.queueTimeoutMs) > 0 ||
     draft.contractExpiresAt !== ''
@@ -108,6 +113,7 @@ export function hasAnyNodeLimitPatch(patch: ProviderNodeLimitsPatch): boolean {
     (patch.tpm ?? 0) > 0 ||
     (patch.concurrency ?? 0) > 0 ||
     (patch.dailyRequests ?? 0) > 0 ||
+    (patch.dailyTokens ?? 0) > 0 ||
     (patch.tokenQuota ?? 0) > 0 ||
     (patch.queueTimeoutMs ?? 0) > 0 ||
     (patch.contractExpiresAt ?? '') !== ''
@@ -122,12 +128,14 @@ export function nodeLimitsSummary(draft: NodeLimitsDraft): string {
   const tpm = countOf(draft.tpm)
   const concurrency = countOf(draft.concurrency)
   const dailyRequests = countOf(draft.dailyRequests)
+  const dailyTokens = countOf(draft.dailyTokens)
   const queueTimeoutMs = countOf(draft.queueTimeoutMs)
   const tokenQuota = countOf(draft.tokenQuota)
   if (rpm > 0) parts.push(`${rpm} rpm`)
   if (tpm > 0) parts.push(`${compactCount(tpm)} tpm`)
   if (concurrency > 0) parts.push(`${concurrency} conc`)
   if (dailyRequests > 0) parts.push(`${dailyRequests} rpd`)
+  if (dailyTokens > 0) parts.push(`${compactCount(dailyTokens)} tpd`)
   if (queueTimeoutMs > 0) parts.push(`${queueTimeoutMs} ms queue`)
   if (tokenQuota > 0) parts.push(`${compactCount(tokenQuota)} tok`)
   if (draft.contractExpiresAt) parts.push(`ends ${shortDate(draft.contractExpiresAt)}`)

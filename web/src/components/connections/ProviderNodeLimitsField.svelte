@@ -109,6 +109,15 @@
           hint="A fixed daily budget. It resets at 00:00 UTC, not one minute after the first request."
         />
         <Input
+          id="node-limits-daily-tokens"
+          label="Tokens / day"
+          type="number"
+          min="0"
+          bind:value={draft.dailyTokens}
+          placeholder="0"
+          hint="A fixed daily budget. It resets at 00:00 UTC, not one minute after the first request."
+        />
+        <Input
           id="node-limits-queue"
           label="Queue wait (ms)"
           type="number"

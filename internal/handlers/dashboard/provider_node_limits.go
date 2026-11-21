@@ -33,10 +33,12 @@ import (
 // ProviderNodeLimitsResponse is a node's policy plus the usage it is measured
 // against, so the dashboard can render both from one read.
 type ProviderNodeLimitsResponse struct {
-	RPM            int `json:"rpm"`
-	TPM            int `json:"tpm"`
-	Concurrency    int `json:"concurrency"`
-	DailyRequests  int `json:"dailyRequests"`
+	RPM           int `json:"rpm"`
+	TPM           int `json:"tpm"`
+	Concurrency   int `json:"concurrency"`
+	DailyRequests int `json:"dailyRequests"`
+	// DailyTokens caps prompt+completion tokens per UTC day. 0 = unlimited.
+	DailyTokens    int `json:"dailyTokens"`
 	TokenQuota     int `json:"tokenQuota"`
 	QueueTimeoutMs int `json:"queueTimeoutMs"`
 	// QuotaResetID is the usageHistory row the token quota is measured from, and
@@ -72,6 +74,7 @@ func (h *DashboardHandler) providerNodeLimitsFrom(nodeID string, limits db.Provi
 		TPM:               limits.TPM,
 		Concurrency:       limits.Concurrency,
 		DailyRequests:     limits.DailyRequests,
+		DailyTokens:       limits.DailyTokens,
 		TokenQuota:        limits.TokenQuota,
 		QueueTimeoutMs:    limits.QueueTimeoutMs,
 		QuotaResetID:      limits.QuotaResetID,
@@ -119,6 +122,7 @@ func (h *DashboardHandler) HandleUpdateProviderNodeLimits(w http.ResponseWriter,
 		TPM               *int    `json:"tpm"`
 		Concurrency       *int    `json:"concurrency"`
 		DailyRequests     *int    `json:"dailyRequests"`
+		DailyTokens       *int    `json:"dailyTokens"`
 		TokenQuota        *int    `json:"tokenQuota"`
 		QueueTimeoutMs    *int    `json:"queueTimeoutMs"`
 		ContractExpiresAt *string `json:"contractExpiresAt"`
@@ -157,6 +161,7 @@ func (h *DashboardHandler) HandleUpdateProviderNodeLimits(w http.ResponseWriter,
 		{"tpm", patch.TPM, &merged.TPM},
 		{"concurrency", patch.Concurrency, &merged.Concurrency},
 		{"dailyRequests", patch.DailyRequests, &merged.DailyRequests},
+		{"dailyTokens", patch.DailyTokens, &merged.DailyTokens},
 		{"tokenQuota", patch.TokenQuota, &merged.TokenQuota},
 		{"queueTimeoutMs", patch.QueueTimeoutMs, &merged.QueueTimeoutMs},
 	}

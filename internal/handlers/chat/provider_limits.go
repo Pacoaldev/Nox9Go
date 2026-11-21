@@ -245,6 +245,7 @@ func middlewareLimits(limits db.ProviderLimits) middleware.Limits {
 		TPM:           limits.TPM,
 		Concurrency:   limits.Concurrency,
 		DailyRequests: limits.DailyRequests,
+		DailyTokens:   limits.DailyTokens,
 		QueueTimeout:  time.Duration(limits.QueueTimeoutMs) * time.Millisecond,
 	}
 }
@@ -284,7 +285,7 @@ func (h *ChatHandler) acquireProviderAttempt(ctx context.Context, provider, mode
 		return nil, nil
 	}
 	effective := middlewareLimits(limits)
-	if effective.RPM <= 0 && effective.TPM <= 0 && effective.Concurrency <= 0 && effective.DailyRequests <= 0 {
+	if effective.RPM <= 0 && effective.TPM <= 0 && effective.Concurrency <= 0 && effective.DailyRequests <= 0 && effective.DailyTokens <= 0 {
 		return nil, nil
 	}
 
@@ -293,7 +294,7 @@ func (h *ChatHandler) acquireProviderAttempt(ctx context.Context, provider, mode
 	// estimates from the client's body because that is all it has, and the two
 	// numbers are allowed to differ.
 	promptTokens := 0
-	if effective.TPM > 0 {
+	if effective.TPM > 0 || effective.DailyTokens > 0 {
 		promptTokens = middleware.EstimatePromptTokens(body)
 	}
 

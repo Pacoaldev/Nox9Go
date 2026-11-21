@@ -367,6 +367,8 @@ var goOnlyColumns = [][3]string{
 	// RPM window: a provider that publishes "60 requests per day, resets at
 	// 00:00 UTC" refills at midnight, not one minute after the first request.
 	{"providerNodes", "dailyRequests", "INTEGER DEFAULT 0"},
+	// A fixed UTC-day token budget, the token counterpart of dailyRequests.
+	{"providerNodes", "dailyTokens", "INTEGER DEFAULT 0"},
 	{"providerNodes", "tokenQuota", "INTEGER DEFAULT 0"},
 	{"providerNodes", "queueTimeoutMs", "INTEGER DEFAULT 0"},
 	{"providerNodes", "quotaResetId", "INTEGER DEFAULT 0"},
@@ -510,6 +512,10 @@ var providerCapacityTables = []tableDef{
 			{"tpm", "INTEGER DEFAULT 0"},
 			{"concurrency", "INTEGER DEFAULT 0"},
 			{"dailyRequests", "INTEGER DEFAULT 0"},
+			// A fixed UTC-day token budget, the token counterpart of dailyRequests.
+			// A free provider that publishes "150K tokens/day, resets at 00:00 UTC"
+			// refills at midnight, not one minute after its first request.
+			{"dailyTokens", "INTEGER DEFAULT 0"},
 			{"queueTimeoutMs", "INTEGER DEFAULT 0"},
 			{"tokenQuota", "INTEGER DEFAULT 0"},
 			{"contractExpiresAt", "TEXT DEFAULT ''"},
