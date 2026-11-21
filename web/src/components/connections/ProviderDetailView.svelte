@@ -5045,7 +5045,7 @@
   isCompatible={!!selectedNode}
   isAnthropic={selectedNode?.apiType === 'responses'}
   existingNames={connections.map((c) => c.name).filter((n): n is string => !!n)}
-  existingPriorities={connections.map((c) => c.priority).filter((p): p is number => p != null)}
+  existingPriorities={providerConnections.map((c) => c.priority).filter((p): p is number => p != null)}
   {proxyPools}
   error={addConnectionError}
   onClose={() => {
