@@ -585,7 +585,7 @@ var KnownProviders = map[string]ProviderConfig{
 		AuthScheme: "bearer",
 	},
 	"mimo-free": {
-		BaseURL:       "https://api.xiaomimimimo.com/api/free-ai/openai/chat",
+		BaseURL:       "https://api.xiaomimimo.com/api/free-ai/openai/chat",
 		AuthHeader:    "Authorization",
 		AuthScheme:    "bearer",
 		DefaultAPIKey: "mimo-dynamic",
