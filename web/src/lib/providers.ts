@@ -158,7 +158,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "color": "#22C55E",
     "icon": "bolt",
     "website": "https://xkiro.com",
-    "notice": {"text":"Unified AI gateway (api.xkiro.com) with 100+ LLM models, image generation, TTS, and 1M free tokens/day (resets every 24h). Accepts a bearer token (sk-xt-...) or x-api-key header.", "apiKeyUrl":"https://xkiro.com"},
+    "notice": {"text":"Unified AI gateway (api.xkiro.com) with 100+ LLM models, image generation, TTS, and 500K free-model tokens/day (1M after Telegram verification; resets every 24h). Accepts a bearer token (sk-xt-...) or x-api-key header.", "apiKeyUrl":"https://xkiro.com"},
     "modelsFetcher": {"url": "https://api.xkiro.com/v1/models", "type": "openai"},
     "authType": "apikey",
     "noAuth": false,
@@ -755,13 +755,13 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "nan",
     "name": "NaN.Builders",
-    "category": "freeTier",
+    "category": "apikey",
     "uiSection": "oauth",
     "alias": "nan",
     "color": "#06B6D4",
     "icon": "construction",
     "website": "https://nan.builders",
-    "notice": {"apiKeyUrl":"https://cloud.nan.builders"},
+    "notice": {"text":"Paid community (70 EUR/month and up). No free inference tier.", "apiKeyUrl":"https://cloud.nan.builders"},
     "authType": "apikey",
     "noAuth": false,
     "serviceKinds": [
@@ -902,12 +902,12 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
     "id": "poolside",
     "name": "Poolside",
-    "category": "freeTier",
+    "category": "apikey",
     "alias": "ps",
     "color": "#0EA5E9",
     "icon": "water_drop",
     "website": "https://poolside.ai",
-    "notice": {"apiKeyUrl":"https://platform.poolside.ai/api-keys"},
+    "notice": {"text":"Self-serve free inference was shut down on 2026-10-31.", "apiKeyUrl":"https://platform.poolside.ai/api-keys"},
     "authType": "apikey",
     "noAuth": false,
     "serviceKinds": [
@@ -1843,7 +1843,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
     "color": "#FF7000",
     "icon": "air",
     "website": "https://mistral.ai",
-    "notice": {"apiKeyUrl":"https://console.mistral.ai/api-keys"},
+    "notice": {"text":"API access requires billing activation: Mistral's Free mode covers Vibe and Studio only and explicitly excludes API keys. Every request is paid pay-as-you-go.", "apiKeyUrl":"https://console.mistral.ai/api-keys"},
     "authType": "apikey",
     "noAuth": false,
     "serviceKinds": [
