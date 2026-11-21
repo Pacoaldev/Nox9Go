@@ -32,6 +32,15 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: web-bun-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            web-bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
+            web-bun-${{ runner.os }}-
+
       # --frozen-lockfile: the lockfile is the source of truth. A mismatched
       # package.json fails here instead of silently resolving a different tree.
       - name: Install dependencies
@@ -73,7 +82,7 @@ jobs:
           cache: true
 
       # web/dist is gitignored (`//go:embed dist/*` needs it), so a clean clone
-      # cannot compile until the artifact from the Ffrontend job is in place.
+      # cannot compile until the artifact from the Frontend job is in place.
       - name: Restore built SPA
         uses: actions/download-artifact@v4
         with:
@@ -86,7 +95,7 @@ jobs:
       # Coverage feeds Codecov: the badge and PR comments read from it.
       # -covermode=atomic keeps the profile valid for concurrent packages.
       - name: go test with coverage
-        run: go test -v -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -shuffle=on -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
@@ -100,9 +109,13 @@ jobs:
         run: CGO_ENABLED=0 go build -trimpath -o /tmp/nox9go ./cmd/nox9go/
 
   race:
-    name: Race detector
+    name: Race detector (shard ${{ matrix.shard + 1 }}/3)
     needs: web
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     steps:
       - uses: actions/checkout@v4
 
@@ -111,14 +124,45 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      # web/dist is gitignored (`//go:embed dist/*` needs it), so a clean clone
+      # cannot compile until the artifact from the Frontend job is in place.
       - name: Restore built SPA
         uses: actions/download-artifact@v4
         with:
           name: web-dist
           path: web/dist
 
-      - name: go test -race
-        run: go test -race ./...
+      - name: go test -race (sharded)
+        shell: pwsh
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: 3
+        run: |
+          $idx = [int]$env:SHARD_INDEX
+          $cnt = [int]$env:SHARD_COUNT
+
+          $testPkgs = @(
+            go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... |
+              Where-Object { $_ } |
+              Sort-Object -Unique
+          )
+
+          $shardPkgs = @()
+          for ($i = 0; $i -lt $testPkgs.Count; $i++) {
+            if (($i % $cnt) -eq $idx) {
+              $shardPkgs += $testPkgs[$i]
+            }
+          }
+
+          "Shard $($idx + 1)/$cnt -> $($shardPkgs.Count) paquetes de $($testPkgs.Count) con tests"
+          if ($shardPkgs.Count -eq 0) {
+            exit 0
+          }
+
+          go test -race -shuffle=on @shardPkgs
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
   secrets:
     name: Secret scan
@@ -194,6 +238,17 @@ jobs:
           name: web-dist
           path: web/dist
 
+      - name: Cache Bun install cache and Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/ms-playwright
+          key: e2e-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            e2e-${{ runner.os }}-${{ env.BUN_VERSION }}-
+            e2e-${{ runner.os }}-
+
       - name: Install web dependencies
         working-directory: web
         run: bun install --frozen-lockfile
@@ -202,8 +257,10 @@ jobs:
       # test with "gateway binary not found" when it is missing. The artifact
       # above is only the SPA; the binary has to be built here.
       - name: Build gateway binary
-        run: CGO_ENABLED=0 go build -o nox9go ./cmd/nox9go/
+        run: CGO_ENABLED=0 go build -trimpath -o nox9go ./cmd/nox9go/
 
+      # Keep --with-deps so system libs are present on fresh runners while
+      # reusing cached browser binaries when the cache hits.
       - name: Install Playwright browsers
         working-directory: web
         run: bunx playwright install --with-deps chromium

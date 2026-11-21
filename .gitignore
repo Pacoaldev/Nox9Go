@@ -101,6 +101,7 @@ stitch-screenshots/
 /docs/auditoriaUnificada.md
 /docs/report.md
 /docs/tabla_saldos.md
+/scripts/audit-ci.ps1
 *.code-workspace
 # Per-machine tooling: a prompt-filter list that belongs to whoever installed it.
 /.rtk/
