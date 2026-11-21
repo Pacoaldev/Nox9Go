@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.5] - Unreleased
+
+### Routing & Executors
+- **Kiro responses name the model that answered.** `handleKiroStream` built its OpenAI-shaped chunks with no `model` key, and the non-stream path folds those chunks through `sseToOpenAIJSON` (`internal/proxy/executor/codebuddy.go`), which reads `first["model"]` and falls back to `""` when the key is absent. Every `kiro` request was therefore answered with an empty model — a live `kr/deepseek-3.2` request returned `model=[]` while every other provider named its model, so a client reading `response.model` could not tell which model answered. Upstream `open-sse/executors/kiro.js` stamps the model into every chunk through its `sseChunk` builder, so this was a port gap rather than a design choice. `kiroRequestedModel(req)` (`internal/proxy/executor/providers.go`) is now the single extractor — `req.ModelName`, else the request body's `model` — reused by `kiroUpstreamBody` for the prefix-stripped `modelId` it sends upstream, and `handleKiroStream` stamps it into all four chunks (content, reasoning, `tool_calls`, terminal). Covered by `TestForwardKiro_NonStreamNamesTheModel` and `TestForwardKiro_StreamNamesTheModelOnEveryChunk`, both failing before the fix with `model = ""`; observed live after it: `model=[deepseek-3.2]` on the non-stream answer and `"model":"deepseek-3.2"` on every stream chunk. `sseToOpenAIJSON` is untouched, so the CodeBuddy fold keeps its behavior. Note while probing: a repeated prompt is answered from the gateway's semantic cache in ~3ms, which serves the pre-fix body and can mask this kind of verification — check `run/gateway.log` for `[chat] semantic cache hit` and use a fresh prompt.
+
 ## [1.1.4] - 2026-11-21
 
 ### MCP
@@ -39,6 +44,9 @@
 - **Ponytail prompts ported to the upstream v5.3.3 doctrine.** All three levels carry the lazy-senior-developer doctrine, with a shared `ponytailSharedTail` that keeps scope, validation and closing rules identical, so the levels differ only in how hard they push back on the request.
 - **The RTK `find` filter matches Windows paths.** Its match pattern accepted only POSIX shapes (`./`, `/`, `dir/`), so `find` output from Windows (`C:\...`, `.\src\...`, `dir\...`) never matched the filter and passed through uncompressed. The pattern now also accepts a drive-absolute (`C:\`) or backslash-relative path, and `filters/shell-find.json` gained a Windows inline sample.
 - **The RTK `git log` filter no longer throws away the author and date.** `Author:` and `Date:` sat in `dropPatterns`, so a compacted `git log` kept the commit line and the indented body but lost who wrote it and when. Both lines moved to `includePatterns`, and the filter's inline sample now pins the surviving header (`filters/git-log.json`).
+
+### Repository Hygiene
+- **The CI workflow runs lighter.** The race detector is sharded into three matrix jobs and runs with `-shuffle=on`; `~/.bun/install/cache` and `~/.cache/ms-playwright` are cached, so a run stops re-downloading the lockfile's packages and the Playwright browser bundle; the build and e2e jobs compile with `-trimpath`; a `Ffrontend` typo in a comment is fixed; and `/scripts/audit-ci.ps1` joined `.gitignore` as the per-machine helper it is.
 
 ## [1.1.3] - 2026-11-19
 ### Providers

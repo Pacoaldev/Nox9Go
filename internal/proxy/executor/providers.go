@@ -254,15 +254,7 @@ func kiroUpstreamBody(req *Request) ([]byte, error) {
 		}
 	}
 
-	model := req.ModelName
-	if model == "" {
-		var oreq struct {
-			Model string `json:"model"`
-		}
-		if err := json.Unmarshal(req.Body, &oreq); err == nil {
-			model = oreq.Model
-		}
-	}
+	model := kiroRequestedModel(req)
 	// Drop the provider prefix the client sent (kr/claude-sonnet-4.5).
 	if _, after, ok := strings.Cut(model, "/"); ok {
 		model = after
@@ -288,6 +280,24 @@ func kiroUpstreamBody(req *Request) ([]byte, error) {
 		}
 	}
 	return out, nil
+}
+
+// kiroRequestedModel returns the model the request names, exactly as the client
+// spelled it. The Kiro envelope needs it prefix-stripped, but the OpenAI-shaped
+// chunks name it back verbatim: upstream kiro.js stamps every chunk with the
+// model it was handed, so a client that reads `response.model` learns which
+// model answered.
+func kiroRequestedModel(req *Request) string {
+	if req.ModelName != "" {
+		return req.ModelName
+	}
+	var oreq struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(req.Body, &oreq); err != nil {
+		return ""
+	}
+	return oreq.Model
 }
 
 // ForwardAzure forwards to Azure OpenAI with dynamic URL from env vars.

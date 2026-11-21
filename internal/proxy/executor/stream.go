@@ -838,6 +838,7 @@ func handleKiroStream(w http.ResponseWriter, req *Request, upstream io.Reader) e
 	responseID := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 	created := time.Now().Unix()
 	state := &kiroStreamState{}
+	model := kiroRequestedModel(req)
 
 	var accumulatedContent strings.Builder
 	var readErr error
@@ -872,6 +873,7 @@ func handleKiroStream(w http.ResponseWriter, req *Request, upstream io.Reader) e
 				"id":      responseID,
 				"object":  "chat.completion.chunk",
 				"created": created,
+				"model":   model,
 				"choices": []map[string]any{{
 					"index": 0,
 					"delta": map[string]any{"content": payload.Content},
@@ -898,6 +900,7 @@ func handleKiroStream(w http.ResponseWriter, req *Request, upstream io.Reader) e
 				"id":      responseID,
 				"object":  "chat.completion.chunk",
 				"created": created,
+				"model":   model,
 				"choices": []map[string]any{{
 					"index": 0,
 					"delta": map[string]any{"reasoning_content": payload.Text},
@@ -963,6 +966,7 @@ func handleKiroStream(w http.ResponseWriter, req *Request, upstream io.Reader) e
 			"id":      responseID,
 			"object":  "chat.completion.chunk",
 			"created": created,
+			"model":   model,
 			"choices": []map[string]any{{
 				"index": 0,
 				"delta": map[string]any{
@@ -996,6 +1000,7 @@ func handleKiroStream(w http.ResponseWriter, req *Request, upstream io.Reader) e
 		"id":      responseID,
 		"object":  "chat.completion.chunk",
 		"created": created,
+		"model":   model,
 		"choices": []map[string]any{{
 			"index":         0,
 			"delta":         map[string]any{},

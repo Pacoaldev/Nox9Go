@@ -106,6 +106,80 @@ func TestKiroUpstreamBody_StripsProviderPrefixAndSuffixes(t *testing.T) {
 	}
 }
 
+// Upstream kiro.js stamps every SSE chunk with the model the request named, so
+// a `stream:false` client that reads `response.model` learns which model
+// answered. The Go port emitted no `model` key at all, so sseToOpenAIJSON
+// folded it to "": the live gateway answered `"model":""` for
+// `kr/deepseek-3.2` while every other provider names it.
+func TestForwardKiro_NonStreamNamesTheModel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.amazon.eventstream")
+		w.WriteHeader(http.StatusOK)
+		w.Write(kiroEventFrame("assistantResponseEvent", `{"content":"Hey"}`))
+	}))
+	defer srv.Close()
+
+	rec := httptest.NewRecorder()
+	err := ForwardKiro(rec, &Request{
+		Client:   srv.Client(),
+		Config:   &providers.ProviderConfig{BaseURL: srv.URL, AuthHeader: "Authorization", AuthScheme: "bearer"},
+		APIKey:   "bearer-token",
+		Body:     []byte(`{"model":"kr/deepseek-3.2","messages":[{"role":"user","content":"hi"}],"stream":false}`),
+		IsStream: false,
+	})
+	if err != nil {
+		t.Fatalf("ForwardKiro: %v", err)
+	}
+
+	var out struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("body is not JSON: %v\nbody: %s", err, rec.Body.String())
+	}
+	if out.Model != "kr/deepseek-3.2" {
+		t.Errorf("model = %q, want %q", out.Model, "kr/deepseek-3.2")
+	}
+}
+
+// The streaming path must name the model on every chunk, not just on the last
+// one, because a client reading the first delta is the common case.
+func TestForwardKiro_StreamNamesTheModelOnEveryChunk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.amazon.eventstream")
+		w.WriteHeader(http.StatusOK)
+		w.Write(kiroEventFrame("assistantResponseEvent", `{"content":"Hey"}`))
+		w.Write(kiroEventFrame("assistantResponseEvent", `{"content":" there"}`))
+	}))
+	defer srv.Close()
+
+	rec := httptest.NewRecorder()
+	err := ForwardKiro(rec, &Request{
+		Client:   srv.Client(),
+		Config:   &providers.ProviderConfig{BaseURL: srv.URL, AuthHeader: "Authorization", AuthScheme: "bearer"},
+		APIKey:   "bearer-token",
+		Body:     []byte(`{"model":"kr/deepseek-3.2","messages":[{"role":"user","content":"hi"}],"stream":true}`),
+		IsStream: true,
+	})
+	if err != nil && !errors.Is(err, io.EOF) {
+		t.Fatalf("ForwardKiro: %v", err)
+	}
+
+	chunks := 0
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: ") || strings.TrimSpace(line) == "data: [DONE]" {
+			continue
+		}
+		chunks++
+		if !strings.Contains(line, `"model":"kr/deepseek-3.2"`) {
+			t.Errorf("chunk does not name the model: %s", line)
+		}
+	}
+	if chunks == 0 {
+		t.Fatal("no chunks were emitted, so the assertion above never ran")
+	}
+}
+
 // kiroEventFrame builds one AWS EventStream frame. The reader in internal/providers
 // verifies both CRCs, so the fixture has to write them.
 func kiroEventFrame(eventType, payload string) []byte {
