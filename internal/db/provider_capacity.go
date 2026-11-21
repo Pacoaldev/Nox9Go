@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"nox9go/proxy/internal/providers"
 )
@@ -226,12 +227,47 @@ func (r *Repo) ListProviderObservations(ctx context.Context, providerID string) 
 			&o.LimitUnit, &o.Evidence, &o.SampleCount, &o.FirstSeen, &o.LastSeen); err != nil {
 			return nil, fmt.Errorf("scan provider observation: %w", err)
 		}
+		// A row written before the writer bounded its evidence on a rune boundary
+		// can hold invalid UTF-8. Repair it here rather than fail the scan or, worse,
+		// let encoding/json refuse the response later.
+		o.Evidence = repairUTF8(o.Evidence)
 		out = append(out, o)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate provider observations: %w", err)
 	}
 	return out, nil
+}
+
+// repairUTF8 returns s truncated to its longest valid UTF-8 prefix.
+//
+// It exists because SQLite stores bytes, not text: a row whose evidence was cut
+// mid-rune by an earlier writer reads back without error and only fails later,
+// when encoding/json refuses invalid UTF-8. That turned one bad row into a 500 on
+// the whole capacity endpoint — and, after a restart, into a 200 whose body was
+// truncated at the bad byte with the error object concatenated after it, which is
+// worse because a caller that does not parse the body sees success.
+//
+// Repairing on read keeps the observation (its signal, value and sample count are
+// untouched) and keeps the readable prefix, so the operator still learns why the
+// provider refused. The damaged tail is dropped, not guessed at.
+func repairUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	// Walk forward rune by rune and stop at the first sequence that does not
+	// decode. Everything before it is valid by construction, so the result needs
+	// no further trimming.
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size <= 1 {
+			return s[:i]
+		}
+		i += size
+	}
+	// Unreachable for an invalid string, but a valid one that slipped past the
+	// fast path must come back whole rather than truncated.
+	return s
 }
 
 // maxEvidenceLen bounds a stored snippet so one verbose upstream body cannot bloat
