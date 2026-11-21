@@ -6,7 +6,7 @@
   import Button from '../../lib/ui/Button.svelte'
   import { api, type CreateConnectionPayload, type ProxyPool } from '../../api/client'
   import { PROVIDER_CATALOG } from '../../lib/providers'
-  import { planBulkAdd } from '../../lib/bulk-add'
+  import { planBulkAdd, nextBulkStartPriority } from '../../lib/bulk-add'
 
   interface Props {
     isOpen: boolean
@@ -17,6 +17,8 @@
     isAnthropic?: boolean
     /** Names of already saved connections, so bulk auto-naming never collides. */
     existingNames?: string[]
+    /** Priorities already in use, so bulk add starts after the highest one. */
+    existingPriorities?: number[]
     proxyPools?: ProxyPool[]
     /** Save error reported by the parent. */
     error?: string
@@ -32,6 +34,7 @@
     isCompatible = false,
     isAnthropic = false,
     existingNames = [],
+    existingPriorities = [],
     proxyPools = [],
     error = '',
     onClose,
@@ -431,11 +434,14 @@
   async function handleBulkSubmit() {
     const plan = planBulkAdd(bulkText.split('\n'), existingNames, { isCloudflareAi })
     if (!plan.length) return
+    // Priority continues after the highest one already in use (#1 when the
+    // provider has none), incrementing per key instead of stamping every row #1.
+    const startPriority = nextBulkStartPriority(existingPriorities)
     saving = true
     bulkResult = null
     let success = 0
     let failed = 0
-    for (const entry of plan) {
+    for (const [i, entry] of plan.entries()) {
       try {
         // Validate each key so bulk-added connections get a real status too.
         const res = await api.validateProvider({
@@ -448,7 +454,7 @@
           authType: connectionAuthType,
           name: entry.name,
           apiKey: entry.apiKey,
-          priority: 1,
+          priority: startPriority + i,
           testStatus: res.supported && res.valid ? 'active' : 'unknown',
           ...(entry.providerSpecificData ? { providerSpecificData: entry.providerSpecificData } : {}),
         })

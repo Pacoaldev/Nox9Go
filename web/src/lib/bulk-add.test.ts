@@ -4,7 +4,7 @@
 // tests/unit/bulk-add-names.test.js.
 import assert from 'node:assert'
 import { describe, it } from 'node:test'
-import { planBulkAdd } from './bulk-add'
+import { planBulkAdd, nextBulkStartPriority } from './bulk-add'
 
 describe('planBulkAdd: auto-named gap-fill', () => {
   it('uses Key 1..N by paste index when nothing exists', () => {
@@ -100,5 +100,29 @@ describe('planBulkAdd: robustness', () => {
   it('coerces non-array existingNames gracefully', () => {
     const out = planBulkAdd(['sk-a'], null)
     assert.strictEqual(out[0].name, 'Key 1')
+  })
+})
+
+describe('nextBulkStartPriority: continues after the highest existing priority', () => {
+  
+
+  it('starts at 1 when the provider has no connections', () => {
+    assert.strictEqual(nextBulkStartPriority([]), 1)
+    assert.strictEqual(nextBulkStartPriority(null), 1)
+    assert.strictEqual(nextBulkStartPriority(undefined), 1)
+  })
+
+  it('continues after the highest priority when there are gaps', () => {
+    // #1 and #3 in use -> next is #4, not #2
+    assert.strictEqual(nextBulkStartPriority([1, 3]), 4)
+  })
+
+  it('increments per key added in the same batch', () => {
+    const start = nextBulkStartPriority([1, 2, 3])
+    assert.deepStrictEqual([0, 1, 2].map((i) => start + i), [4, 5, 6])
+  })
+
+  it('ignores non-numeric entries', () => {
+    assert.strictEqual(nextBulkStartPriority([2, NaN, Infinity, null] as unknown as number[]), 3)
   })
 })

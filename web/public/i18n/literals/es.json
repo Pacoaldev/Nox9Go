@@ -228,7 +228,6 @@
   "Catalogue sweep": "Barrido de catálogo",
   "Cert": "Certificado",
   "Chain": "Cadena",
-  "Change Log": "Registro de cambios",
   "Changes & Release Notes": "Cambios y notas de la versión",
   "Chart metric": "Métrica del gráfico",
   "Chat / code-gen via OpenAI or Anthropic format with streaming.": "Chat/generación de código vía OpenAI o formato Anthropic con streaming.",
@@ -720,7 +719,6 @@
   "Live Test Bench": "Banco de pruebas en vivo",
   "Load Anti-Poisoning Preset": "Cargar preajuste anti-envenenamiento",
   "Loading": "Cargando",
-  "Loading change log...": "Cargando registro de cambios...",
   "Loading changes...": "Cargando cambios...",
   "Loading chart...": "Cargando gráfico...",
   "Loading dashboard...": "Cargando panel...",
@@ -1477,5 +1475,6 @@
   "How long a request waits for a slot before the provider counts as full.": "Cuánto espera una solicitud por un cupo antes de que el proveedor cuente como lleno.",
   "Prompt + completion tokens for this provider. Once spent, requests to it answer 403.": "Tokens de prompt + completion para este proveedor. Una vez agotados, las solicitudes responden 403.",
   "Last day the subscription is valid. Empty means no expiry.": "Último día válido de la suscripción. Vacío significa sin vencimiento.",
-  "0 means unlimited. A request that cannot get a slot is served by another candidate; 429 only appears once no candidate is left.": "0 significa ilimitado. Una solicitud que no consigue un cupo la atiende otro candidato; 429 solo aparece cuando no queda ningún candidato."
+  "0 means unlimited. A request that cannot get a slot is served by another candidate; 429 only appears once no candidate is left.": "0 significa ilimitado. Una solicitud que no consigue un cupo la atiende otro candidato; 429 solo aparece cuando no queda ningún candidato.",
+  "Masked API key": "API key enmascarada"
 }

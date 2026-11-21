@@ -47,6 +47,13 @@ function parseLine(line: string, opts: PlanBulkAddOptions = {}): ParsedLine | nu
   return { baseName: 'Key', apiKey: parts[0].trim() }
 }
 
+// nextBulkStartPriority returns the priority the first bulk-added key gets:
+// one past the highest priority already in use, or 1 when the provider has none.
+export function nextBulkStartPriority(existingPriorities?: number[] | null): number {
+  const safe = Array.isArray(existingPriorities) ? existingPriorities.filter((p) => typeof p === 'number' && Number.isFinite(p)) : []
+  return safe.length ? Math.max(...safe) + 1 : 1
+}
+
 // planBulkAdd parses the pasted lines and assigns collision-free "<base> <n>"
 // names, skipping blank lines and lines without a key.
 export function planBulkAdd(

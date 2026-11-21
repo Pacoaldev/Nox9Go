@@ -297,6 +297,8 @@
     // in-place sort is safe.
     return rows.sort((a, b) => a.id.localeCompare(b.id, undefined, { sensitivity: 'base' }))
   })
+  // Masked API key hints are always shown (the raw secret never leaves the
+  // server), so each row is identifiable without opening the edit modal.
   let canImportCompatible = $derived(providerConnections.some((c) => c.isActive !== 0))
 
   // Settings & Strategies
@@ -3566,6 +3568,10 @@
                       <span class="inline-flex items-center gap-1.5 rounded-full font-semibold bg-surface-2 text-text-muted px-2 py-0.5 text-[10px]">
                         {conn.authType === 'oauth' ? 'OAuth' : 'API Key'}
                       </span>
+                      <!-- Always-visible masked key hint; the raw secret stays server-side -->
+                      {#if conn.apiKeyMasked}
+                        <span class="font-mono text-[10px] font-semibold text-text-muted select-all" title="Masked API key">{conn.apiKeyMasked}</span>
+                      {/if}
                       <!-- Freebuff Session status badge -->
                       {#if isFreebuff}
                         {@const fbSess = freebuffSessions[conn.id]}
@@ -5039,6 +5045,7 @@
   isCompatible={!!selectedNode}
   isAnthropic={selectedNode?.apiType === 'responses'}
   existingNames={connections.map((c) => c.name).filter((n): n is string => !!n)}
+  existingPriorities={connections.map((c) => c.priority).filter((p): p is number => p != null)}
   {proxyPools}
   error={addConnectionError}
   onClose={() => {
