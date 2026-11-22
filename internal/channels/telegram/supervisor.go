@@ -36,6 +36,9 @@ const (
 	// StateRunning means the poll loop is active.
 	StateRunning State = "running"
 	// StateError means the loop could not start, typically a rejected token.
+	// A fault inside a running loop is reported as LastError and leaves the
+	// state as StateRunning: the channel still works, and nothing but a restart
+	// used to clear it.
 	StateError State = "error"
 )
 
@@ -254,6 +257,37 @@ func (s *Supervisor) Stop(ctx context.Context) {
 	s.mu.Unlock()
 }
 
+// closeOrphanedTask closes a task the previous process left running.
+//
+// A running task means an order sits in the development inbox waiting to be
+// drained. That inbox outlives the gateway, so the order may still be executed
+// — but this process cannot know whether it was, and a panel that keeps saying
+// "Ejecutando" forever is the one thing it must never do. The task is closed as
+// failed with the cause, and the operator can re-submit the instruction.
+func (s *Supervisor) closeOrphanedTask() {
+	cfg, err := s.repo.GetTelegramChannelConfig()
+	if err != nil || cfg == nil {
+		if err != nil {
+			s.setError(err)
+		}
+		return
+	}
+	for _, chatID := range cfg.AllowedUserIDs {
+		task, err := s.repo.GetTelegramAgentTask(chatID)
+		if err != nil {
+			s.setError(err)
+			continue
+		}
+		if TaskStatus(task.Status) != TaskRunning {
+			continue
+		}
+		status := encodeTaskStatus(TaskFailed, "orden perdida al reiniciar el canal")
+		if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, status); err != nil {
+			s.setError(err)
+		}
+	}
+}
+
 // startLoop starts the poll loop when none is running. An already-running loop
 // is left alone, which is what makes Reconcile idempotent.
 func (s *Supervisor) startLoop(token string) {
@@ -269,6 +303,7 @@ func (s *Supervisor) startLoop(token string) {
 	s.status = Status{State: StateRunning, Running: true, StartedAt: time.Now()}
 	loop := s.runLoop
 	s.mu.Unlock()
+	go s.closeOrphanedTask()
 
 	go func() {
 		defer close(done)
@@ -339,11 +374,21 @@ func (s *Supervisor) cancelTurn(chatID int64) (chan struct{}, bool) {
 	return handle.done, ok
 }
 
-// setError records a failure the operator needs to see, in place of the state
-// that was running before it.
+// setError records a failure the operator needs to see without condemning the
+// channel.
+//
+// A running loop keeps running: an expired long-poll or the cosmetic
+// SetMyCommands rejection is a fault to report, not a dead channel, and
+// reconcile() only starts a loop when none exists, so overwriting the state
+// with StateError left the dashboard red until a restart nobody asked for.
+// Only a loop that is not running can report StateError, which is the
+// start-up failure (a rejected token) where there is genuinely no channel.
 func (s *Supervisor) setError(err error) {
 	s.mu.Lock()
-	s.status = Status{State: StateError, LastError: err.Error()}
-	s.username = ""
+	s.status.LastError = err.Error()
+	if !s.status.Running {
+		s.status.State = StateError
+		s.username = ""
+	}
 	s.mu.Unlock()
 }

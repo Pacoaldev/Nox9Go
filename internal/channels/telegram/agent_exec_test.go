@@ -383,3 +383,84 @@ func TestChatModeNeverSubmitsOrder(t *testing.T) {
 		t.Errorf("chat reply = %v, want the gateway answer", sent)
 	}
 }
+
+// A transient fault must not condemn the channel forever. setError used to
+// overwrite the whole status with StateError, so one expired long-poll (or the
+// cosmetic SetMyCommands failure) left the dashboard red until a restart, and
+// reconcile() only ever calls startLoop when no loop exists — so nothing could
+// clear it. The loop keeps running; only the last error is reported.
+func TestSetError_DoesNotStopTheRunningLoop(t *testing.T) {
+	s := NewSupervisor(&fakeRepo{}, func(int64) bool { return true })
+	s.mu.Lock()
+	s.status = Status{State: StateRunning, Running: true}
+	s.mu.Unlock()
+
+	s.setError(errors.New("telegram: unknown error"))
+
+	st := s.Status()
+	if st.State != StateRunning {
+		t.Fatalf("State = %q after a transient error, want %q", st.State, StateRunning)
+	}
+	if !st.Running {
+		t.Error("Running = false after a transient error, want true")
+	}
+	if st.LastError != "telegram: unknown error" {
+		t.Errorf("LastError = %q, want the reported cause", st.LastError)
+	}
+}
+
+func TestStartLoop_ClearsLastError(t *testing.T) {
+	s := NewSupervisor(&fakeRepo{}, func(int64) bool { return true })
+	s.setError(errors.New("telegram: token rejected: 401"))
+
+	if st := s.Status(); st.State != StateError {
+		t.Fatalf("state before start = %q, want %q", st.State, StateError)
+	}
+	s.startLoop("tok")
+	defer s.stopLoop()
+	if st := s.Status(); st.LastError != "" {
+		t.Errorf("LastError = %q after a successful start, want empty", st.LastError)
+	}
+}
+
+// A task left running by a previous process has no order behind it any more:
+// the spool is drained by the development session, and the gateway restarting
+// does not resurrect the instruction. Reporting it as running forever is the
+// one thing the panel must never do, so the boot pass closes it with the
+// reason the operator can act on.
+func TestReconcile_ClosesOrphanedRunningTask(t *testing.T) {
+	repo := &fakeRepo{
+		task: db.TelegramAgentTask{
+			ChatID:      42,
+			Instruction: "Actualiza el CHANGELOG.md",
+			Status:      string(TaskRunning),
+		},
+		allowed: []int64{42},
+	}
+	sup := NewSupervisor(repo, func(id int64) bool { return id == 42 })
+
+	sup.closeOrphanedTask()
+
+	got := repo.task.Status
+	if !strings.HasPrefix(got, string(TaskFailed)+": ") {
+		t.Fatalf("status = %q, want it to start with %q", got, string(TaskFailed)+": ")
+	}
+	if !strings.Contains(got, "orden perdida") {
+		t.Errorf("status = %q, want the lost-order reason", got)
+	}
+}
+
+func TestCloseOrphanedTask_LeavesOtherStatesAlone(t *testing.T) {
+	for _, status := range []TaskStatus{TaskIdle, TaskPendingApproval, TaskCancelled, TaskDone} {
+		t.Run(string(status), func(t *testing.T) {
+			repo := &fakeRepo{
+				task:    db.TelegramAgentTask{ChatID: 42, Instruction: "x", Status: string(status)},
+				allowed: []int64{42},
+			}
+			NewSupervisor(repo, func(int64) bool { return true }).closeOrphanedTask()
+			if repo.task.Status != string(status) {
+				t.Errorf("status = %q, want it untouched", repo.task.Status)
+			}
+		})
+	}
+}
