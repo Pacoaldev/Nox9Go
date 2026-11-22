@@ -254,3 +254,57 @@ func TestUpdateConnectionData_LeavesOtherColumnsAlone(t *testing.T) {
 		t.Errorf("data = %q, want the refreshed payload", got.Data)
 	}
 }
+
+// Two connections added in the same second tie on updatedAt, because RFC3339
+// there carries whole seconds only. Without a final tiebreak the pair came back
+// in an arbitrary order, which is what made the reorder test fail under -race:
+// the slower run straddled a second boundary and read the pool back shuffled.
+func TestConnectionOrder_SameSecondIsStable(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+	repo := NewRepo(database)
+
+	// Inserted out of alphabetical order on purpose. Without a tiebreak, SQLite
+	// falls back to whatever index it walks, and the ids are chosen so that the
+	// alphabetical order differs from the insertion order: that is the only
+	// arrangement where a missing tiebreak changes the answer instead of
+	// coincidentally matching it.
+	sameStamp := "2026-01-01T00:00:00Z"
+	for _, id := range []string{"z", "m", "a"} {
+		if err := repo.CreateProviderConnection(id, "same-second", "apikey", id, `{}`); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+		if _, err := database.Exec(
+			`UPDATE providerConnections SET updatedAt = ?, priority = 1 WHERE id = ?`, sameStamp, id,
+		); err != nil {
+			t.Fatalf("pin timestamp %s: %v", id, err)
+		}
+	}
+
+	// The reorder reads the pool back itself to decide what to swap, so a tie
+	// there decides the outcome. Priority 1 on all three, same updatedAt: the
+	// read must return insertion order for the swap to land where asked.
+	if err := repo.ReorderProviderConnections("same-second", "z", 1); err != nil {
+		t.Fatalf("ReorderProviderConnections() error = %v", err)
+	}
+
+	// Moving the first row down must swap it with the second *in insertion
+	// order*, so the result is m, z, a — not a, m, z, which is what an
+	// alphabetical tiebreak would have produced.
+	if got, want := connectionIDs(t, repo, "same-second"), []string{"m", "z", "a"}; !slices.Equal(got, want) {
+		t.Errorf("pool order after moving the first row down = %v, want %v", got, want)
+	}
+}
+
+func connectionIDs(t *testing.T, repo *Repo, provider string) []string {
+	t.Helper()
+	conns, err := repo.GetProviderConnections(provider, false)
+	if err != nil {
+		t.Fatalf("read pool: %v", err)
+	}
+	ids := make([]string, 0, len(conns))
+	for _, c := range conns {
+		ids = append(ids, c.ID)
+	}
+	return ids
+}

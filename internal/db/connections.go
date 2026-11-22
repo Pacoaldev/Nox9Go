@@ -17,7 +17,16 @@ const providerConnectionColumns = `id, provider, authType, name, email, priority
 
 // connectionSortOrder mirrors the JavaScript ordering: rows with no priority sort
 // last, ties break on the most recently updated row.
-const connectionSortOrder = `ORDER BY CASE WHEN priority IS NULL THEN 999999 ELSE priority END ASC, updatedAt DESC`
+//
+// rowid is the final tiebreak, and it is not cosmetic. updatedAt is written as
+// RFC3339, which carries whole seconds, so connections added in the same second
+// tie on it — and SQLite is then free to return them in any order. That surfaced
+// as a flaky reorder test under -race, where the extra slowness made the seeds
+// straddle a second boundary: the same pool came back in a different order
+// depending on how fast the machine was. rowid is the insertion order, strictly
+// increasing, so the ordering is total and the dashboard cannot shuffle two
+// rows the operator did not ask it to move.
+const connectionSortOrder = `ORDER BY CASE WHEN priority IS NULL THEN 999999 ELSE priority END ASC, updatedAt DESC, rowid ASC`
 
 // scanConnection fills a connection from a row shaped like
 // providerConnectionColumns. Both *sql.Row and *sql.Rows satisfy it, so the

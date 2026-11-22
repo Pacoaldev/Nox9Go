@@ -115,8 +115,11 @@ func (r *Repo) ReorderProviderConnections(provider, id string, direction int) er
 	defer func() { _ = tx.Rollback() }()
 
 	rows, err := tx.Query(
+		// rowid as the final tiebreak for the same reason as connectionSortOrder:
+		// updatedAt only carries whole seconds, so two rows written in the same
+		// second would otherwise be read back in an arbitrary order.
 		`SELECT id FROM providerConnections WHERE provider = ?
-		 ORDER BY CASE WHEN priority IS NULL THEN 999999 ELSE priority END ASC, updatedAt DESC, id ASC`,
+		 ORDER BY CASE WHEN priority IS NULL THEN 999999 ELSE priority END ASC, updatedAt DESC, rowid ASC`,
 		provider,
 	)
 	if err != nil {
