@@ -118,5 +118,11 @@ func CreateTables(database *sql.DB) error {
 	if err := db.EnsureProviderCapacityTables(database); err != nil {
 		return fmt.Errorf("create provider capacity tables: %w", err)
 	}
+	// The Telegram channel tables are Go-only too: without them a fixture that
+	// saves or reads a bot token fails on a missing table rather than on the
+	// behavior the test is about.
+	if err := db.EnsureTelegramChannelTables(database); err != nil {
+		return fmt.Errorf("create telegram channel tables: %w", err)
+	}
 	return db.EnsureAdditiveColumns(database)
 }
