@@ -51,7 +51,7 @@ export interface Dashboard {
  * each file in its own process: two suites booting on one port would race, and
  * the loser's `afterAll` would close a browser the winner was still driving.
  */
-export async function startDashboard(port: number): Promise<Dashboard> {
+export async function startDashboard(port: number, extraEnv: Record<string, string> = {}): Promise<Dashboard> {
   if (!existsSync(BINARY)) {
     throw new Error(`gateway binary not found at ${BINARY}; build it before running the e2e suite`)
   }
@@ -69,6 +69,9 @@ export async function startDashboard(port: number): Promise<Dashboard> {
       RTK_ENABLED: 'false',
       CAVEMAN_ENABLED: 'false',
       PONYTAIL_ENABLED: 'false',
+      // Per-suite overrides. The Development tab needs DEV_REPO_ROOT pointing
+      // at a real work tree, and no other suite should inherit that.
+      ...extraEnv,
     },
     stdio: 'ignore',
   })
