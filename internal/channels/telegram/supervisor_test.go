@@ -31,8 +31,10 @@ type fakeRepo struct {
 	// what a turn actually stored.
 	appended func(role, content string)
 
-	// inboxPath, when set, points DevInbox at a real throwaway file.
+	// inboxPath, when set, points DevInbox at a real throwaway file, and
+	// inboxErr makes opening the inbox itself fail.
 	inboxPath string
+	inboxErr  error
 	// mode is the channel mode the fake reports; empty reads as chat.
 	mode db.BotMode
 	// task is the agent task this chat is supervising, and autoApprove its
@@ -123,8 +125,13 @@ func (f *fakeRepo) TelegramTranscript(int64, int) ([]db.TelegramTranscriptMessag
 func (f *fakeRepo) EnsureTelegramAPIKey() (string, error) { return "sk-fake", nil }
 func (f *fakeRepo) DevRepoRoot() (string, error)          { return f.repoRoot, nil }
 func (f *fakeRepo) DevFeatureName() (string, error)       { return f.feature, nil }
-func (f *fakeRepo) DevInbox() (*notify.Spool, error)      { return notify.NewSpool(f.inboxPath), nil }
-func (f *fakeRepo) DevSpool() (*notify.Spool, error)      { return notify.NewSpool(f.spoolPath), nil }
+func (f *fakeRepo) DevInbox() (*notify.Spool, error) {
+	if f.inboxErr != nil {
+		return nil, f.inboxErr
+	}
+	return notify.NewSpool(f.inboxPath), nil
+}
+func (f *fakeRepo) DevSpool() (*notify.Spool, error) { return notify.NewSpool(f.spoolPath), nil }
 
 func (f *fakeRepo) GetTelegramChannelConfig() (*Config, error) {
 	return &Config{

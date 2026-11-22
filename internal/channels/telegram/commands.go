@@ -154,6 +154,14 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 
 	status := string(TaskPendingApproval)
 	if auto {
+		// S2: auto-approve is the approval path with the waiting step removed, so
+		// the order is submitted before the task says anything (S3). A task whose
+		// order never left the gateway is recorded as failed, not as running.
+		if err := s.submitOrder(instruction); err != nil {
+			s.recordFailedTask(ctx, bot, chatID, instruction, err)
+			s.updatePanel(ctx, bot, chatID)
+			return
+		}
 		status = string(TaskRunning)
 	}
 	if err := s.repo.SetTelegramAgentTask(chatID, instruction, status); err != nil {
@@ -166,7 +174,7 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 	case TaskPendingApproval:
 		s.send(ctx, bot, chatID, "Tarea registrada. Espera tu aprobación.")
 	case TaskRunning:
-		s.send(ctx, bot, chatID, "Tarea registrada y en ejecución.")
+		s.send(ctx, bot, chatID, "Tarea registrada y enviada a la sesión de desarrollo.")
 	}
 	s.updatePanel(ctx, bot, chatID)
 }
@@ -420,6 +428,44 @@ func (s *Supervisor) cmdModel(ctx context.Context, bot *tgbot.Bot, chatID int64,
 	s.send(ctx, bot, chatID, "Modelo cambiado a: "+args)
 }
 
+// orderTitle is the title every instruction carries into the development
+// inbox, so a drained order reads the same whether it came from /pi or from an
+// approved task.
+const orderTitle = "Orden desde Telegram"
+
+// submitOrder hands one instruction to the development session.
+//
+// It is the channel's single delivery path to the executor: the order event the
+// session drains. /pi, the approve button and auto-approve all go through it, so
+// there is one spool and one shape of event, and nothing here executes anything
+// itself. An error means the instruction did not leave the gateway, which is why
+// every caller must treat it as a failure rather than as progress.
+func (s *Supervisor) submitOrder(instruction string) error {
+	inbox, err := s.repo.DevInbox()
+	if err != nil {
+		return fmt.Errorf("telegram: open dev inbox: %w", err)
+	}
+	if err := inbox.Append(notify.Event{
+		Kind:   notify.KindOrder,
+		Title:  orderTitle,
+		Detail: strings.TrimSpace(instruction),
+	}); err != nil {
+		return fmt.Errorf("telegram: append order: %w", err)
+	}
+	return nil
+}
+
+// recordFailedTask stores a task as failed with the cause and tells the
+// operator, in place of leaving a status that claims it is executing.
+func (s *Supervisor) recordFailedTask(ctx context.Context, bot *tgbot.Bot, chatID int64, instruction string, cause error) {
+	if err := s.repo.SetTelegramAgentTask(chatID, instruction, encodeTaskStatus(TaskFailed, cause.Error())); err != nil {
+		s.setError(err)
+	}
+	s.setError(cause)
+	s.send(ctx, bot, chatID, fmt.Sprintf(
+		"No pude enviar la orden a la sesión de desarrollo: %s\nLa tarea quedó como fallida.", cause.Error()))
+}
+
 // cmdPi submits an instruction for the development session.
 //
 // It is the one writing direction of this bot: /estado and the feed only show
@@ -436,17 +482,7 @@ func (s *Supervisor) cmdPi(ctx context.Context, bot *tgbot.Bot, chatID int64, ar
 		return
 	}
 
-	inbox, err := s.repo.DevInbox()
-	if err != nil {
-		s.setError(err)
-		s.send(ctx, bot, chatID, "No pude abrir la bandeja de órdenes.")
-		return
-	}
-	if err := inbox.Append(notify.Event{
-		Kind:   notify.KindOrder,
-		Title:  "Orden desde Telegram",
-		Detail: strings.TrimSpace(args),
-	}); err != nil {
+	if err := s.submitOrder(args); err != nil {
 		s.setError(err)
 		s.send(ctx, bot, chatID, "No pude registrar la orden.")
 		return

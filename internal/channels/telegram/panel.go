@@ -20,7 +20,39 @@ const (
 	TaskCancelled       TaskStatus = "cancelled"
 	TaskRejected        TaskStatus = "rejected"
 	TaskDone            TaskStatus = "done"
+	// TaskFailed is the honest end of a task whose instruction never reached the
+	// development session. It exists so a refused submit has a state to land in
+	// that cannot be mistaken for progress.
+	TaskFailed TaskStatus = "failed"
 )
+
+// failedStatusPrefix marks a stored status that carries the reason it failed.
+// The task row is the only storage the channel owns, so the reason travels in
+// the status column instead of a second spool: a `failed` nobody can explain is
+// what makes an operator retry blind.
+const failedStatusPrefix = string(TaskFailed) + ": "
+
+// parseTaskStatus splits a stored status into the state and, for a failure, the
+// reason it carries.
+func parseTaskStatus(stored string) (TaskStatus, string) {
+	stored = strings.TrimSpace(stored)
+	if stored == "" {
+		return TaskIdle, ""
+	}
+	if reason, ok := strings.CutPrefix(stored, failedStatusPrefix); ok {
+		return TaskFailed, strings.TrimSpace(reason)
+	}
+	return TaskStatus(stored), ""
+}
+
+// encodeTaskStatus is the inverse for the one state that carries a reason.
+func encodeTaskStatus(status TaskStatus, reason string) string {
+	reason = strings.TrimSpace(reason)
+	if status != TaskFailed || reason == "" {
+		return string(status)
+	}
+	return failedStatusPrefix + reason
+}
 
 // PanelState is everything the two panels read. It is built from the database
 // and the task table on each render, never cached in the Supervisor, so the
@@ -30,6 +62,7 @@ type PanelState struct {
 	ModelOrCombo       string
 	TaskStatus         TaskStatus
 	PendingApproval    string
+	FailureReason      string
 	LastAction         string
 	CurrentInstruction string
 	AutoApprove        bool
@@ -132,6 +165,13 @@ func renderAgentPanel(s PanelState) (string, models.ReplyMarkup) {
 	switch {
 	case status == TaskPendingApproval && s.PendingApproval != "":
 		fmt.Fprintf(&b, "Pendiente: <code>%s</code>\n", esc(s.PendingApproval))
+	case status == TaskFailed && s.FailureReason != "":
+		// A failure names the instruction it lost and the cause, so the operator
+		// reads why instead of a bare state they cannot act on.
+		if s.CurrentInstruction != "" {
+			fmt.Fprintf(&b, "Tarea: %s\n", esc(truncate(s.CurrentInstruction, 80)))
+		}
+		fmt.Fprintf(&b, "Motivo: %s\n", esc(truncate(s.FailureReason, 160)))
 	case s.CurrentInstruction != "":
 		// A task the operator already submitted stays visible while it runs, so
 		// the panel answers "what is it doing" before "what should I type".
@@ -184,6 +224,8 @@ func taskStatusLabel(s TaskStatus) string {
 		return "Rechazada"
 	case TaskDone:
 		return "Completada"
+	case TaskFailed:
+		return "Fallida"
 	default:
 		return "Inactivo"
 	}

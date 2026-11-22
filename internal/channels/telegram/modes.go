@@ -28,17 +28,18 @@ func (s *Supervisor) panelState(chatID int64) PanelState {
 	}
 
 	if task, err := s.repo.GetTelegramAgentTask(chatID); err == nil {
-		state.TaskStatus = TaskStatus(task.Status)
-		if state.TaskStatus == TaskPendingApproval {
+		status, reason := parseTaskStatus(task.Status)
+		state.TaskStatus = status
+		switch status {
+		case TaskPendingApproval:
 			state.PendingApproval = task.Instruction
-		}
-		// A task under supervision keeps its instruction on the panel while it
-		// runs, which is what the operator is watching for.
-		if state.TaskStatus == TaskRunning {
+		case TaskRunning:
+			// A task under supervision keeps its instruction on the panel while it
+			// runs, which is what the operator is watching for.
 			state.CurrentInstruction = task.Instruction
-		}
-		if state.TaskStatus == "" {
-			state.TaskStatus = TaskIdle
+		case TaskFailed:
+			state.CurrentInstruction = task.Instruction
+			state.FailureReason = reason
 		}
 	}
 
@@ -229,15 +230,30 @@ func (s *Supervisor) resolveTask(ctx context.Context, bot *tgbot.Bot, chatID int
 		return
 	}
 
-	current := TaskStatus(task.Status)
-	if current == "" {
-		current = TaskIdle
-	}
+	current, _ := parseTaskStatus(task.Status)
 	if !taskTransitionAllowed(current, target) {
 		s.send(ctx, bot, chatID, fmt.Sprintf(
 			"No puedo hacer eso: la tarea está en %s.", taskStatusLabel(current)))
 		s.updatePanel(ctx, bot, chatID)
 		return
+	}
+
+	// S1/S3: approving is what hands the instruction to the development session,
+	// and it is the only thing that does. The status is written after the spool
+	// accepted the order, so a submit that failed can never leave the panel
+	// claiming progress that is not happening.
+	if target == TaskRunning {
+		if err := s.submitOrder(task.Instruction); err != nil {
+			s.recordFailedTask(ctx, bot, chatID, task.Instruction, err)
+			return
+		}
+	}
+
+	// S4: a cancelled task may already be queued in the session, so the caveat
+	// travels with the cancellation instead of leaving the operator believing
+	// the instruction was recalled.
+	if target == TaskCancelled && current == TaskRunning {
+		note = cancelRunningNote
 	}
 
 	if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, string(target)); err != nil {
@@ -249,7 +265,10 @@ func (s *Supervisor) resolveTask(ctx context.Context, bot *tgbot.Bot, chatID int
 	s.updatePanel(ctx, bot, chatID)
 }
 
-// taskTransitionAllowed is the state machine for the panel controls.
+// cancelRunningNote is what cancelling an already-submitted task says.
+const cancelRunningNote = "Tarea cancelada. La orden puede estar ya en la cola de la sesión de desarrollo."
+
+// taskTransitionAllowed is the state machine for the task's states.
 func taskTransitionAllowed(from, to TaskStatus) bool {
 	switch to {
 	case TaskRunning:
@@ -260,6 +279,12 @@ func taskTransitionAllowed(from, to TaskStatus) bool {
 		// un-approve it.
 		return from == TaskPendingApproval
 	case TaskCancelled:
+		return from == TaskPendingApproval || from == TaskRunning
+	case TaskFailed:
+		// S3: failure is the recorded outcome of a submit the spool refused, or
+		// of a session reporting back. Both are reachable from the states a task
+		// can be submitted from, and neither is offered as a button: an operator
+		// does not fail a task, it fails on its own.
 		return from == TaskPendingApproval || from == TaskRunning
 	default:
 		return false
@@ -285,21 +310,21 @@ func (s *Supervisor) panelMessage(chatID int64) int {
 
 // taskStatusText reports the task state in detail, for the "Estado / Paso"
 // button. It reads the task rather than the cached panel state so the answer
-// cannot lag behind it.
+// cannot lag behind it, and it names the reason a failed task carries.
 func (s *Supervisor) taskStatusText(chatID int64) string {
 	task, err := s.repo.GetTelegramAgentTask(chatID)
 	if err != nil {
 		s.setError(err)
 		return "No pude leer la tarea."
 	}
-	status := TaskStatus(task.Status)
-	if status == "" {
-		status = TaskIdle
-	}
+	status, reason := parseTaskStatus(task.Status)
 
 	lines := []string{"Estado: " + taskStatusLabel(status)}
 	if task.Instruction != "" {
 		lines = append(lines, "Instrucción: "+task.Instruction)
+	}
+	if reason != "" {
+		lines = append(lines, "Motivo: "+reason)
 	}
 	if task.UpdatedAt != "" {
 		lines = append(lines, "Actualizada: "+task.UpdatedAt)

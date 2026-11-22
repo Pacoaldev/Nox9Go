@@ -189,6 +189,13 @@ func TestTaskTransitionAllowed(t *testing.T) {
 		{TaskIdle, TaskRunning, false},
 		{TaskIdle, TaskCancelled, false},
 		{TaskDone, TaskRunning, false},
+		// S3: a task that failed never claims progress, and failure is only
+		// reachable from the two states a task can be submitted from.
+		{TaskPendingApproval, TaskFailed, true},
+		{TaskRunning, TaskFailed, true},
+		{TaskIdle, TaskFailed, false},
+		{TaskCancelled, TaskFailed, false},
+		{TaskDone, TaskFailed, false},
 	}
 
 	for _, tt := range tests {
