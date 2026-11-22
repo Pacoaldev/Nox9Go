@@ -29,6 +29,10 @@ type DashboardHandler struct {
 	// is optional: a handler built outside a boot (tests, tooling) has none, and
 	// the live usage fields then read zero rather than being invented.
 	Limiter *middleware.RateLimiter
+	// ReconcileTelegramChannel re-evaluates the Telegram poll loop after a
+	// settings change. It is optional: a handler built outside a boot has none,
+	// and a save then takes effect on the next start.
+	ReconcileTelegramChannel func()
 }
 
 // NewDashboardHandler initializes a DashboardHandler with the provided Repo.

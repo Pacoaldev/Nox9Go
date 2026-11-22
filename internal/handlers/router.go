@@ -231,6 +231,13 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 	// Compression Analytics
 	r.Get("/api/analytics/compression", dashH.HandleGetCompressionAnalytics)
 
+	// Telegram channel settings. The allowlist is edited here and only here:
+	// there is no /allow command on the bot, so authorization is a deliberate
+	// dashboard action and never a message a stranger can send.
+	r.Get("/api/channels/telegram", dashH.HandleGetTelegramChannel)
+	r.Put("/api/channels/telegram/token", dashH.HandleSetTelegramToken)
+	r.Put("/api/channels/telegram/allowlist", dashH.HandleSetTelegramAllowlist)
+
 	// Top-bar and semaphore status snapshot
 	r.Get("/api/dashboard/status", dashH.HandleStatus)
 	// The alert bell's detail list. It lives here as well as in
