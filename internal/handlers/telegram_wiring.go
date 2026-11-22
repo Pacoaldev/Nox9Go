@@ -20,6 +20,30 @@ type TelegramRuntime struct {
 	sup *telegram.Supervisor
 }
 
+// telegramHolder carries the process's runtime from the boot site to the
+// router, which is built earlier and cannot receive it as a parameter without
+// threading it through every provider. A save before the first start lands on
+// a nil runtime and simply takes effect at the next reconcile.
+var telegramHolder struct {
+	mu  sync.Mutex
+	rt  *TelegramRuntime
+}
+
+// SetTelegramRuntime publishes the runtime the OnStart hook created.
+func SetTelegramRuntime(rt *TelegramRuntime) {
+	telegramHolder.mu.Lock()
+	telegramHolder.rt = rt
+	telegramHolder.mu.Unlock()
+}
+
+// SharedTelegramRuntime returns the published runtime, or nil before the first
+// start.
+func SharedTelegramRuntime() *TelegramRuntime {
+	telegramHolder.mu.Lock()
+	defer telegramHolder.mu.Unlock()
+	return telegramHolder.rt
+}
+
 // startTelegramChannel wires and starts the channel for a booted gateway.
 //
 // It is a no-op when the channel is not configured: no token or no allowlist
@@ -50,6 +74,7 @@ func StartTelegramChannel(ctx context.Context, repo *db.Repo, selfURL string) *T
 	sup.SetGateway(selfURL, auth.CLIToken())
 
 	rt.sup = sup
+	SetTelegramRuntime(rt)
 	sup.Reconcile(ctx)
 	return rt
 }

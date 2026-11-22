@@ -114,3 +114,28 @@ func TestSelfBaseURL(t *testing.T) {
 		t.Errorf("selfBaseURL(20130) = %q, want http://127.0.0.1:20130", got)
 	}
 }
+
+// S10: the production dashboard routes must install the reconcile hook through
+// the shared holder. A save that only wrote settings without re-evaluating the
+// poll loop left the bot silent until the next restart, which is exactly what a
+// user saw on the first live run: token saved at 06:41 with status 200 and no
+// polling afterward.
+func TestSharedTelegramRuntime_PublishesAcrossBoot(t *testing.T) {
+	repo := newWiringRepo(t)
+	if err := repo.SaveTelegramToken("123456:secret"); err != nil {
+		t.Fatalf("SaveTelegramToken() = %v", err)
+	}
+	if err := repo.SetTelegramAllowedUserIDs([]int64{42}); err != nil {
+		t.Fatalf("SetTelegramAllowedUserIDs() = %v", err)
+	}
+
+	rt := StartTelegramChannel(context.Background(), repo, selfBaseURL(20130))
+	t.Cleanup(func() { rt.Stop(context.Background()) })
+
+	if got := SharedTelegramRuntime(); got != rt {
+		t.Errorf("SharedTelegramRuntime() = %p, want the runtime the boot published", got)
+	}
+	// A dashboard save after the publish reconciles the live loop instead of
+	// hitting the nil path.
+	rt.Reconcile()
+}

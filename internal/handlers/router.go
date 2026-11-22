@@ -655,7 +655,10 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 		// API key, or the local CLI token — same policy as the rest of the
 		// dashboard group.
 		r.Get("/api/changelog", engineChatH.HandleChangelog)
-		SetupDashboardRoutes(r, repo, engineChatH)
+		// The Telegram runtime hook must live on the production table: a save
+		// that only wrote settings would otherwise leave the poll loop
+		// unevaluated until the next process restart.
+		SetupDashboardRoutesWithTelegram(r, repo, engineChatH, SharedTelegramRuntime())
 	})
 
 	// CLI Tools status is a dashboard read: the SPA calls it with the session
