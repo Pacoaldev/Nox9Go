@@ -157,6 +157,14 @@ func ProvideServer(p ServerParams) *http.Server {
 
 			fmt.Fprintf(os.Stdout, "\n  🚀 nox9go Proxy (%s) on %s\n\n", updater.CurrentVersion, addr)
 			log.Printf("Server is ready to handle requests at %s", addr)
+
+			// The Telegram poll loop talks to this same listener, so it starts
+			// after ListenAndServe: a loop started earlier would spend its first
+			// turns dialing a port nothing is bound to yet.
+			if p.Repo != nil {
+				telegramRt = handlers.StartTelegramChannel(shutdown.Context(), p.Repo,
+					fmt.Sprintf("http://127.0.0.1:%d", p.Config.Port))
+			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
