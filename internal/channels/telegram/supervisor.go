@@ -70,6 +70,16 @@ type Repo interface {
 	// The model chosen with /model.
 	TelegramChannelModel() (string, error)
 	SetTelegramChannelModel(model string) error
+	// The mode a chat's free text is interpreted under: chat forwards it as a
+	// conversation, agent records it as a task the panel supervises.
+	TelegramMode() (db.BotMode, error)
+	SetTelegramMode(mode db.BotMode) error
+	// The task an agent-mode chat is supervising, and whether this chat skips
+	// the approval step.
+	GetTelegramAgentTask(chatID int64) (*db.TelegramAgentTask, error)
+	SetTelegramAgentTask(chatID int64, instruction, status string) error
+	TelegramAutoApprove(chatID int64) (bool, error)
+	SetTelegramAutoApprove(chatID int64, on bool) error
 
 	// The channel's own client API key, issued on first use. A turn carries it
 	// as Bearer because the engine's chat route guards itself with RequireApiKey,
@@ -126,6 +136,10 @@ type Supervisor struct {
 	// running (S7). A chat has at most one: a second message while one is in
 	// flight is handled after the first returns, not concurrently.
 	inFlight map[int64]context.CancelFunc
+	// panels holds the message id of each chat's mode panel (S4). Editing that
+	// message is what makes a mode switch change the panel instead of stacking
+	// a second one.
+	panels   map[int64]int
 	done     chan struct{}
 	status   Status
 	username string

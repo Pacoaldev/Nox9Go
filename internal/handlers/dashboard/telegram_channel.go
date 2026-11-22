@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"nox9go/proxy/internal/config"
+	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/devstatus"
 	"strings"
 	"time"
@@ -33,9 +34,13 @@ type telegramStatus struct {
 	TokenMasked    string  `json:"tokenMasked"`
 	AllowedUserIDs []int64 `json:"allowedUserIds"`
 	Model          string  `json:"model"`
-	State          string  `json:"state"`
-	BotUsername    string  `json:"botUsername"`
-	LastError      string  `json:"lastError"`
+	// Mode is the behaviour free text is interpreted under: chat forwards it as
+	// a conversation, agent records it as a supervised task. The dashboard shows
+	// it so the operator can see which one the bot is in.
+	Mode        string `json:"mode"`
+	State       string `json:"state"`
+	BotUsername string `json:"botUsername"`
+	LastError   string `json:"lastError"`
 }
 
 // TelegramLiveStatus is the source of the live channel state. Optional: a
@@ -60,6 +65,11 @@ func (h *DashboardHandler) HandleGetTelegramChannel(w http.ResponseWriter, r *ht
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	mode, err := h.Repo.TelegramMode()
+	if err != nil {
+		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	status := telegramStatus{
 		Enabled:        cfg.Enabled,
@@ -67,6 +77,7 @@ func (h *DashboardHandler) HandleGetTelegramChannel(w http.ResponseWriter, r *ht
 		TokenMasked:    cfg.TokenMasked,
 		AllowedUserIDs: cfg.AllowedUserIDs,
 		Model:          model,
+		Mode:           string(mode),
 		State:          "disabled",
 	}
 	if !cfg.TokenPresent {
@@ -134,6 +145,28 @@ func (h *DashboardHandler) HandleSetTelegramToken(w http.ResponseWriter, r *http
 //
 // An empty list is accepted and means "authorize nobody", which keeps the poll
 // loop stopped. Refusing an empty list would leave no way to revoke everyone.
+func (h *DashboardHandler) HandleSetTelegramMode(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	if err := decodeTelegramBody(r, &req); err != nil {
+		handlerutil.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if db.ParseBotMode(req.Mode) == db.ModeAgent && strings.TrimSpace(strings.ToLower(req.Mode)) != "agent" {
+		// A value that is not agent reads as chat, but a request that named
+		// something else is a client bug: say so instead of guessing.
+		handlerutil.WriteJSONError(w, http.StatusBadRequest, "mode must be \"chat\" or \"agent\"")
+		return
+	}
+
+	if err := h.Repo.SetTelegramMode(db.ParseBotMode(req.Mode)); err != nil {
+		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.HandleGetTelegramChannel(w, r)
+}
+
 func (h *DashboardHandler) HandleSetTelegramAllowlist(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		UserIDs []int64 `json:"userIds"`

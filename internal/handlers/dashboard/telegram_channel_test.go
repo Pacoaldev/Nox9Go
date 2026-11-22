@@ -322,3 +322,33 @@ func writeAt(t *testing.T, dir, name, content string) {
 		t.Fatalf("write: %v", err)
 	}
 }
+
+// S10: the dashboard names the active mode, so the operator can see which
+// behaviour free text gets without opening the bot.
+func TestTelegramChannel_ModeReported(t *testing.T) {
+	h := NewDashboardHandler(newTelegramDashboardRepo(t))
+
+	// Defaults to chat.
+	if got := getTelegramStatus(t, h); got.Mode != "chat" {
+		t.Errorf("default mode = %q, want chat", got.Mode)
+	}
+
+	putMode := func(body string) {
+		rec := httptest.NewRecorder()
+		h.HandleSetTelegramMode(rec, httptest.NewRequest(http.MethodPut,
+			"/api/channels/telegram/mode", strings.NewReader(body)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("mode save status = %d", rec.Code)
+		}
+	}
+
+	putMode(`{"mode":"agent"}`)
+	if got := getTelegramStatus(t, h); got.Mode != "agent" {
+		t.Errorf("mode = %q after setting agent, want agent", got.Mode)
+	}
+
+	putMode(`{"mode":"chat"}`)
+	if got := getTelegramStatus(t, h); got.Mode != "chat" {
+		t.Errorf("mode = %q after setting chat, want chat", got.Mode)
+	}
+}

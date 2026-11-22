@@ -25,6 +25,10 @@ var telegramChannelTables = []tableDef{
 			{"tokenWrappedDEK", "TEXT NOT NULL DEFAULT ''"},
 			{"tokenCiphertext", "TEXT NOT NULL DEFAULT ''"},
 			{"defaultModel", "TEXT NOT NULL DEFAULT ''"},
+			// mode selects how free text is interpreted: '' and 'chat' mean
+			// conversation, 'agent' means a task instruction. It defaults to
+			// empty so an existing row reads as chat without a migration.
+			{"mode", "TEXT NOT NULL DEFAULT ''"},
 			{"apiKeyWrappedDEK", "TEXT NOT NULL DEFAULT ''"},
 			{"apiKeyCiphertext", "TEXT NOT NULL DEFAULT ''"},
 			{"updatedAt", "TEXT NOT NULL DEFAULT ''"},
@@ -79,7 +83,8 @@ func EnsureTelegramChannelTables(db *sql.DB) error {
 	if db == nil {
 		return fmt.Errorf("telegram channel tables: nil db")
 	}
-	for _, t := range telegramChannelTables {
+	for _, t := range append(append(telegramChannelTables,
+		telegramAgentTaskTables...), telegramChatSettingTables...) {
 		if err := ensureTable(db, t); err != nil {
 			return err
 		}

@@ -109,7 +109,52 @@ func (s *Supervisor) handleMessage(ctx context.Context, bot *tgbot.Bot, msg *mod
 		return
 	}
 
+	// S5: the mode decides what free text means. In agent mode the words are an
+	// instruction, not a conversation turn, so they never reach the chat route.
+	if mode, err := s.repo.TelegramMode(); err != nil {
+		s.setError(err)
+	} else if mode == db.ModeAgent {
+		s.handleAgentInstruction(ctx, bot, chatID, msg.Text)
+		return
+	}
+
 	s.handleChat(ctx, bot, msg, chatID)
+}
+
+// handleAgentInstruction records free text as the chat's task (S5).
+//
+// A task starts pending approval unless this chat turned auto-approve on, so
+// the operator decides before anything runs. The panel is redrawn in place: the
+// instruction and its buttons appear on the message they already have, instead
+// of a second panel stacking below it.
+func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot, chatID int64, text string) {
+	instruction := strings.TrimSpace(text)
+	if instruction == "" {
+		return
+	}
+
+	auto, err := s.repo.TelegramAutoApprove(chatID)
+	if err != nil {
+		s.setError(err)
+	}
+
+	status := string(TaskPendingApproval)
+	if auto {
+		status = string(TaskRunning)
+	}
+	if err := s.repo.SetTelegramAgentTask(chatID, instruction, status); err != nil {
+		s.setError(err)
+		s.send(ctx, bot, chatID, "No pude registrar la tarea.")
+		return
+	}
+
+	switch TaskStatus(status) {
+	case TaskPendingApproval:
+		s.send(ctx, bot, chatID, "Tarea registrada. Espera tu aprobación.")
+	case TaskRunning:
+		s.send(ctx, bot, chatID, "Tarea registrada y en ejecución.")
+	}
+	s.updatePanel(ctx, bot, chatID)
 }
 
 // handleChat forwards free text through the chat's active session.
@@ -224,6 +269,8 @@ func (s *Supervisor) handleCommand(ctx context.Context, bot *tgbot.Bot, chatID i
 		s.cmdCancel(ctx, bot, chatID)
 	case "estado", "avance", "dev":
 		s.cmdDevStatus(ctx, bot, chatID, args)
+	case "panel", "modo", "mode":
+		s.cmdPanel(ctx, bot, chatID)
 	default:
 		s.send(ctx, bot, chatID, "Comando desconocido. /help para ver la lista.")
 	}

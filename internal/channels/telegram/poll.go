@@ -132,10 +132,16 @@ func (s *Supervisor) handleUpdate(ctx context.Context, bot *tgbot.Bot, update *m
 	if update == nil {
 		return
 	}
+	// An inline button press carries its own authorization: the same gate
+	// decides, and handleCallbackQuery applies it before acting.
+	if update.CallbackQuery != nil {
+		s.handleCallbackQuery(ctx, bot, update.CallbackQuery)
+		return
+	}
+
 	msg := update.Message
 	if msg == nil || msg.From == nil {
-		// Edits, channel posts and callback queries are outside the text
-		// contract this channel promises.
+		// Edits and channel posts carry nothing this channel acts on.
 		return
 	}
 

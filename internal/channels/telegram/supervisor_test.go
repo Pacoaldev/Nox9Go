@@ -33,11 +33,54 @@ type fakeRepo struct {
 
 	// inboxPath, when set, points DevInbox at a real throwaway file.
 	inboxPath string
+	// mode is the channel mode the fake reports; empty reads as chat.
+	mode db.BotMode
+	// task is the agent task this chat is supervising, and autoApprove its
+	// skip-the-approval preference.
+	task        db.TelegramAgentTask
+	autoApprove bool
 }
 
 func (f *fakeRepo) TelegramToken() (string, error) { return f.token, nil }
 
 func (f *fakeRepo) TelegramChannelModel() (string, error) { return f.model, nil }
+
+func (f *fakeRepo) TelegramMode() (db.BotMode, error) {
+	if f.mode == "" {
+		return db.ModeChat, nil
+	}
+	return f.mode, nil
+}
+
+func (f *fakeRepo) SetTelegramMode(mode db.BotMode) error {
+	f.mode = mode
+	return nil
+}
+
+func (f *fakeRepo) GetTelegramAgentTask(chatID int64) (*db.TelegramAgentTask, error) {
+	task := f.task
+	task.ChatID = chatID
+	if task.Status == "" {
+		task.Status = "idle"
+	}
+	return &task, nil
+}
+
+func (f *fakeRepo) SetTelegramAgentTask(chatID int64, instruction, status string) error {
+	f.task = db.TelegramAgentTask{
+		ChatID:      chatID,
+		Instruction: instruction,
+		Status:      status,
+	}
+	return nil
+}
+
+func (f *fakeRepo) TelegramAutoApprove(chatID int64) (bool, error) { return f.autoApprove, nil }
+
+func (f *fakeRepo) SetTelegramAutoApprove(chatID int64, on bool) error {
+	f.autoApprove = on
+	return nil
+}
 
 func (f *fakeRepo) SetTelegramChannelModel(m string) error { f.model = m; return nil }
 
