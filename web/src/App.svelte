@@ -22,6 +22,7 @@
   import MediaKindView from './components/media/MediaKindView.svelte'
   import MediaProviderDetail from './components/media/MediaProviderDetail.svelte'
   import ProxyPoolsView from './components/ProxyPoolsView.svelte'
+  import ChannelsView from './views/ChannelsView.svelte'
   import ProfileSettingsView from './components/ProfileSettingsView.svelte'
   import MediaWebView from './components/media/MediaWebView.svelte'
   import QuotaTrackerView from './components/QuotaTrackerView.svelte'
@@ -601,6 +602,8 @@
                   onSelectProvider={(kind, id) => navigateMediaProvider(kind, id)}
                 />
               {/if}
+            {:else if activeTab === 'channels'}
+              <ChannelsView />
             {:else if activeTab === 'proxy-pools'}
               <ProxyPoolsView />
             {:else if activeTab === 'skills'}

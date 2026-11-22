@@ -15,6 +15,7 @@ import (
 
 	"nox9go/proxy/internal/config"
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/handlers"
 	"nox9go/proxy/internal/handlers/chat"
 	"nox9go/proxy/internal/providers"
 	"nox9go/proxy/internal/proxy/executor"
@@ -55,6 +56,8 @@ type ServerParams struct {
 	// its own in-memory LRU, so the dashboard would report zero entries while
 	// the engine served hits.
 	ChatHandler *chat.ChatHandler `optional:"true"`
+
+
 }
 
 // Server timeouts are fixed rather than configurable on purpose: the values
@@ -79,6 +82,12 @@ const (
 
 // ProvideServer creates *http.Server and registers lifecycle hooks.
 func ProvideServer(p ServerParams) *http.Server {
+	// The Telegram runtime lives in this closure rather than in ServerParams.
+	// fx.In resolves every field before this function runs, so a field written
+	// here would be demanded from the graph on the way in. A local variable is
+	// shared by the two hooks below, which is all the ownership this needs.
+	var telegramRt *handlers.TelegramRuntime
+
 	var addr string
 	if p.Config.Host != "" {
 		addr = net.JoinHostPort(p.Config.Host, strconv.Itoa(p.Config.Port))
@@ -148,6 +157,14 @@ func ProvideServer(p ServerParams) *http.Server {
 
 			fmt.Fprintf(os.Stdout, "\n  🚀 nox9go Proxy (%s) on %s\n\n", updater.CurrentVersion, addr)
 			log.Printf("Server is ready to handle requests at %s", addr)
+
+			// The Telegram poll loop talks to this same listener, so it starts
+			// after ListenAndServe: a loop started earlier would spend its first
+			// turns dialing a port nothing is bound to yet.
+			if p.Repo != nil {
+				telegramRt = handlers.StartTelegramChannel(shutdown.Context(), p.Repo,
+					fmt.Sprintf("http://127.0.0.1:%d", p.Config.Port))
+			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -157,6 +174,12 @@ func ProvideServer(p ServerParams) *http.Server {
 			// upstream body, handlers emit a final [DONE], and Shutdown completes well
 			// within its deadline instead of waiting out the full timeout.
 			shutdown.Cancel()
+			// Stop the poll loop before the listener goes away: a loop still
+			// running would keep calling Telegram, and its forwards would fail
+			// against a server that is no longer accepting.
+			if telegramRt != nil {
+				telegramRt.Stop(context.Background())
+			}
 
 			// Refuse NEW keep-alive reuse immediately: idle browser/dashboard
 			// connections otherwise hold Shutdown for the full deadline even

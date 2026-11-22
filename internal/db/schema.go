@@ -636,6 +636,9 @@ func EnsureCoreSchema(db *sql.DB) error {
 	if err := EnsureProviderCapacityTables(db); err != nil {
 		return err
 	}
+	if err := EnsureTelegramChannelTables(db); err != nil {
+		return err
+	}
 	if err := EnsureThoughtSignatureTables(db); err != nil {
 		return err
 	}

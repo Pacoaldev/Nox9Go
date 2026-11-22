@@ -174,11 +174,28 @@ func SetupRoutes(r interface {
 // browser session, a valid API key or the local CLI token through when login is
 // enabled (upstream dashboardGuard).
 func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) {
+	SetupDashboardRoutesWithTelegram(r, repo, chatH, nil)
+}
+
+// SetupDashboardRoutesWithTelegram is SetupDashboardRoutes plus the Telegram
+// channel's runtime hook, so a dashboard save restarts the poll loop without a
+// process restart. The plain entry point passes nil and leaves the channel to
+// start on the next boot.
+func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler, tg *TelegramRuntime) {
 	var ts *TokenSaverConfig
 	if chatH != nil {
 		ts = chatH.TokenSaver
 	}
 	dashH := dashboard.NewDashboardHandler(repo, ts)
+	if chatH != nil {
+		dashH.ChatHandler = chatH
+	}
+	if tg != nil {
+		dashH.ReconcileTelegramChannel = tg.Reconcile
+	}
+	// Live status is resolved per request: the runtime does not exist yet when
+	// the routes mount, so capturing it here would freeze nil.
+	dashH.TelegramLiveStatus = sharedTelegramStatus{}
 	if chatH != nil {
 		dashH.SemanticCache = chatH.SemanticCache
 		// The engine's handler holds the limiter the data plane meters provider
@@ -230,6 +247,14 @@ func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) 
 
 	// Compression Analytics
 	r.Get("/api/analytics/compression", dashH.HandleGetCompressionAnalytics)
+
+	// Telegram channel settings. The allowlist is edited here and only here:
+	// there is no /allow command on the bot, so authorization is a deliberate
+	// dashboard action and never a message a stranger can send.
+	r.Get("/api/channels/telegram", dashH.HandleGetTelegramChannel)
+	r.Get("/api/channels/telegram/models", dashH.HandleTelegramModels)
+	r.Put("/api/channels/telegram/token", dashH.HandleSetTelegramToken)
+	r.Put("/api/channels/telegram/allowlist", dashH.HandleSetTelegramAllowlist)
 
 	// Top-bar and semaphore status snapshot
 	r.Get("/api/dashboard/status", dashH.HandleStatus)
@@ -637,7 +662,10 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 		// API key, or the local CLI token — same policy as the rest of the
 		// dashboard group.
 		r.Get("/api/changelog", engineChatH.HandleChangelog)
-		SetupDashboardRoutes(r, repo, engineChatH)
+		// The Telegram runtime hook must live on the production table: a save
+		// that only wrote settings would otherwise leave the poll loop
+		// unevaluated until the next process restart.
+		SetupDashboardRoutesWithTelegram(r, repo, engineChatH, SharedTelegramRuntime())
 	})
 
 	// CLI Tools status is a dashboard read: the SPA calls it with the session

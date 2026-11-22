@@ -96,6 +96,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { kind: 'link', id: 'media-web', label: 'Web Fetch & Search', icon: 'travel_explore' },
         ],
       },
+      { kind: 'link', id: 'channels', label: 'Channels', icon: 'forum' },
       { kind: 'link', id: 'proxy-pools', label: 'Proxy Pools', icon: 'lan' },
       { kind: 'link', id: 'skills', label: 'Skills', icon: 'extension' },
       { kind: 'link', id: 'console-log', label: 'Console Log', icon: 'terminal' },

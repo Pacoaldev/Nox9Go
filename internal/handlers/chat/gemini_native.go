@@ -117,7 +117,7 @@ type openAIOutTool struct {
 // HandleGeminiModelsList answers GET /v1beta/models in the Gemini list format.
 func (h *ChatHandler) HandleGeminiModelsList(w http.ResponseWriter, r *http.Request) {
 	setGeminiCORS(w)
-	result := h.buildModelsListResult(r.Context(), modeListConnected)
+	result := h.BuildModelsListResult(r.Context(), ModeListConnected)
 	type geminiModel struct {
 		Name                       string   `json:"name"`
 		DisplayName                string   `json:"displayName"`

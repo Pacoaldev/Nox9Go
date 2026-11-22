@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/handlers/chat"
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/middleware"
 	"nox9go/proxy/internal/observ"
@@ -29,6 +30,20 @@ type DashboardHandler struct {
 	// is optional: a handler built outside a boot (tests, tooling) has none, and
 	// the live usage fields then read zero rather than being invented.
 	Limiter *middleware.RateLimiter
+	// ReconcileTelegramChannel re-evaluates the Telegram poll loop after a
+	// settings change. It is optional: a handler built outside a boot has none,
+	// and a save then takes effect on the next start.
+	ReconcileTelegramChannel func()
+	// TelegramLiveStatus reports the poll loop's live state for the read
+	// endpoint. Optional: tests and tooling have none and the read then falls
+	// back to the stored configuration.
+	TelegramLiveStatus interface {
+		Status() (state, botUsername, lastError string)
+	}
+	// ChatHandler is the engine's handler, used to list the models the gateway
+	// can dispatch for the bot's /model command. Optional: tests have none and
+	// the endpoint then reports the unavailability instead of failing.
+	ChatHandler *chat.ChatHandler
 }
 
 // NewDashboardHandler initializes a DashboardHandler with the provided Repo.

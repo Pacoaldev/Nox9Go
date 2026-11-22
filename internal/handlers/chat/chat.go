@@ -520,18 +520,18 @@ func (h *ChatHandler) HandleTriggerUpdate(w http.ResponseWriter, r *http.Request
 }
 
 // modelsListModeFromQuery reads the listing scope from the request. Absent
-// params keep the upstream default (modeListAll) so existing clients are
+// params keep the upstream default (ModeListAll) so existing clients are
 // unaffected: `?connected=1` narrows to usable providers, `?all=1` forces the
 // full catalog.
 func modelsListModeFromQuery(r *http.Request) ModelsListMode {
 	q := r.URL.Query()
 	if queryFlagEnabled(q.Get("connected")) {
-		return modeListConnected
+		return ModeListConnected
 	}
 	if queryFlagEnabled(q.Get("all")) {
-		return modeListCatalog
+		return ModeListCatalog
 	}
-	return modeListAll
+	return ModeListAll
 }
 
 // queryFlagEnabled treats an explicit "1"/"true" as on, matching the loose
@@ -559,7 +559,7 @@ func queryFlagEnabled(v string) bool {
 // candidate catalog from a usable model list.
 func (h *ChatHandler) HandleModels(w http.ResponseWriter, r *http.Request) {
 	mode := modelsListModeFromQuery(r)
-	result := h.buildModelsListResult(r.Context(), mode)
+	result := h.BuildModelsListResult(r.Context(), mode)
 	visible, err := h.filterModelsByAccess(requestKey(r), result.Models)
 	if err != nil {
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
@@ -789,7 +789,7 @@ func (h *ChatHandler) findModelForLookup(ctx context.Context, modelID string) (M
 	if m, ok := findModelByID(h.buildModelsList(ctx), modelID); ok {
 		return m, true
 	}
-	return findModelByID(h.buildModelsListResult(ctx, modeListConnected).Models, modelID)
+	return findModelByID(h.BuildModelsListResult(ctx, ModeListConnected).Models, modelID)
 }
 
 // findModelByID scans the published list for an exact provider/model id.
