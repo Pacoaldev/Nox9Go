@@ -221,14 +221,8 @@ func (s *Supervisor) cmdModel(ctx context.Context, bot *tgbot.Bot, chatID int64,
 		if current != "" {
 			s.send(ctx, bot, chatID, "Modelo actual: "+current)
 		}
-		baseURL, _ := s.gateway()
-		apiKey, err := s.repo.EnsureTelegramAPIKey()
-		if err != nil {
-			s.setError(err)
-			s.send(ctx, bot, chatID, "No pude emitir la clave del canal.")
-			return
-		}
-		ids, err := fetchModelIDs(ctx, baseURL, apiKey)
+		baseURL, cliToken := s.gateway()
+		ids, err := fetchModelIDs(ctx, baseURL, cliToken)
 		if err != nil || len(ids) == 0 {
 			s.send(ctx, bot, chatID, "No pude listar los modelos. Usá /model <id> con un id que conozcas.")
 			return

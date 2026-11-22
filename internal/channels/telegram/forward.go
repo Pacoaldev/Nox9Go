@@ -160,11 +160,16 @@ func parseCommand(text string) (cmd, args string, isCommand bool) {
 	return name, strings.TrimSpace(rest), true
 }
 
-// fetchModelIDs reads the model catalog from this instance's own /v1/models
-// route, so /model offers what this deployment can actually dispatch instead of
-// a hardcoded list that goes stale the moment a connection is added.
+// fetchModelIDs reads the model catalog from this instance's own
+// /api/channels/telegram/models route, so /model offers what this deployment can
+// actually dispatch instead of a hardcoded list that goes stale the moment a
+// connection is added.
+//
+// The route is a dashboard route, so it takes the CLI token, and it answers a
+// plain {"models": [...]} list because it builds the list through the engine
+// rather than through the OpenAI wire shape.
 func fetchModelIDs(ctx context.Context, baseURL, cliToken string) ([]string, error) {
-	url := strings.TrimRight(baseURL, "/") + "/v1/models"
+	url := strings.TrimRight(baseURL, "/") + "/api/channels/telegram/models"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("telegram: build models request: %w", err)
@@ -181,18 +186,15 @@ func fetchModelIDs(ctx context.Context, baseURL, cliToken string) ([]string, err
 	}
 
 	var out struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
+		Models []string `json:"models"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("telegram: decode models: %w", err)
 	}
-
-	ids := make([]string, 0, len(out.Data))
-	for _, m := range out.Data {
-		if m.ID != "" {
-			ids = append(ids, m.ID)
+	ids := make([]string, 0, len(out.Models))
+	for _, id := range out.Models {
+		if id != "" {
+			ids = append(ids, id)
 		}
 	}
 	return ids, nil
