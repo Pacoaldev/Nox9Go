@@ -11,6 +11,10 @@ func openTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("open in-memory sqlite: %v", err)
 	}
+	// In-memory SQLite belongs to the connection that created it: a second
+	// pooled connection would query an empty database and report "no such
+	// table" at random.
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 	if err := EnsureQuotaState(db); err != nil {
 		t.Fatalf("ensure schema: %v", err)

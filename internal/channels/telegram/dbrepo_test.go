@@ -18,6 +18,10 @@ func newRealRepo(t *testing.T) *db.Repo {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
+	// In-memory SQLite belongs to the connection that created it: a second
+	// pooled connection would query an empty database and report "no such
+	// table" at random.
+	database.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = database.Close() })
 	if err := db.EnsureTelegramChannelTables(database); err != nil {
 		t.Fatalf("EnsureTelegramChannelTables() = %v", err)

@@ -15,6 +15,10 @@ func setupTestSQLite(t *testing.T) (*sql.DB, func()) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	// In-memory SQLite belongs to the connection that created it: a second
+	// pooled connection would query an empty database and report "no such
+	// table" at random.
+	db.SetMaxOpenConns(1)
 
 	createSQL := `
 CREATE TABLE IF NOT EXISTS semanticCacheEntries (

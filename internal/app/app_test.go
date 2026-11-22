@@ -9,16 +9,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nox9go/proxy/internal/app"
-	"nox9go/proxy/internal/config"
-	"nox9go/proxy/internal/db"
-	"nox9go/proxy/internal/handlers"
-	"nox9go/proxy/internal/shutdown"
 	"github.com/go-chi/chi/v5"
 	"github.com/spf13/viper"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/fx"
 	_ "modernc.org/sqlite"
+	"nox9go/proxy/internal/app"
+	"nox9go/proxy/internal/config"
+	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/handlers"
+	"nox9go/proxy/internal/shutdown"
 )
 
 func TestAppModule_Validate(t *testing.T) {
@@ -347,6 +347,10 @@ func TestProvideTokenSaverConfig_EnvOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open in-memory db: %v", err)
 	}
+	// In-memory SQLite belongs to the connection that created it: a second
+	// pooled connection would query an empty database and report "no such
+	// table" at random.
+	database.SetMaxOpenConns(1)
 	defer database.Close()
 	repo := db.NewRepo(database)
 	tsc := app.ProvideTokenSaverConfig(repo, params)
