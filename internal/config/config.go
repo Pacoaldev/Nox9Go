@@ -141,10 +141,22 @@ func dirHasDatabase(dir string) bool {
 	return false
 }
 
+// envFileName is the config file the server loads. It is a named constant so
+// the resolution helpers and their tests cannot drift on the spelling.
+const envFileName = ".env"
+
 // dataDirFromEnvFile reads DATA_DIR out of the .env next to the binary or in
 // the working directory. Viper owns the file format, so this reuses it rather
 // than hand-parsing KEY=VALUE and drifting from what the server accepted.
 func dataDirFromEnvFile() string {
+	return envFileValue("DATA_DIR")
+}
+
+// envFileValue reads one key out of the first env file found, next to the
+// binary or in the working directory. Viper owns the file format, so this
+// reuses it rather than hand-parsing KEY=VALUE and drifting from what the
+// server accepted.
+func envFileValue(key string) string {
 	for _, path := range envFileCandidates() {
 		if _, err := os.Stat(path); err != nil {
 			continue
@@ -155,12 +167,40 @@ func dataDirFromEnvFile() string {
 		if err := v.ReadInConfig(); err != nil {
 			continue
 		}
-		if dir := strings.TrimSpace(v.GetString("DATA_DIR")); dir != "" {
-			return dir
+		if value := strings.TrimSpace(v.GetString(key)); value != "" {
+			return value
 		}
 	}
 	return ""
 }
+
+// devValue resolves one of the development report's settings: the process
+// environment first, then the env file the server loads.
+//
+// Reading only os.Getenv was a defect with a visible symptom. Viper reads the
+// env file into itself, so a value placed there is never in the process
+// environment, and the report answered "no checkout configured" while the
+// checkout sat in the config the server had already read. ResolveDataDir hit
+// the same trap and was fixed the same way; these three settings now answer
+// the question the same way DATA_DIR does.
+func devValue(key string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return envFileValue(key)
+}
+
+// DevRepoRoot is the checkout the development report reads. Empty means the
+// report is off, and the panel says how to enable it instead of guessing.
+func DevRepoRoot() string { return devValue("DEV_REPO_ROOT") }
+
+// DevFeature is the ODD document the report follows. Empty means the first
+// feature found is used.
+func DevFeature() string { return devValue("DEV_FEATURE") }
+
+// DevSpoolPath is the notification spool the report can read. Empty means the
+// default location under the data dir.
+func DevSpoolPath() string { return devValue("DEV_SPOOL_PATH") }
 
 // envFileCandidates lists the .env locations the server itself reads: the one
 // in the working directory, then the one beside the executable so a daemon

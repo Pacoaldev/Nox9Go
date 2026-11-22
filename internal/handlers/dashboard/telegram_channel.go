@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"nox9go/proxy/internal/config"
 	"nox9go/proxy/internal/devstatus"
-	"os"
 	"strings"
 	"time"
 
@@ -218,18 +218,18 @@ func (h *DashboardHandler) HandleTelegramModels(w http.ResponseWriter, r *http.R
 // package, so the two cannot drift: an operator who checks the dashboard and an
 // operator who checks the phone are reading one answer with two renderings.
 func (h *DashboardHandler) HandleDevStatus(w http.ResponseWriter, r *http.Request) {
-	root := strings.TrimSpace(os.Getenv("DEV_REPO_ROOT"))
+	root := config.DevRepoRoot()
 	if root == "" {
 		handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 			"configured": false,
-			"message":    "Set DEV_REPO_ROOT to a checkout to enable the development report.",
+			"message":    "Set DEV_REPO_ROOT in the gateway's environment or env file to enable the development report.",
 		})
 		return
 	}
 
 	feature := strings.TrimSpace(r.URL.Query().Get("feature"))
 	if feature == "" {
-		feature = strings.TrimSpace(os.Getenv("DEV_FEATURE"))
+		feature = config.DevFeature()
 	}
 
 	snap := devstatus.Repo{Root: root}.Take(r.Context(), feature)

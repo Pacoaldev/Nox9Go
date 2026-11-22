@@ -164,6 +164,61 @@ ADHD_ENABLED=true
 	}
 }
 
+// The development report's checkout is resolved the same way DATA_DIR is: the
+// process environment first, then the env file the server itself loads.
+// Reading only os.Getenv left a file-configured deployment with an empty panel
+// while the value sat in the config the server had already read.
+func TestDevRootFromDotEnv(t *testing.T) {
+	tempDir := t.TempDir()
+	repo := filepath.Join(tempDir, "checkout")
+	envContent := "DEV_REPO_ROOT=" + repo + "\nDEV_FEATURE=telegram-channel\n"
+	if err := os.WriteFile(filepath.Join(tempDir, envFileName), []byte(envContent), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Chdir(tempDir)
+	t.Setenv("DEV_REPO_ROOT", "")
+	t.Setenv("DEV_FEATURE", "")
+
+	if got := DevRepoRoot(); got != repo {
+		t.Errorf("DevRepoRoot() = %q, want %q from the file", got, repo)
+	}
+	if got := DevFeature(); got != "telegram-channel" {
+		t.Errorf("DevFeature() = %q, want %q from the file", got, "telegram-channel")
+	}
+}
+
+// The process environment wins over the file, so a one-off override works
+// without editing the deployment's config.
+func TestDevRootEnvWinsOverDotEnv(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, envFileName), []byte("DEV_REPO_ROOT=/from/file\n"), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Chdir(tempDir)
+	t.Setenv("DEV_REPO_ROOT", "/from/env")
+
+	if got := DevRepoRoot(); got != "/from/env" {
+		t.Errorf("DevRepoRoot() = %q, want the environment value", got)
+	}
+}
+
+// An unset value stays empty rather than guessing a directory: the panel
+// explains how to enable itself instead of reporting on an arbitrary checkout.
+func TestDevRootUnset(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("DEV_REPO_ROOT", "")
+	t.Setenv("DEV_SPOOL_PATH", "")
+
+	if got := DevRepoRoot(); got != "" {
+		t.Errorf("DevRepoRoot() = %q, want empty with nothing configured", got)
+	}
+	if got := DevSpoolPath(); got != "" {
+		t.Errorf("DevSpoolPath() = %q, want empty with nothing configured", got)
+	}
+}
+
 func TestEnvPrecedenceOverDotEnv(t *testing.T) {
 	tempDir := t.TempDir()
 	envContent := `PORT=20140
