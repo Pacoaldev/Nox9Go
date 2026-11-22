@@ -24,7 +24,7 @@ const (
 	dockChatEnd      = "🔒 Cerrar sesión"
 	dockChatToAgent  = "🤖 Cambiar a Modo Agente"
 
-	dockAgentOrder    = "⚡ Orden a Pi"
+	dockAgentTask     = "📋 Tarea actual"
 	dockAgentDev      = "📊 Estado dev"
 	dockAgentFeature  = "🎯 Feature ODD"
 	dockAgentSessions = "🗂️ Ver sesiones"
@@ -34,8 +34,7 @@ const (
 // Text the dock answers with when a button has nothing to run (L0b). Both name
 // the command that does the job, so a button never explains nothing.
 const (
-	dockOrderGuidance = "Mandá tu orden en texto libre (en Modo Agente) o usá /pi <orden>."
-	featureGuidance   = "Usá /estado <feature> para consultar una feature ODD concreta."
+	featureGuidance = "Usá /estado <feature> para consultar una feature ODD concreta."
 )
 
 // Input field placeholders, one per mode (S1): the field itself says what to
@@ -58,7 +57,7 @@ const (
 	dockActStatus
 	dockActCancel
 	dockActEnd
-	dockActOrder
+	dockActTask
 	dockActDev
 	dockActFeatures
 	dockActToAgent
@@ -78,7 +77,7 @@ var dockActions = map[string]dockAction{
 	dockCancel:        dockActCancel,
 	dockChatEnd:       dockActEnd,
 	dockChatToAgent:   dockActToAgent,
-	dockAgentOrder:    dockActOrder,
+	dockAgentTask:     dockActTask,
 	dockAgentDev:      dockActDev,
 	dockAgentFeature:  dockActFeatures,
 	dockAgentSessions: dockActSessions,
@@ -89,7 +88,7 @@ var dockActions = map[string]dockAction{
 	"🗂️ Historial sesiones":      dockActSessions,
 	"🔒 Cerrar y archivar sesion": dockActEnd,
 	"🤖 Cambiar a Panel Agente":   dockActToAgent,
-	"⚡ Enviar orden a Pi":        dockActOrder,
+	"⚡ Orden a Pi":               dockActTask,
 	"📊 Estado desarrollo":        dockActDev,
 	"💬 Cambiar a Panel Chat":     dockActToChat,
 	"Cancelar":                   dockActCancel,
@@ -100,7 +99,7 @@ var dockActions = map[string]dockAction{
 func dockRows(mode db.BotMode) [][]string {
 	if mode == db.ModeAgent {
 		return [][]string{
-			{dockAgentOrder},
+			{dockAgentTask},
 			{dockAgentDev, dockAgentFeature},
 			{dockStatus, dockCancel},
 			{dockAgentSessions},
@@ -206,11 +205,11 @@ func (s *Supervisor) handleDock(ctx context.Context, bot *tgbot.Bot, chatID int6
 		s.cmdCancel(ctx, bot, chatID)
 	case dockActStatus:
 		s.cmdStatus(ctx, bot, chatID)
-	case dockActOrder:
-		// L0b: guidance only. The order itself is free text in agent mode or
-		// /pi, so the button teaches those two paths instead of inventing a
-		// third one that would have to reach a provider.
-		s.send(ctx, bot, chatID, dockOrderGuidance)
+	case dockActTask:
+		// The task panel already reports state and reason; the button just
+		// opens it, so the operator can check on the work without sending
+		// anything to the development session.
+		s.showTaskPanel(ctx, bot, chatID)
 	case dockActDev:
 		s.cmdDevStatus(ctx, bot, chatID, "")
 	case dockActModels:
@@ -237,4 +236,12 @@ func (s *Supervisor) switchMode(ctx context.Context, bot *tgbot.Bot, chatID int6
 		return
 	}
 	s.updatePanel(ctx, bot, chatID)
+}
+
+// showTaskPanel is what 📋 Tarea actual does: it reports the chat's task state
+// and reason without submitting anything, so checking on the work never sends
+// an order by accident.
+func (s *Supervisor) showTaskPanel(ctx context.Context, bot *tgbot.Bot, chatID int64) {
+	s.send(ctx, bot, chatID, s.taskStatusText(chatID))
+	s.sendDock(ctx, bot, chatID)
 }
