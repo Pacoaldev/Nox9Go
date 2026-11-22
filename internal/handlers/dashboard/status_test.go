@@ -11,6 +11,44 @@ import (
 	"nox9go/proxy/internal/db"
 )
 
+type stubTelegramLiveStatus struct {
+	state string
+}
+
+func (s stubTelegramLiveStatus) Status() (string, string, string) {
+	return s.state, "", ""
+}
+
+func TestHandleStatusTelegramState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state string
+		want  string
+	}{
+		{name: "reports live state", state: "running", want: "running"},
+		{name: "empty live state falls back to disabled", state: "", want: "disabled"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewDashboardHandler(nil)
+			h.TelegramLiveStatus = stubTelegramLiveStatus{state: tt.state}
+			rec := httptest.NewRecorder()
+			h.HandleStatus(rec, httptest.NewRequest(http.MethodGet, "/api/dashboard/status", nil))
+
+			var payload struct {
+				Telegram map[string]any `json:"telegram"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			if got := payload.Telegram["state"]; got != tt.want {
+				t.Errorf("telegram.state = %v, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestHandleStatus(t *testing.T) {
 	database, cleanup := setupTestDB(t)
 	defer cleanup()
