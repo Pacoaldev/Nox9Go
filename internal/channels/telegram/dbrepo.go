@@ -33,5 +33,11 @@ func (r *DBRepo) GetTelegramChannelConfig() (*Config, error) {
 	}, nil
 }
 
+// EnsureTelegramAPIKey issues the channel's client API key through the shared
+// vault when it does not exist yet.
+func (r *DBRepo) EnsureTelegramAPIKey() (string, error) {
+	return r.Repo.EnsureTelegramAPIKey()
+}
+
 // compile-time proof the adapter satisfies the interface the supervisor uses.
 var _ Repo = (*DBRepo)(nil)

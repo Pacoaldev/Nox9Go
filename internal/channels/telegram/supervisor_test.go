@@ -41,6 +41,8 @@ func (f *fakeRepo) TelegramTranscript(int64, int) ([]db.TelegramTranscriptMessag
 	return nil, nil
 }
 
+func (f *fakeRepo) EnsureTelegramAPIKey() (string, error) { return "sk-fake", nil }
+
 func (f *fakeRepo) GetTelegramChannelConfig() (*Config, error) {
 	return &Config{
 		Enabled:        f.token != "" && len(f.allowed) > 0,

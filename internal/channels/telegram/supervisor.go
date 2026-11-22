@@ -68,6 +68,11 @@ type Repo interface {
 	// The model chosen with /model.
 	TelegramChannelModel() (string, error)
 	SetTelegramChannelModel(model string) error
+
+	// The channel's own client API key, issued on first use. A turn carries it
+	// as Bearer because the engine's chat route guards itself with RequireApiKey,
+	// which the CLI token does not satisfy.
+	EnsureTelegramAPIKey() (string, error)
 }
 
 // Status is the supervisor's snapshot.

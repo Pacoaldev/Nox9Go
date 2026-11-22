@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"nox9go/proxy/internal/vault"
 )
 
@@ -23,6 +25,8 @@ var telegramChannelTables = []tableDef{
 			{"tokenWrappedDEK", "TEXT NOT NULL DEFAULT ''"},
 			{"tokenCiphertext", "TEXT NOT NULL DEFAULT ''"},
 			{"defaultModel", "TEXT NOT NULL DEFAULT ''"},
+			{"apiKeyWrappedDEK", "TEXT NOT NULL DEFAULT ''"},
+			{"apiKeyCiphertext", "TEXT NOT NULL DEFAULT ''"},
 			{"updatedAt", "TEXT NOT NULL DEFAULT ''"},
 		},
 	},
@@ -202,6 +206,78 @@ func (r *Repo) SaveTelegramToken(token string) error {
 		return fmt.Errorf("save telegram token: %w", err)
 	}
 	return nil
+}
+
+// TelegramAPIKey returns the channel's own client API key, the credential its
+// turns carry to the gateway engine. An empty result means none was issued yet.
+func (r *Repo) TelegramAPIKey() (string, error) {
+	v := r.Vault()
+	if v == nil || !v.Enabled() {
+		return "", fmt.Errorf("telegram api key: %w", vault.ErrDisabled)
+	}
+	var wrapped, ciphertext string
+	err := r.db.QueryRow(
+		`SELECT apiKeyWrappedDEK, apiKeyCiphertext FROM telegramChannel WHERE id = 1`,
+	).Scan(&wrapped, &ciphertext)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read telegram api key: %w", err)
+	}
+	if ciphertext == "" {
+		return "", nil
+	}
+	key, err := v.Open(wrapped, ciphertext)
+	if err != nil {
+		return "", fmt.Errorf("open telegram api key: %w", err)
+	}
+	return key, nil
+}
+
+// EnsureTelegramAPIKey returns the channel's client API key, issuing one on the
+// first call. The key never reaches disk in clear: it is sealed with the same
+// vault as the bot token. It is named after the channel in the apiKeys table so
+// the operator can see and revoke it there.
+func (r *Repo) EnsureTelegramAPIKey() (string, error) {
+	if key, err := r.TelegramAPIKey(); err == nil && key != "" {
+		return key, nil
+	}
+
+	plaintext := "sk-" + strings.ReplaceAll(uuid.New().String(), "-", "")
+	v := r.Vault()
+	if v == nil || !v.Enabled() {
+		return "", fmt.Errorf("ensure telegram api key: %w", vault.ErrDisabled)
+	}
+	wrapped, ciphertext, err := v.Seal(plaintext)
+	if err != nil {
+		return "", fmt.Errorf("ensure telegram api key: seal: %w", err)
+	}
+
+	// The telegramChannel row is updated first: it is the source of truth for
+	// "this key exists". The apiKeys insert is OR IGNORE because the key id is
+	// fixed, so a retry after a partial failure must not abort on the unique
+	// constraint — the row's key may have been revealed or rotated separately
+	// and that stored value keeps working through Open above anyway.
+	if _, err := r.db.Exec(
+		`INSERT INTO telegramChannel (id, apiKeyWrappedDEK, apiKeyCiphertext)
+		 VALUES (1, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET
+		   apiKeyWrappedDEK = excluded.apiKeyWrappedDEK,
+		   apiKeyCiphertext = excluded.apiKeyCiphertext`,
+		wrapped, ciphertext,
+	); err != nil {
+		return "", fmt.Errorf("ensure telegram api key: store: %w", err)
+	}
+	if _, err := r.db.Exec(
+		`INSERT INTO apiKeys (id, key, name, machineId, isActive, createdAt)
+		 VALUES (?, ?, 'telegram-channel', '', 1, datetime('now'))
+		 ON CONFLICT(id) DO UPDATE SET key = excluded.key, isActive = 1`,
+		"telegram-channel", plaintext,
+	); err != nil {
+		return "", fmt.Errorf("ensure telegram api key: insert: %w", err)
+	}
+	return plaintext, nil
 }
 
 // ClearTelegramToken removes the stored token. The allowlist is left intact: it

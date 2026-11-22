@@ -103,12 +103,14 @@ func TestForwardText_SendsChatCompletion(t *testing.T) {
 	_ = repo
 }
 
-// S4: the gateway is authenticated with the CLI token, never anonymously. An
-// unauthenticated call would be rejected by the gateway's own guard.
-func TestForwardText_SendsCLIToken(t *testing.T) {
+// S4: the gateway is authenticated with the channel's own client API key, never
+// anonymously. An unauthenticated call would be rejected by the engine's
+// RequireApiKey guard; a CLI token would be too, because the chat route is a
+// client route.
+func TestForwardText_SendsBearerAPIKey(t *testing.T) {
 	var header string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		header = r.Header.Get("x-9r-cli-token")
+		header = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
 	}))
@@ -117,8 +119,8 @@ func TestForwardText_SendsCLIToken(t *testing.T) {
 	if _, err := forwardText(context.Background(), srv.URL, "the-cli-token", "m", []chatMessage{{Role: "user", Content: "hi"}}); err != nil {
 		t.Fatalf("forwardText() error = %v", err)
 	}
-	if header != "the-cli-token" {
-		t.Errorf("x-9r-cli-token = %q, want the configured token", header)
+	if header != "Bearer the-cli-token" {
+		t.Errorf("Authorization = %q, want the channel key as Bearer", header)
 	}
 }
 

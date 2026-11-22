@@ -30,6 +30,10 @@ var gatewayClient = &http.Client{Timeout: 5 * time.Minute}
 // forwardText sends a completion request to the instance's own
 // /v1/chat/completions route and returns the assistant text.
 //
+// The credential is the channel's own client API key, not the CLI token: the
+// engine's chat route guards itself with RequireApiKey, which the CLI token
+// does not satisfy.
+//
 // The call goes through the gateway rather than to a provider directly, so combo
 // expansion, failover, strike handling, quota accounting and usage history all
 // apply to a Telegram turn exactly as they do to an API client.
@@ -49,9 +53,9 @@ func forwardText(ctx context.Context, baseURL, cliToken, model string, messages 
 		return "", fmt.Errorf("telegram: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// The dashboard/CLI token identifies this process to its own gateway. It is
+	// The channel's own API key identifies these turns to the engine. It is
 	// never sent anywhere else: the URL is the local listener.
-	req.Header.Set("x-9r-cli-token", cliToken)
+	req.Header.Set("Authorization", "Bearer "+cliToken)
 
 	resp, err := gatewayClient.Do(req)
 	if err != nil {

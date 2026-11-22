@@ -87,8 +87,14 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 		messages = append(messages, chatMessage{Role: m.Role, Content: m.Content})
 	}
 
-	baseURL, cliToken := s.gateway()
-	reply, err := forwardText(ctx, baseURL, cliToken, model, messages)
+	baseURL, _ := s.gateway()
+	apiKey, err := s.repo.EnsureTelegramAPIKey()
+	if err != nil {
+		s.setError(err)
+		s.send(ctx, bot, chatID, "No pude emitir la clave del canal.")
+		return
+	}
+	reply, err := forwardText(ctx, baseURL, apiKey, model, messages)
 	if err != nil {
 		// The failure is reported to the user because a silent turn looks like
 		// the bot is broken, and the cause is usually a model or provider choice
@@ -215,8 +221,14 @@ func (s *Supervisor) cmdModel(ctx context.Context, bot *tgbot.Bot, chatID int64,
 		if current != "" {
 			s.send(ctx, bot, chatID, "Modelo actual: "+current)
 		}
-		baseURL, cliToken := s.gateway()
-		ids, err := fetchModelIDs(ctx, baseURL, cliToken)
+		baseURL, _ := s.gateway()
+		apiKey, err := s.repo.EnsureTelegramAPIKey()
+		if err != nil {
+			s.setError(err)
+			s.send(ctx, bot, chatID, "No pude emitir la clave del canal.")
+			return
+		}
+		ids, err := fetchModelIDs(ctx, baseURL, apiKey)
 		if err != nil || len(ids) == 0 {
 			s.send(ctx, bot, chatID, "No pude listar los modelos. Usá /model <id> con un id que conozcas.")
 			return

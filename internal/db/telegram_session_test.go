@@ -1,6 +1,11 @@
 package db
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"nox9go/proxy/internal/vault"
+)
 
 // S5: a chat starts with no session. That is the "idle" state the handler uses
 // to avoid spending tokens on stray input.
@@ -170,5 +175,61 @@ func TestTelegramChannelModel_DoesNotEnableChannel(t *testing.T) {
 	}
 	if cfg.Enabled {
 		t.Errorf("Enabled = true with a model but no token, want false")
+	}
+}
+
+// S4: the channel's client API key is issued once and reused, and it is stored
+// sealed like the bot token. A second call must return the same key, not issue
+// a second row that would look like two identities in the usage history.
+func TestTelegramAPIKey_IssuedOnce(t *testing.T) {
+	database := openTelegramTestDB(t)
+	key := make([]byte, vault.KeySize)
+	for i := range key {
+		key[i] = byte(i + 21)
+	}
+	v, err := vault.New(key)
+	if err != nil {
+		t.Fatalf("vault.New() = %v", err)
+	}
+	// The apiKeys table backs EnsureTelegramAPIKey's listing, so the test
+	// creates it inline: dbtest would be an import cycle from this package.
+	if _, err := database.Exec(`CREATE TABLE apiKeys (
+		id TEXT PRIMARY KEY,
+		key TEXT NOT NULL,
+		name TEXT,
+		machineId TEXT,
+		isActive INTEGER NOT NULL DEFAULT 1,
+		createdAt TEXT NOT NULL
+	)`); err != nil {
+		t.Fatalf("create apiKeys: %v", err)
+	}
+	repo := NewRepo(database)
+	repo.SetVault(v)
+
+	first, err := repo.EnsureTelegramAPIKey()
+	if err != nil {
+		t.Fatalf("EnsureTelegramAPIKey() error = %v", err)
+	}
+	if len(first) < 20 {
+		t.Errorf("key = %q, want a sk- style key", first)
+	}
+
+	second, err := repo.EnsureTelegramAPIKey()
+	if err != nil {
+		t.Fatalf("EnsureTelegramAPIKey() second call = %v", err)
+	}
+	if second != first {
+		t.Errorf("second EnsureTelegramAPIKey() = a different key, want the same one")
+	}
+
+	// Sealed at rest: the plaintext must not be readable through a raw query.
+	var stored string
+	if err := repo.RawDB().QueryRow(
+		`SELECT apiKeyCiphertext FROM telegramChannel WHERE id = 1`,
+	).Scan(&stored); err != nil {
+		t.Fatalf("read ciphertext: %v", err)
+	}
+	if stored == first || strings.Contains(stored, "sk-") {
+		t.Errorf("the api key is stored in clear text")
 	}
 }
