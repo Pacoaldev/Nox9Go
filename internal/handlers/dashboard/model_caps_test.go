@@ -395,4 +395,3 @@ func TestHandleGetModelCaps_UnknownProviderIs404(t *testing.T) {
 		t.Fatalf("unknown provider: status = %d, want 404", code)
 	}
 }
-

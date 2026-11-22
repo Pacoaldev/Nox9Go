@@ -1,12 +1,12 @@
 package db
 
 import (
-	"nox9go/proxy/internal/models"
 	"context"
 	"database/sql"
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"nox9go/proxy/internal/models"
 	"slices"
 	"time"
 )

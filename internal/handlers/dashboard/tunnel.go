@@ -48,7 +48,6 @@ var (
 	}
 )
 
-
 // findTailscaleBin searches for the tailscale executable across PATH and well-known locations.
 func findTailscaleBin() string {
 	if p, err := exec.LookPath("tailscale"); err == nil {
@@ -197,8 +196,8 @@ func (h *DashboardHandler) HandleTunnelEnable(w http.ResponseWriter, r *http.Req
 	}
 
 	_ = h.Repo.UpdateSettingsRaw(map[string]any{
-		"tunnelEnabled":  true,
-		"tunnelUrl":      res.TunnelURL,
+		"tunnelEnabled":   true,
+		"tunnelUrl":       res.TunnelURL,
 		"tunnelPublicUrl": res.PublicURL,
 	})
 
@@ -215,8 +214,8 @@ func (h *DashboardHandler) HandleTunnelDisable(w http.ResponseWriter, r *http.Re
 	port := config.LoadConfig().Port
 	cloudflareDisable(port)
 	_ = h.Repo.UpdateSettingsRaw(map[string]any{
-		"tunnelEnabled":  false,
-		"tunnelUrl":      "",
+		"tunnelEnabled":   false,
+		"tunnelUrl":       "",
 		"tunnelPublicUrl": "",
 	})
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})

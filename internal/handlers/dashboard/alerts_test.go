@@ -30,8 +30,8 @@ type alertEntry struct {
 
 // alertsPayload mirrors the wire shape of GET /api/dashboard/alerts.
 type alertsPayload struct {
-	Alerts      []alertEntry `json:"alerts"`
-	Counts      struct {
+	Alerts []alertEntry `json:"alerts"`
+	Counts struct {
 		Total        int `json:"total"`
 		Locked       int `json:"locked"`
 		Errored      int `json:"errored"`

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/semanticcache"
 	"nox9go/proxy/internal/translator"
-	"github.com/go-chi/chi/v5"
 )
 
 func TestHandleGetCache(t *testing.T) {

@@ -1,8 +1,8 @@
 package db
 
 import (
-	json "encoding/json/v2"
 	"database/sql"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"time"

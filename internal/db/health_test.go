@@ -147,4 +147,3 @@ func TestIsProviderAvailable_Repo(t *testing.T) {
 		t.Error("expected available=false when locked")
 	}
 }
-

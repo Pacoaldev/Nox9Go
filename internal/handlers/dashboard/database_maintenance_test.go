@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"nox9go/proxy/internal/db"
 	json "encoding/json/v2"
+	"nox9go/proxy/internal/db"
 )
 
 func TestHandleDatabaseMaintenance(t *testing.T) {

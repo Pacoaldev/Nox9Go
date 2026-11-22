@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	json "encoding/json/v2"
 	"nox9go/proxy/internal/handlerutil"
 	"nox9go/proxy/internal/tokensaver"
-	json "encoding/json/v2"
 )
 
 // TestRTKRequest represents the request body for POST /api/tokensaver/rtk/test.

@@ -1,9 +1,9 @@
 package dashboard
 
 import (
+	json "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
-	json "encoding/json/v2"
 	"path/filepath"
 	"testing"
 	"time"

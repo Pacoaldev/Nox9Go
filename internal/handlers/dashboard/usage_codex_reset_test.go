@@ -3,11 +3,11 @@ package dashboard
 import (
 	"io"
 
-	"nox9go/proxy/internal/db"
 	"bytes"
 	json "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
+	"nox9go/proxy/internal/db"
 	"testing"
 
 	"nox9go/proxy/internal/auth"
