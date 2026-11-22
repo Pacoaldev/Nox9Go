@@ -820,3 +820,93 @@ func TestCancelledTurn_LeavesNoAssistantRow(t *testing.T) {
 		t.Errorf("the user message is missing from the transcript: %v", appended)
 	}
 }
+
+// Regression: ReplyMarkup is an interface field, and sending it a
+// pre-marshaled string made the wire carry a quoted JSON string, which the
+// Bot API rejects with "can't parse reply keyboard markup JSON object". That
+// error surfaced on every chat turn because the abort ack precedes the
+// forward, so the operator could not chat at all. The keyboard must travel as
+// a JSON object, and the ack must not be reported as an error when it succeeds.
+func TestSendKeyboard_SendsAJSONObject(t *testing.T) {
+	fake := newFakeTelegram(t)
+	sup := NewSupervisor(&fakeRepo{token: "111:secret", allowed: []int64{42}}, func(int64) bool { return true })
+
+	sup.sendKeyboard(context.Background(), fake.bot(t), 42, "probando")
+
+	markups := fake.replyMarkups()
+	if len(markups) != 1 {
+		t.Fatalf("sent %d markups, want 1", len(markups))
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(markups[0]); err == nil {
+		markups[0] = string(decoded)
+	}
+	if !strings.HasPrefix(markups[0], "{") {
+		t.Errorf("reply_markup traveled as %q, want a JSON object — a quoted string is what the Bot API rejects", markups[0])
+	}
+	if !strings.Contains(markups[0], `"keyboard"`) || !strings.Contains(markups[0], "Cancelar") {
+		t.Errorf("reply_markup = %q, want a keyboard containing Cancelar", markups[0])
+	}
+	if len(fake.messages()) != 1 || fake.messages()[0] != "probando" {
+		t.Errorf("messages = %v, want the ack", fake.messages())
+	}
+	if status := sup.Status(); status.LastError != "" {
+		t.Errorf("a successful send must not record an error: %v", status.LastError)
+	}
+}
+
+// /pi submits an instruction for the development session. The bot writes an
+// `order` event and executes nothing itself; the session drains the inbox and
+// acts. An empty instruction asks for the usage instead of submitting a blank
+// line, and the path from a chat the allowlist does not know is closed by
+// handleUpdate before any command runs.
+func TestCmdPi(t *testing.T) {
+	t.Run("appends the order to the inbox", func(t *testing.T) {
+		fake := newFakeTelegram(t)
+		inbox := filepath.Join(t.TempDir(), "inbox.jsonl")
+		sup := NewSupervisor(&fakeRepo{token: "111:secret", allowed: []int64{42}, inboxPath: inbox}, func(int64) bool { return true })
+
+		usingKeyboard(t, sup, fake, "/pi arregla el test que flaquea")
+
+		data, err := os.ReadFile(inbox)
+		if err != nil {
+			t.Fatalf("the instruction never reached the inbox: %v", err)
+		}
+		var event notify.Event
+		if err := json.Unmarshal(data, &event); err != nil {
+			t.Fatalf("decode event: %v", err)
+		}
+		if event.Kind != notify.KindOrder {
+			t.Errorf("event kind = %q, want order", event.Kind)
+		}
+		if event.Detail != "arregla el test que flaquea" {
+			t.Errorf("event detail = %q, want the instruction verbatim", event.Detail)
+		}
+	})
+
+	t.Run("an empty instruction asks for usage instead of submitting", func(t *testing.T) {
+		fake := newFakeTelegram(t)
+		inbox := filepath.Join(t.TempDir(), "inbox.jsonl")
+		sup := NewSupervisor(&fakeRepo{token: "111:secret", allowed: []int64{42}, inboxPath: inbox}, func(int64) bool { return true })
+
+		usingKeyboard(t, sup, fake, "/pi")
+
+		if _, err := os.Stat(inbox); !os.IsNotExist(err) {
+			t.Errorf("an empty instruction must not write to the inbox")
+		}
+	})
+}
+
+// usingKeyboard is a handleUpdate over a command text; runCommand in the other
+// tests drives handleMessage through a helper whose shape changed with the
+// keyboard path, so /pi is asserted through the same public entry point as a
+// real phone message would use.
+func usingKeyboard(t *testing.T, sup *Supervisor, fake *fakeTelegram, text string) {
+	t.Helper()
+	sup.handleUpdate(context.Background(), fake.bot(t), &models.Update{
+		Message: &models.Message{
+			Text: text,
+			From: &models.User{ID: 42},
+			Chat: models.Chat{ID: 42},
+		},
+	})
+}

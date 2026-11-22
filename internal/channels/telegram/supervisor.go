@@ -86,6 +86,11 @@ type Repo interface {
 	// DevSpool is the development event feed the channel forwards. A spool with
 	// an empty path means no feed is configured.
 	DevSpool() (*notify.Spool, error)
+
+	// DevInbox is the one the operator writes to: /pi submits an instruction
+	// for the development session to act on. Same append/drain model as the
+	// feed, so one event is delivered exactly once.
+	DevInbox() (*notify.Spool, error)
 }
 
 // Status is the supervisor's snapshot.

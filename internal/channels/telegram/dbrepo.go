@@ -66,5 +66,11 @@ func (r *DBRepo) DevSpool() (*notify.Spool, error) {
 	return notify.NewSpool(path), nil
 }
 
+// DevInbox returns the instruction inbox under the data dir by default, so
+// /pi works with no configuration; the env value wins when set.
+func (r *DBRepo) DevInbox() (*notify.Spool, error) {
+	return notify.NewSpool(config.DevInboxPath()), nil
+}
+
 // compile-time proof the adapter satisfies the interface the supervisor uses.
 var _ Repo = (*DBRepo)(nil)

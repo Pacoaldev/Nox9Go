@@ -33,6 +33,9 @@ const (
 	KindBlocker Kind = "blocker"
 	// KindInfo is anything else worth surfacing.
 	KindInfo Kind = "info"
+	// KindOrder is an instruction the operator submitted for the development
+	// session to act on. It flows bot -> file, the reverse of every other kind.
+	KindOrder Kind = "order"
 )
 
 // Event is one line of the spool.
@@ -69,6 +72,8 @@ func (k Kind) Label() string {
 		return "check"
 	case KindBlocker:
 		return "decisión"
+	case KindOrder:
+		return "orden"
 	default:
 		return "info"
 	}

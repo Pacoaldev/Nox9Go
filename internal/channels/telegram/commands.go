@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/go-telegram/bot/models"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/devstatus"
+	"nox9go/proxy/internal/notify"
 )
 
 // send delivers one Telegram message, splitting anything over the platform cap.
@@ -34,14 +34,16 @@ func (s *Supervisor) send(ctx context.Context, bot *tgbot.Bot, chatID int64, tex
 // reachable while the operator reads a long reply, and a press when nothing is
 // in flight gets the same honest nothing-to-cancel answer.
 func (s *Supervisor) sendKeyboard(ctx context.Context, bot *tgbot.Bot, chatID int64, text string) {
-	markup, err := json.Marshal(&models.ReplyKeyboardMarkup{
+	// The library's ReplyMarkup field is an interface; passing the struct lets
+	// it marshal into the JSON object Telegram demands. A pre-marshaled string
+	// was sent as a quoted JSON string and the API rejected it with "can't
+	// parse reply keyboard markup JSON object" — which failed every chat turn,
+	// because this ack precedes the forward. The marshal also served as the
+	// struct-shape check; the compiler now does that job.
+	markup := models.ReplyKeyboardMarkup{
 		Keyboard:       [][]models.KeyboardButton{{{Text: "Cancelar"}}},
 		ResizeKeyboard: true,
 		IsPersistent:   true,
-	})
-	if err != nil {
-		s.send(ctx, bot, chatID, text)
-		return
 	}
 	if _, err := bot.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
@@ -183,6 +185,8 @@ func (s *Supervisor) handleCommand(ctx context.Context, bot *tgbot.Bot, chatID i
 		s.cmdStatus(ctx, bot, chatID)
 	case "model":
 		s.cmdModel(ctx, bot, chatID, args)
+	case "pi":
+		s.cmdPi(ctx, bot, chatID, args)
 	case "cancel":
 		s.cmdCancel(ctx, bot, chatID)
 	case "estado", "avance", "dev":
@@ -313,6 +317,40 @@ func (s *Supervisor) cmdModel(ctx context.Context, bot *tgbot.Bot, chatID int64,
 	s.send(ctx, bot, chatID, "Modelo cambiado a: "+args)
 }
 
+// cmdPi submits an instruction for the development session.
+//
+// It is the one writing direction of this bot: /estado and the feed only show
+// what the session already produced, while /pi hands it an instruction. The
+// delivery contract is the notification spool in reverse — the command appends
+// an `order` event, the session drains it, acts, and reports back through the
+// usual feed, so one line is one instruction and nothing here executes
+// anything itself. The bot runs on the operator's machine behind the
+// allowlist, and this is the operator's standing order machine; a remote
+// stranger gets nothing, because handleUpdate gates every path before this.
+func (s *Supervisor) cmdPi(ctx context.Context, bot *tgbot.Bot, chatID int64, args string) {
+	if strings.TrimSpace(args) == "" {
+		s.send(ctx, bot, chatID, "Decime la orden después del comando: /pi arreglá el test que flaquea.")
+		return
+	}
+
+	inbox, err := s.repo.DevInbox()
+	if err != nil {
+		s.setError(err)
+		s.send(ctx, bot, chatID, "No pude abrir la bandeja de órdenes.")
+		return
+	}
+	if err := inbox.Append(notify.Event{
+		Kind:   notify.KindOrder,
+		Title:  "Orden desde Telegram",
+		Detail: strings.TrimSpace(args),
+	}); err != nil {
+		s.setError(err)
+		s.send(ctx, bot, chatID, "No pude registrar la orden.")
+		return
+	}
+	s.send(ctx, bot, chatID, "Orden registrada. La ejecuta la sesión de desarrollo a la próxima vuelta.")
+}
+
 // cmdCancel aborts the chat's in-flight turn (S7).
 //
 // "Cancelar" (the label a reply-keyboard button shows) is accepted alongside
@@ -365,6 +403,7 @@ func helpText() string {
 		"/model <id> — cambiar el modelo",
 		"/status — estado del canal",
 		"/cancel — cancelar el turno en vuelo",
+		"/pi <orden> — dejar una orden para la sesión de desarrollo",
 		"/estado — avance del desarrollo (commits, pendientes, tareas)",
 		"/estado <feature> — avance de una feature ODD concreta",
 		"/help — esta ayuda",

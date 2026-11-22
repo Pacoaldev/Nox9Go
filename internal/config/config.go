@@ -202,6 +202,16 @@ func DevFeature() string { return devValue("DEV_FEATURE") }
 // default location under the data dir.
 func DevSpoolPath() string { return devValue("DEV_SPOOL_PATH") }
 
+// DevInboxPath is the instruction inbox the Telegram channel writes and the
+// development session reads. It defaults to the data dir, so the channel is
+// usable with no configuration; an explicit env value wins.
+func DevInboxPath() string {
+	if path := devValue("DEV_INBOX_PATH"); path != "" {
+		return path
+	}
+	return filepath.Join(ResolveDataDir(), "dev-inbox.jsonl")
+}
+
 // envFileCandidates lists the .env locations the server itself reads: the one
 // in the working directory, then the one beside the executable so a daemon
 // started from another directory still finds the same config its CLI reports on.
