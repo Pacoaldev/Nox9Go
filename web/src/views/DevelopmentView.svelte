@@ -82,7 +82,9 @@
       <p class="text-text-main">No checkout configured.</p>
       <p class="mt-2">
         Set <code class="rounded bg-surface-3 px-1.5 py-0.5 text-text-main">DEV_REPO_ROOT</code>
-        to a repository path and restart the gateway to see the development report here.
+        <span>to a repository path in the gateway's environment or its</span>
+        <code class="rounded bg-surface-3 px-1.5 py-0.5 text-text-main">.env</code>
+        <span>file, then restart the gateway to see the development report here.</span>
       </p>
     </div>
   {:else if status && status.configured}

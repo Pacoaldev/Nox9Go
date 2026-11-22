@@ -1512,5 +1512,7 @@
   "Last commit": "Último commit",
   "Uncommitted": "Sin commitear",
   "files": "archivos",
-  "Could not read the development report.": "No pude leer el reporte de desarrollo."
+  "Could not read the development report.": "No pude leer el reporte de desarrollo.",
+  "to a repository path in the gateway's environment or its": "a una ruta de repositorio en el entorno del gateway o en su",
+  "file, then restart the gateway to see the development report here.": "archivo, y reiniciá el gateway para ver acá el informe de desarrollo."
 }
