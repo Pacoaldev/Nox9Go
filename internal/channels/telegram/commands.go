@@ -105,6 +105,11 @@ func (s *Supervisor) handleMessage(ctx context.Context, bot *tgbot.Bot, msg *mod
 		return
 	}
 
+	// A photo arrives with an empty Text and its caption in Caption. The
+	// attachment is resolved once here so both modes share the same download
+	// path; a failed download is reported instead of silently dropped.
+	attachment, imgErr := s.imageFromMessage(ctx, bot, msg)
+
 	// The cancel keyboard button arrives as plain text. It is intercepted here
 	// rather than forwarded to a model that was never asked for it; when no
 	// turn is in flight the operator gets the same honest nothing-to-cancel
@@ -123,16 +128,29 @@ func (s *Supervisor) handleMessage(ctx context.Context, bot *tgbot.Bot, msg *mod
 		return
 	}
 
+	// The bot refuses text-only commands for a photo turn: a photo carries no
+	// command surface, and "Cancelar" as a caption would cancel anyway through
+	// the keyboard; falling through keeps the behavior predictable.
+
 	// S5: the mode decides what free text means. In agent mode the words are an
 	// instruction, not a conversation turn, so they never reach the chat route.
 	if mode, err := s.repo.TelegramMode(); err != nil {
 		s.setError(err)
 	} else if mode == db.ModeAgent {
-		s.handleAgentInstruction(ctx, bot, chatID, msg.Text)
+		s.handleAgentInstruction(ctx, bot, chatID, turnText(msg), attachment, imgErr)
 		return
 	}
 
-	s.handleChat(ctx, bot, msg, chatID)
+	s.handleChat(ctx, bot, msg, chatID, attachment, imgErr)
+}
+
+// turnText is the readable text of a message: the caption when an image is
+// attached, the raw text otherwise.
+func turnText(msg *models.Message) string {
+	if len(msg.Photo) > 0 || isImageDocument(msg) {
+		return msg.Caption
+	}
+	return msg.Text
 }
 
 // handleAgentInstruction records free text as the chat's task (S5).
@@ -141,15 +159,32 @@ func (s *Supervisor) handleMessage(ctx context.Context, bot *tgbot.Bot, msg *mod
 // the operator decides before anything runs. The panel is redrawn in place: the
 // instruction and its buttons appear on the message they already have, instead
 // of a second panel stacking below it.
-func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot, chatID int64, text string) {
+func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot, chatID int64, text string, attachment *imageAttachment, imgErr error) {
+	if imgErr != nil {
+		s.setError(imgErr)
+		s.send(ctx, bot, chatID, "No pude leer la imagen: "+imgErr.Error())
+		return
+	}
 	instruction := strings.TrimSpace(text)
-	if instruction == "" {
+	if instruction == "" && attachment == nil {
 		return
 	}
 
 	auto, err := s.repo.TelegramAutoApprove(chatID)
 	if err != nil {
 		s.setError(err)
+	}
+
+	// An attached image is saved under the gateway data dir and referenced by
+	// absolute path, so the development session can open it directly.
+	if attachment != nil {
+		path, err := s.saveAgentAttachment(attachment)
+		if err != nil {
+			s.setError(err)
+			s.send(ctx, bot, chatID, "No pude guardar la imagen.")
+			return
+		}
+		instruction = instruction + "\n[Imagen adjunta: " + path + "]"
 	}
 
 	status := string(TaskPendingApproval)
@@ -183,7 +218,12 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 //
 // S6: a chat with no active session is idle. The text is answered with a hint
 // instead of being forwarded, so stray input never spends a token.
-func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models.Message, chatID int64) {
+func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models.Message, chatID int64, attachment *imageAttachment, imgErr error) {
+	if imgErr != nil {
+		s.setError(imgErr)
+		s.send(ctx, bot, chatID, "No pude leer la imagen: "+imgErr.Error())
+		return
+	}
 	session, err := s.repo.ActiveTelegramSession(chatID)
 	if err != nil {
 		s.setError(err)
@@ -206,7 +246,11 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 		return
 	}
 
-	if err := s.repo.AppendTelegramMessage(session.ID, "user", msg.Text); err != nil {
+	userRow := msg.Text
+	if attachment != nil || len(msg.Photo) > 0 || isImageDocument(msg) {
+		userRow = transcriptImageRow(msg)
+	}
+	if err := s.repo.AppendTelegramMessage(session.ID, "user", userRow); err != nil {
 		s.setError(err)
 		s.send(ctx, bot, chatID, "No pude guardar el mensaje.")
 		return
@@ -220,7 +264,12 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 	}
 	messages := make([]chatMessage, 0, len(transcript))
 	for _, m := range transcript {
-		messages = append(messages, chatMessage{Role: m.Role, Content: m.Content})
+		messages = append(messages, textMessage(m.Role, m.Content))
+	}
+	// The image rides only on the current turn: history stays string-based
+	// (S3), so the just-stored caption row is replaced by the multimodal one.
+	if attachment != nil {
+		messages[len(messages)-1] = userImageMessage(transcriptImageRow(msg), attachment)
 	}
 
 	baseURL, _ := s.gateway()
@@ -555,6 +604,7 @@ func helpText() string {
 		"/estado — avance del desarrollo (commits, pendientes, tareas)",
 		"/estado <feature> — avance de una feature ODD concreta",
 		"/panel — abrir el panel de modo (chat o agente)",
+		"Podés mandar una foto con o sin texto: en chat la lee el modelo, en agente la guarda y la referencia en la tarea.",
 		"/help — esta ayuda",
 	}, "\n")
 }

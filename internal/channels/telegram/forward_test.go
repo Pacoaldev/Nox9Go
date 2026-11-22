@@ -80,9 +80,7 @@ func TestForwardText_SendsChatCompletion(t *testing.T) {
 	srv, got := newTestGateway(t, "hola desde el gateway")
 	repo := &fakeRepo{token: "111:secret", allowed: []int64{42}, model: "test/model"}
 
-	gotReply, err := forwardText(context.Background(), srv.URL, "cli-token", "test/model", []chatMessage{
-		{Role: "user", Content: "hola"},
-	})
+	gotReply, err := forwardText(context.Background(), srv.URL, "cli-token", "test/model", []chatMessage{textMessage("user", "hola")})
 	if err != nil {
 		t.Fatalf("forwardText() error = %v", err)
 	}
@@ -116,7 +114,7 @@ func TestForwardText_SendsBearerAPIKey(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	if _, err := forwardText(context.Background(), srv.URL, "the-cli-token", "m", []chatMessage{{Role: "user", Content: "hi"}}); err != nil {
+	if _, err := forwardText(context.Background(), srv.URL, "the-cli-token", "m", []chatMessage{textMessage("user", "hi")}); err != nil {
 		t.Fatalf("forwardText() error = %v", err)
 	}
 	if header != "Bearer the-cli-token" {
@@ -133,7 +131,7 @@ func TestForwardText_SurfacesUpstreamError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	_, err := forwardText(context.Background(), srv.URL, "t", "m", []chatMessage{{Role: "user", Content: "hi"}})
+	_, err := forwardText(context.Background(), srv.URL, "t", "m", []chatMessage{textMessage("user", "hi")})
 	if err == nil {
 		t.Fatalf("forwardText() error = nil, want an error for HTTP 502")
 	}

@@ -15,10 +15,42 @@ import (
 // reply is split, never truncated.
 const maxTelegramMessage = 4096
 
-// chatMessage is one entry of the OpenAI messages array.
+// chatMessage is one entry of the OpenAI messages array. Content stays raw
+// because a text turn is a JSON string while a turn with an image is an array
+// of typed parts; json.RawMessage carries either shape without re-encoding.
 type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+}
+
+// textMessage builds a plain text turn. It is the shape every existing caller
+// keeps using.
+func textMessage(role, content string) chatMessage {
+	return chatMessage{Role: role, Content: json.RawMessage(mustJSON(content))}
+}
+
+// userImageMessage builds a user turn carrying the caption and, when an image
+// is attached, the OpenAI multimodal part array.	f (attachment == nil) a
+// caption-only string turn is emitted.
+func userImageMessage(caption string, attachment *imageAttachment) chatMessage {
+	if attachment == nil {
+		return textMessage("user", caption)
+	}
+	parts := []map[string]any{{"type": "text", "text": caption}}
+	parts = append(parts, map[string]any{
+		"type": "image_url",
+		"image_url": map[string]string{"url": attachment.dataURL()},
+	})
+	return chatMessage{Role: "user", Content: json.RawMessage(mustJSON(parts))}
+}
+
+// mustJSON is one-shot encoding for values the code itself constructed.
+func mustJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(fmt.Errorf("telegram: encode %T: %w", v, err))
+	}
+	return b
 }
 
 // gatewayClient is the pooled client used for every call to the instance's own

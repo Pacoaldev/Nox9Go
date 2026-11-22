@@ -65,6 +65,9 @@ func newFakeTelegram(t *testing.T) *fakeTelegram {
 			f.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
+		case strings.HasSuffix(r.URL.Path, "/getFile"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"file_id":"photo-large","file_unique_id":"u","file_path":"photos/file_1.jpg"}}`))
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"id":1,"is_bot":true,"first_name":"test","username":"testbot"}}`))
@@ -101,6 +104,8 @@ func (f *fakeTelegram) replyMarkups() []string {
 	defer f.mu.Unlock()
 	return append([]string(nil), f.markups...)
 }
+
+func (f *fakeTelegram) srvURL() string { return f.srv.URL }
 
 func (f *fakeTelegram) messages() []string {
 	f.mu.Lock()
