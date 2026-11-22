@@ -308,6 +308,13 @@ func RecordLoginSuccess(ip string) {
 }
 
 // ResetLoginLimiter drops every login bucket. Tests only.
+//
+// It exists because the buckets are process-global and keyed by client IP, and
+// every httptest request carries the same client IP. A test that fills a bucket
+// therefore poisons whichever test runs next, which under `go test -shuffle=on`
+// surfaced as an unrelated session test reporting "authenticated false": its
+// valid login was answered 429, so no cookie was set. Every test that touches
+// auth resets the limiter first, through authTestEnv.
 func ResetLoginLimiter() {
 	loginMu.Lock()
 	defer loginMu.Unlock()

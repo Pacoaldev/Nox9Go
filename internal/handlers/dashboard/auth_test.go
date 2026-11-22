@@ -21,6 +21,10 @@ func authTestEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("JWT_SECRET", "dashboard-auth-test-secret")
 	t.Setenv("DATA_DIR", t.TempDir())
+	// The login lockout is process-global and keyed by client IP, so a test
+	// that fills a bucket would otherwise poison the next one under
+	// `-shuffle=on`.
+	auth.ResetLoginLimiter()
 }
 
 func storePassword(t *testing.T, repo *db.Repo, password string) {
@@ -421,5 +425,39 @@ func TestEnsureInitialPassword_GeneratesWhenUnset(t *testing.T) {
 	}
 	if len(printed) != 24 {
 		t.Fatalf("expected a 24-character generated password, got %q", printed)
+	}
+}
+
+// The login lockout buckets live in a package-global map keyed by client IP,
+// and every httptest request shares one client IP. Under `go test -shuffle=on`
+// a test that triggers the lockout therefore poisons whichever test runs next:
+// a valid login gets 429, sets no cookie, and the session round trip reports
+// "authenticated false". This pins the isolation the shuffle exposed.
+func TestLoginLockout_DoesNotLeakIntoTheNextTest(t *testing.T) {
+	authTestEnv(t)
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	storePassword(t, repo, "s3cret-pass")
+	h := NewDashboardHandler(repo)
+
+	// Fill the bucket for this client IP until it locks.
+	// Five failures is the documented threshold; it is hardcoded here so the
+	// test fails loudly if the threshold changes instead of adapting to it.
+	for i := 0; i < 5; i++ {
+		postLogin(t, h, "wrong-password")
+	}
+	if rec := postLogin(t, h, "s3cret-pass"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected the lockout to answer 429, got %d", rec.Code)
+	}
+
+	// A fresh test environment must start unlocked, or an unrelated test
+	// inherits this one's failures.
+	authTestEnv(t)
+	rec := postLogin(t, h, "s3cret-pass")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 after a fresh test environment, got %d", rec.Code)
+	}
+	if len(rec.Result().Cookies()) == 0 {
+		t.Errorf("the login issued no session cookie after the lockout was reset")
 	}
 }
