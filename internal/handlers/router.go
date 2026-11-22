@@ -174,11 +174,22 @@ func SetupRoutes(r interface {
 // browser session, a valid API key or the local CLI token through when login is
 // enabled (upstream dashboardGuard).
 func SetupDashboardRoutes(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler) {
+	SetupDashboardRoutesWithTelegram(r, repo, chatH, nil)
+}
+
+// SetupDashboardRoutesWithTelegram is SetupDashboardRoutes plus the Telegram
+// channel's runtime hook, so a dashboard save restarts the poll loop without a
+// process restart. The plain entry point passes nil and leaves the channel to
+// start on the next boot.
+func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.ChatHandler, tg *TelegramRuntime) {
 	var ts *TokenSaverConfig
 	if chatH != nil {
 		ts = chatH.TokenSaver
 	}
 	dashH := dashboard.NewDashboardHandler(repo, ts)
+	if tg != nil {
+		dashH.ReconcileTelegramChannel = tg.Reconcile
+	}
 	if chatH != nil {
 		dashH.SemanticCache = chatH.SemanticCache
 		// The engine's handler holds the limiter the data plane meters provider
