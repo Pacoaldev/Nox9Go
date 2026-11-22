@@ -79,6 +79,98 @@ func TestTelegramSession_Archive(t *testing.T) {
 	}
 }
 
+// S5a: retaking an archived session makes it the chat's open one again, and the
+// session that was open before is archived in the same step. A chat must never
+// end up with two open sessions, exactly as StartTelegramSession guarantees in
+// the other direction.
+func TestTelegramSession_Resume(t *testing.T) {
+	repo := NewRepo(openTelegramTestDB(t))
+
+	first, err := repo.StartTelegramSession(42, "first")
+	if err != nil {
+		t.Fatalf("StartTelegramSession(first) error = %v", err)
+	}
+	second, err := repo.StartTelegramSession(42, "second")
+	if err != nil {
+		t.Fatalf("StartTelegramSession(second) error = %v", err)
+	}
+
+	if err := repo.ResumeTelegramSession(first.ID); err != nil {
+		t.Fatalf("ResumeTelegramSession() error = %v", err)
+	}
+
+	active, err := repo.ActiveTelegramSession(42)
+	if err != nil {
+		t.Fatalf("ActiveTelegramSession() error = %v", err)
+	}
+	if active == nil || active.ID != first.ID {
+		t.Fatalf("ActiveTelegramSession() = %+v, want the resumed session %d", active, first.ID)
+	}
+
+	// The session that was open is archived by the resume, or the chat would
+	// have two rows the transcript query could return.
+	previous, err := repo.TelegramSessionByID(second.ID)
+	if err != nil {
+		t.Fatalf("TelegramSessionByID(previous) error = %v", err)
+	}
+	if previous.ArchivedAt == "" {
+		t.Errorf("previous session ArchivedAt = empty, want it archived by the resume")
+	}
+
+	resumed, err := repo.TelegramSessionByID(first.ID)
+	if err != nil {
+		t.Fatalf("TelegramSessionByID(resumed) error = %v", err)
+	}
+	if resumed.ArchivedAt != "" {
+		t.Errorf("resumed session ArchivedAt = %q, want it cleared", resumed.ArchivedAt)
+	}
+}
+
+// S5a: resuming the session that is already open changes nothing and is not an
+// error — a stale button pressed twice must not fail the chat.
+func TestTelegramSession_ResumeAlreadyActive(t *testing.T) {
+	repo := NewRepo(openTelegramTestDB(t))
+
+	s, err := repo.StartTelegramSession(42, "chat")
+	if err != nil {
+		t.Fatalf("StartTelegramSession() error = %v", err)
+	}
+	if err := repo.ResumeTelegramSession(s.ID); err != nil {
+		t.Fatalf("ResumeTelegramSession(active) error = %v", err)
+	}
+
+	active, err := repo.ActiveTelegramSession(42)
+	if err != nil {
+		t.Fatalf("ActiveTelegramSession() error = %v", err)
+	}
+	if active == nil || active.ID != s.ID {
+		t.Errorf("ActiveTelegramSession() = %+v, want the same session %d", active, s.ID)
+	}
+}
+
+// S5a: an id that no longer exists is reported instead of silently succeeding,
+// so the chat cannot claim it retook a session that is not there. Nothing may
+// be archived as a side effect of the failed attempt.
+func TestTelegramSession_ResumeUnknownID(t *testing.T) {
+	repo := NewRepo(openTelegramTestDB(t))
+
+	s, err := repo.StartTelegramSession(42, "chat")
+	if err != nil {
+		t.Fatalf("StartTelegramSession() error = %v", err)
+	}
+	if err := repo.ResumeTelegramSession(s.ID + 100); err == nil {
+		t.Fatalf("ResumeTelegramSession(unknown) error = nil, want an error")
+	}
+
+	active, err := repo.ActiveTelegramSession(42)
+	if err != nil {
+		t.Fatalf("ActiveTelegramSession() error = %v", err)
+	}
+	if active == nil || active.ID != s.ID {
+		t.Errorf("ActiveTelegramSession() = %+v, want the untouched session %d", active, s.ID)
+	}
+}
+
 // S5: the transcript round-trips in order and carries both roles.
 func TestTelegramSession_TranscriptOrder(t *testing.T) {
 	repo := NewRepo(openTelegramTestDB(t))

@@ -63,10 +63,18 @@ func stripHTML(text string) string {
 	return r.Replace(text)
 }
 
-// sendKeyboard sends one message carrying the cancel reply keyboard (S7).
-// A reply keyboard persists in the chat, which is deliberate: the button stays
-// reachable while the operator reads a long reply, and a press when nothing is
-// in flight gets the same honest nothing-to-cancel answer.
+// sendKeyboard sends one message carrying the mode's dock (S3/S7).
+//
+// A reply keyboard persists in the chat, which is deliberate: the buttons stay
+// reachable while the operator reads a long reply, and a cancel pressed when
+// nothing is in flight gets the same honest nothing-to-cancel answer.
+//
+// It carries the whole dock rather than a lone "Cancelar" button. A reply
+// keyboard replaces the one on screen, so a one-button markup here overwrote
+// every action for the rest of the chat — the dock disappeared on the first
+// turn. The dock's own 🛑 Cancelar turno row is the control an operator sees on
+// the phone, and the bare "Cancelar" label stays accepted for keyboards a chat
+// already has.
 func (s *Supervisor) sendKeyboard(ctx context.Context, bot *tgbot.Bot, chatID int64, text string) {
 	// The library's ReplyMarkup field is an interface; passing the struct lets
 	// it marshal into the JSON object Telegram demands. A pre-marshaled string
@@ -74,11 +82,7 @@ func (s *Supervisor) sendKeyboard(ctx context.Context, bot *tgbot.Bot, chatID in
 	// parse reply keyboard markup JSON object" — which failed every chat turn,
 	// because this ack precedes the forward. The marshal also served as the
 	// struct-shape check; the compiler now does that job.
-	markup := models.ReplyKeyboardMarkup{
-		Keyboard:       [][]models.KeyboardButton{{{Text: "Cancelar"}}},
-		ResizeKeyboard: true,
-		IsPersistent:   true,
-	}
+	markup := dockMarkup(s.currentMode())
 	if _, err := bot.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        text,
@@ -104,9 +108,18 @@ func (s *Supervisor) handleMessage(ctx context.Context, bot *tgbot.Bot, msg *mod
 	// The cancel keyboard button arrives as plain text. It is intercepted here
 	// rather than forwarded to a model that was never asked for it; when no
 	// turn is in flight the operator gets the same honest nothing-to-cancel
-	// answer the /cancel command gives.
+	// answer the /cancel command gives. It stays ahead of the dock router so a
+	// cancel still answers exactly once.
 	if strings.TrimSpace(msg.Text) == "Cancelar" {
 		s.cmdCancel(ctx, bot, chatID)
+		return
+	}
+
+	// S2: the dock's buttons arrive as ordinary text carrying their label, so
+	// the router runs before the mode decides what the text means. A button is
+	// a second entry point for a command, never a routing rule (S7).
+	if action, ok := resolveDock(msg.Text); ok {
+		s.handleDock(ctx, bot, chatID, action)
 		return
 	}
 
@@ -256,8 +269,10 @@ func (s *Supervisor) handleCommand(ctx context.Context, bot *tgbot.Bot, chatID i
 	case "start":
 		s.send(ctx, bot, chatID, helpText())
 		// /start is what a fresh chat sends. Showing the panel right after the
-		// help makes the two modes reachable without knowing /panel exists.
+		// help makes the two modes reachable without knowing /panel exists, and
+		// the dock is what makes every action one tap from here on (S1/S3).
 		s.cmdPanel(ctx, bot, chatID)
+		s.sendDock(ctx, bot, chatID)
 	case "help":
 		// A lookup, not a fresh chat: it answers without redrawing the panel.
 		s.send(ctx, bot, chatID, helpText())

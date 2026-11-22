@@ -63,6 +63,9 @@ type Repo interface {
 	ActiveTelegramSession(chatID int64) (*db.TelegramSession, error)
 	StartTelegramSession(chatID int64, title string) (*db.TelegramSession, error)
 	ArchiveTelegramSession(sessionID int64) error
+	// ResumeTelegramSession reopens an archived session (S5a). The chat keeps a
+	// single open session, so the one that was open is archived with it.
+	ResumeTelegramSession(sessionID int64) error
 	ListTelegramSessions(chatID int64, limit int) ([]db.TelegramSession, error)
 	AppendTelegramMessage(sessionID int64, role, content string) error
 	TelegramTranscript(sessionID int64, limit int) ([]db.TelegramTranscriptMessage, error)

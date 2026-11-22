@@ -72,5 +72,12 @@ func (r *DBRepo) DevInbox() (*notify.Spool, error) {
 	return notify.NewSpool(config.DevInboxPath()), nil
 }
 
+// ResumeTelegramSession reopens an archived session (S5a). The delegation is
+// deliberately one line: the transaction and the single-open-session invariant
+// belong to the storage layer, which is where StartTelegramSession lives too.
+func (r *DBRepo) ResumeTelegramSession(sessionID int64) error {
+	return r.Repo.ResumeTelegramSession(sessionID)
+}
+
 // compile-time proof the adapter satisfies the interface the supervisor uses.
 var _ Repo = (*DBRepo)(nil)

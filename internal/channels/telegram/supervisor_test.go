@@ -39,6 +39,12 @@ type fakeRepo struct {
 	// skip-the-approval preference.
 	task        db.TelegramAgentTask
 	autoApprove bool
+
+	// sessions is what ListTelegramSessions reports, and resumed records the id
+	// a retake handed to the storage helper, so a test asserts the button
+	// reached the route instead of only drawing one.
+	sessions []db.TelegramSession
+	resumed  int64
 }
 
 func (f *fakeRepo) TelegramToken() (string, error) { return f.token, nil }
@@ -95,7 +101,12 @@ func (f *fakeRepo) StartTelegramSession(chatID int64, title string) (*db.Telegra
 func (f *fakeRepo) ArchiveTelegramSession(int64) error { return nil }
 
 func (f *fakeRepo) ListTelegramSessions(int64, int) ([]db.TelegramSession, error) {
-	return nil, nil
+	return f.sessions, nil
+}
+
+func (f *fakeRepo) ResumeTelegramSession(sessionID int64) error {
+	f.resumed = sessionID
+	return nil
 }
 
 func (f *fakeRepo) AppendTelegramMessage(sessionID int64, role, content string) error {

@@ -31,6 +31,7 @@ type fakeTelegram struct {
 	sent    []string
 	markups []string
 	modes   []string
+	edits   []string
 	srv     *httptest.Server
 }
 
@@ -49,6 +50,18 @@ func newFakeTelegram(t *testing.T) *fakeTelegram {
 			f.sent = append(f.sent, r.FormValue("text"))
 			f.markups = append(f.markups, r.FormValue("reply_markup"))
 			f.modes = append(f.modes, r.FormValue("parse_mode"))
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
+		case strings.HasSuffix(r.URL.Path, "/editMessageText"):
+			// The panel is edited in place, so the edit is the observable proof
+			// that a redraw reached the message the operator is reading.
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			f.mu.Lock()
+			f.edits = append(f.edits, r.FormValue("text"))
 			f.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
@@ -97,6 +110,15 @@ func (f *fakeTelegram) messages() []string {
 	return out
 }
 
+// editedMessages returns the text of every in-place edit the bot made.
+func (f *fakeTelegram) editedMessages() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.edits))
+	copy(out, f.edits)
+	return out
+}
+
 // runCommand drives one command through the same entry point a real update
 // takes, so the dispatcher is exercised rather than the command in isolation.
 func runCommand(t *testing.T, sup *Supervisor, fake *fakeTelegram, text string) []string {
@@ -119,7 +141,9 @@ func TestCommands_AnsweredLocally(t *testing.T) {
 		wantText     string
 		wantMessages int
 	}{
-		{name: "start offers help and the panel", command: "/start", wantText: "/new", wantMessages: 2},
+		// /start is a fresh chat's first message: help, panel and the dock, so the
+		// actions are one tap away from the first contact (S1/S3).
+		{name: "start offers help, the panel and the dock", command: "/start", wantText: "/new", wantMessages: 3},
 		{name: "help offers help", command: "/help", wantText: "/new", wantMessages: 1},
 		{name: "new opens a session", command: "/new", wantText: "abierta", wantMessages: 1},
 		{name: "unknown command is refused", command: "/nonsense", wantText: "desconocido", wantMessages: 1},
@@ -298,10 +322,11 @@ func TestHandleUpdate_AcceptsAuthorizedUser(t *testing.T) {
 		},
 	})
 
-	// /start answers with the help and then the mode panel, so an authorized
-	// first message produces both; the point here is that it is answered at all.
-	if sent := fake.messages(); len(sent) != 2 {
-		t.Errorf("replied %d times to an authorized user, want 2", len(sent))
+	// /start answers with the help, the mode panel and then the dock, so an
+	// authorized first message produces all three; the point here is that it is
+	// answered at all.
+	if sent := fake.messages(); len(sent) != 3 {
+		t.Errorf("replied %d times to an authorized user, want 3", len(sent))
 	}
 }
 

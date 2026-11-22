@@ -121,6 +121,52 @@ func (r *Repo) ArchiveTelegramSession(sessionID int64) error {
 	return nil
 }
 
+// ResumeTelegramSession makes an archived session the chat's open one again
+// (S5a). It is the inverse of ArchiveTelegramSession and carries the same
+// invariant StartTelegramSession enforces in the other direction: a chat keeps
+// exactly one open session, so the row that was open before is archived in the
+// same transaction instead of being left behind.
+//
+// An id that no longer exists is an error rather than a silent no-op: the
+// channel tells the operator the session was retaken, and a claim like that
+// must not be made about a row that is not there. Nothing is archived when the
+// lookup fails.
+func (r *Repo) ResumeTelegramSession(sessionID int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("resume telegram session: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var chatID int64
+	err = tx.QueryRow(`SELECT chatId FROM telegramSession WHERE id = ?`, sessionID).Scan(&chatID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("resume telegram session: %d does not exist", sessionID)
+		}
+		return fmt.Errorf("resume telegram session: read chat: %w", err)
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE telegramSession SET archivedAt = datetime('now')
+		  WHERE chatId = ? AND archivedAt = '' AND id <> ?`,
+		chatID, sessionID,
+	); err != nil {
+		return fmt.Errorf("resume telegram session: archive previous: %w", err)
+	}
+	if _, err := tx.Exec(
+		`UPDATE telegramSession SET archivedAt = ''
+		  WHERE id = ?`,
+		sessionID,
+	); err != nil {
+		return fmt.Errorf("resume telegram session: clear archive: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("resume telegram session: commit: %w", err)
+	}
+	return nil
+}
+
 // TelegramSessionByID reads one session by id.
 func (r *Repo) TelegramSessionByID(sessionID int64) (*TelegramSession, error) {
 	var s TelegramSession

@@ -108,6 +108,19 @@ func (s *Supervisor) handleCallbackQuery(ctx context.Context, bot *tgbot.Bot, q 
 		return
 	}
 
+	s.dispatchCallback(ctx, bot, chatID, q)
+
+	// S3: a press re-sends the mode's dock, so the keyboard on screen is the one
+	// the press left the chat in and the next action is still one tap away.
+	s.sendDock(ctx, bot, chatID)
+}
+
+// dispatchCallback runs one callback's effect.
+//
+// It is separate from the gate so the dock re-set above happens on every path,
+// including the ones that end in an error answer: a forgotten keyboard is a
+// worse failure than a refused action.
+func (s *Supervisor) dispatchCallback(ctx context.Context, bot *tgbot.Bot, chatID int64, q *models.CallbackQuery) {
 	// The query is answered in every path: an unanswered one leaves the button
 	// spinning for the operator, which reads as a hang.
 	answer := func(note string) {
@@ -119,28 +132,43 @@ func (s *Supervisor) handleCallbackQuery(ctx context.Context, bot *tgbot.Bot, q 
 		}
 	}
 
+	// The pick callbacks carry an argument, so they are matched by prefix before
+	// the exact values below; an exact value can never be mistaken for a prefix
+	// of itself because the argument is what the prefix does not cover.
+	switch {
+	case strings.HasPrefix(q.Data, cbModelPick):
+		s.pickModel(ctx, bot, chatID, strings.TrimPrefix(q.Data, cbModelPick), answer)
+		return
+	case strings.HasPrefix(q.Data, cbSessionPick):
+		s.retakeSession(ctx, bot, chatID, strings.TrimPrefix(q.Data, cbSessionPick), answer)
+		return
+	case strings.HasPrefix(q.Data, cbFeaturePick):
+		s.renderFeature(ctx, bot, chatID, strings.TrimPrefix(q.Data, cbFeaturePick), answer)
+		return
+	}
+
 	switch q.Data {
 	case cbModeAgent:
-		if err := s.repo.SetTelegramMode(db.ModeAgent); err != nil {
-			s.setError(err)
-			answer("No pude cambiar de modo.")
-			return
-		}
 		answer("Modo Agente")
-		s.updatePanel(ctx, bot, chatID)
+		s.switchMode(ctx, bot, chatID, db.ModeAgent)
 
 	case cbModeChat:
-		if err := s.repo.SetTelegramMode(db.ModeChat); err != nil {
-			s.setError(err)
-			answer("No pude cambiar de modo.")
-			return
-		}
 		answer("Modo Chat")
-		s.updatePanel(ctx, bot, chatID)
+		s.switchMode(ctx, bot, chatID, db.ModeChat)
 
-	case cbChatModel:
-		answer("Usá /model <nombre> para elegir modelo.")
-		s.send(ctx, bot, chatID, s.modelChoicesText())
+	case cbChatModel, cbModelsPanel:
+		// Both entry points open the same subpanel: the panel's own button and
+		// the dock's, so there is one model list and one place to keep it right.
+		answer("Modelos")
+		s.showModelPanel(ctx, bot, chatID)
+
+	case cbSessionsPanel:
+		answer("Sesiones")
+		s.showSessionsPanel(ctx, bot, chatID)
+
+	case cbFeaturesPanel:
+		answer("Features ODD")
+		s.showFeaturePanel(ctx, bot, chatID)
 
 	case cbChatReset:
 		answer("Hilo nuevo")
@@ -253,23 +281,6 @@ func (s *Supervisor) panelMessage(chatID int64) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.panels[chatID]
-}
-
-// modelChoicesText explains how to change the model. It names the command
-// instead of drawing a model list: the catalogue is large and provider-specific,
-// and a stale inline list would offer models the deployment cannot serve.
-func (s *Supervisor) modelChoicesText() string {
-	current, err := s.repo.TelegramChannelModel()
-	if err != nil {
-		s.setError(err)
-	}
-	if current == "" {
-		current = "sin elegir"
-	}
-	return strings.Join([]string{
-		"Modelo actual: " + current,
-		"Para cambiarlo: /model <proveedor/modelo>",
-	}, "\n")
 }
 
 // taskStatusText reports the task state in detail, for the "Estado / Paso"
