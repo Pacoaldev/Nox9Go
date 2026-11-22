@@ -961,3 +961,39 @@ func TestCmdDevStatus_SendsHTML(t *testing.T) {
 		t.Errorf("parse_mode = %v, want HTML", modes)
 	}
 }
+
+// The HTML fallback path (send falls back to plain text when Telegram rejects
+// the markup) and the bot-command menu registration are pure tables, covered
+// here because the codecov/patch gate wants them and they cost nothing to pin.
+func TestStripHTML_RemovesEmittedTags(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "bold", input: "<b>Estado: chat</b>", want: "Estado: chat"},
+		{name: "code", input: "Modelo: <code>deepseek-chat</code>", want: "Modelo: deepseek-chat"},
+		{name: "entities", input: "a &amp; b &lt; c &gt; d", want: "a & b < c > d"},
+		{name: "plain passes through", input: "sin etiquetas", want: "sin etiquetas"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stripHTML(tt.input); got != tt.want {
+				t.Errorf("stripHTML(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBotCommands_PanelFirstAndMatchesHelp(t *testing.T) {
+	cmds := botCommands()
+	if len(cmds) == 0 || cmds[0].Command != "panel" {
+		t.Fatalf("botCommands() first command = %v, want /panel first", cmds)
+	}
+	help := helpText()
+	for _, c := range cmds {
+		if !strings.Contains(help, "/"+c.Command) {
+			t.Errorf("menu command /%s is missing from helpText: %q", c.Command, help)
+		}
+	}
+}
