@@ -1502,5 +1502,15 @@
   "Could not save the token.": "No pude guardar el token.",
   "Could not save the list.": "No pude guardar la lista.",
   "The user id must be a positive number.": "El user id tiene que ser un número positivo.",
-  "That user is already authorized.": "Ese usuario ya está autorizado."
+  "That user is already authorized.": "Ese usuario ya está autorizado.",
+  "Development": "Desarrollo",
+  "Where the current feature stands. Also available from the Telegram bot with /estado.": "En qué está la feature actual. También disponible desde el bot de Telegram con /estado.",
+  "Refreshing…": "Actualizando…",
+  "No checkout configured.": "No hay repositorio configurado.",
+  "tasks": "tareas",
+  "Branch": "Rama",
+  "Last commit": "Último commit",
+  "Uncommitted": "Sin commitear",
+  "files": "archivos",
+  "Could not read the development report.": "No pude leer el reporte de desarrollo."
 }

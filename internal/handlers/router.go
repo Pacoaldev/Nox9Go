@@ -253,6 +253,7 @@ func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.C
 	// dashboard action and never a message a stranger can send.
 	r.Get("/api/channels/telegram", dashH.HandleGetTelegramChannel)
 	r.Get("/api/channels/telegram/models", dashH.HandleTelegramModels)
+	r.Get("/api/dev/status", dashH.HandleDevStatus)
 	r.Put("/api/channels/telegram/token", dashH.HandleSetTelegramToken)
 	r.Put("/api/channels/telegram/allowlist", dashH.HandleSetTelegramAllowlist)
 

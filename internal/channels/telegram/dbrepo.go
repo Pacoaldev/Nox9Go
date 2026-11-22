@@ -2,6 +2,9 @@ package telegram
 
 import (
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/notify"
+	"os"
+	"strings"
 )
 
 // DBRepo adapts *db.Repo to the Repo interface this package needs.
@@ -37,6 +40,30 @@ func (r *DBRepo) GetTelegramChannelConfig() (*Config, error) {
 // vault when it does not exist yet.
 func (r *DBRepo) EnsureTelegramAPIKey() (string, error) {
 	return r.Repo.EnsureTelegramAPIKey()
+}
+
+// DevRepoRoot reports the checkout the development report reads, from
+// DEV_REPO_ROOT. An empty value disables the report instead of guessing: a
+// gateway started from anywhere must not read an unrelated repository.
+func (r *DBRepo) DevRepoRoot() (string, error) {
+	return strings.TrimSpace(os.Getenv("DEV_REPO_ROOT")), nil
+}
+
+// DevFeatureName reports the ODD feature the report follows by default, from
+// DEV_FEATURE.
+func (r *DBRepo) DevFeatureName() (string, error) {
+	return strings.TrimSpace(os.Getenv("DEV_FEATURE")), nil
+}
+
+// DevSpool returns the development event feed from DEV_SPOOL_PATH. An empty
+// value disables the feed, so a gateway with no development session attached
+// forwards nothing instead of watching a file that will never exist.
+func (r *DBRepo) DevSpool() (*notify.Spool, error) {
+	path := strings.TrimSpace(os.Getenv("DEV_SPOOL_PATH"))
+	if path == "" {
+		return &notify.Spool{}, nil
+	}
+	return notify.NewSpool(path), nil
 }
 
 // compile-time proof the adapter satisfies the interface the supervisor uses.

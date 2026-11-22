@@ -525,6 +525,27 @@ export interface HeadroomExtrasResponse {
 }
 
 /** Telegram channel settings as the dashboard renders them. */
+export interface DevStatusFeature {
+  name: string
+  title: string
+  done: number
+  total: number
+}
+
+export interface DevStatusResponse {
+  configured: boolean
+  message?: string
+  repoKnown?: boolean
+  branch?: string
+  head?: string
+  headSubject?: string
+  headAt?: string
+  changes?: number
+  rendered?: string
+  features?: string[]
+  feature?: DevStatusFeature
+}
+
 export interface TelegramChannelStatus {
   enabled: boolean
   tokenPresent: boolean
@@ -2320,6 +2341,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ userIds }),
     }),
+  // Development report. Reads a checkout configured with DEV_REPO_ROOT; the
+  // gateway answers `configured: false` when none is set, which the panel shows
+  // as an explanation rather than as an empty, healthy-looking repository.
+  getDevStatus: (feature?: string) =>
+    request<DevStatusResponse>(
+      `/api/dev/status${feature ? `?feature=${encodeURIComponent(feature)}` : ''}`
+    ),
   // Proxy Pools
   getProxyPools: (includeUsage = true) =>
     request<{ proxyPools: ProxyPool[] }>(`/api/proxy-pools${includeUsage ? '?includeUsage=true' : ''}`)

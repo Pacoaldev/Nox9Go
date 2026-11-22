@@ -16,6 +16,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"nox9go/proxy/internal/notify"
 	"time"
 
 	"nox9go/proxy/internal/db"
@@ -73,6 +75,17 @@ type Repo interface {
 	// as Bearer because the engine's chat route guards itself with RequireApiKey,
 	// which the CLI token does not satisfy.
 	EnsureTelegramAPIKey() (string, error)
+
+	// The repository the development report reads. Both are configuration, not
+	// storage: an operator points the channel at a checkout with the
+	// environment, and an empty root means the report is unavailable rather
+	// than guessing a directory.
+	DevRepoRoot() (string, error)
+	DevFeatureName() (string, error)
+
+	// DevSpool is the development event feed the channel forwards. A spool with
+	// an empty path means no feed is configured.
+	DevSpool() (*notify.Spool, error)
 }
 
 // Status is the supervisor's snapshot.

@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"nox9go/proxy/internal/devstatus"
+	"os"
 	"strings"
+	"time"
 
-	"nox9go/proxy/internal/handlerutil"
 	"nox9go/proxy/internal/handlers/chat"
+	"nox9go/proxy/internal/handlerutil"
 )
 
 // decodeTelegramBody reads a request body into dst. The size cap is the point:
@@ -206,4 +209,51 @@ func (h *DashboardHandler) HandleTelegramModels(w http.ResponseWriter, r *http.R
 		}
 	}
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"models": ids})
+}
+
+// HandleDevStatus reports where the development stands, for the dashboard's
+// development panel (S5).
+//
+// It is deliberately the same report the bot's /estado prints, built by the same
+// package, so the two cannot drift: an operator who checks the dashboard and an
+// operator who checks the phone are reading one answer with two renderings.
+func (h *DashboardHandler) HandleDevStatus(w http.ResponseWriter, r *http.Request) {
+	root := strings.TrimSpace(os.Getenv("DEV_REPO_ROOT"))
+	if root == "" {
+		handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
+			"configured": false,
+			"message":    "Set DEV_REPO_ROOT to a checkout to enable the development report.",
+		})
+		return
+	}
+
+	feature := strings.TrimSpace(r.URL.Query().Get("feature"))
+	if feature == "" {
+		feature = strings.TrimSpace(os.Getenv("DEV_FEATURE"))
+	}
+
+	snap := devstatus.Repo{Root: root}.Take(r.Context(), feature)
+
+	payload := map[string]any{
+		"configured":  true,
+		"repoKnown":   snap.RepoKnown,
+		"branch":      snap.Branch,
+		"head":        snap.Head,
+		"headSubject": snap.HeadSubject,
+		"changes":     len(snap.Changes),
+		"rendered":    snap.Render(),
+		"features":    devstatus.Repo{Root: root}.ListFeatures(),
+	}
+	if !snap.HeadWhen.IsZero() {
+		payload["headAt"] = snap.HeadWhen.UTC().Format(time.RFC3339)
+	}
+	if snap.Feature != nil {
+		payload["feature"] = map[string]any{
+			"name":  snap.Feature.Name,
+			"title": snap.Feature.Title,
+			"done":  snap.Feature.Done,
+			"total": snap.Feature.Total,
+		}
+	}
+	handlerutil.WriteJSON(w, http.StatusOK, payload)
 }

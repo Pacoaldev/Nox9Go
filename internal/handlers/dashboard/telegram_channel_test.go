@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -208,5 +211,114 @@ func TestTelegramChannel_RejectsNonPositiveUserID(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("body %s status = %d, want 400", body, rec.Code)
 		}
+	}
+}
+
+// S5: with no checkout configured the endpoint answers a plain explanation
+// instead of an empty report a client would render as a healthy, idle repo.
+func TestHandleDevStatus_Unconfigured(t *testing.T) {
+	t.Setenv("DEV_REPO_ROOT", "")
+	h := &DashboardHandler{}
+
+	rec := httptest.NewRecorder()
+	h.HandleDevStatus(rec, httptest.NewRequest(http.MethodGet, "/api/dev/status", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if configured, _ := body["configured"].(bool); configured {
+		t.Errorf("configured = true with no DEV_REPO_ROOT")
+	}
+}
+
+// S5: a configured checkout returns the branch, the head commit and the
+// rendered report the dashboard shows.
+func TestHandleDevStatus_ReportsRepository(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	gitRun(t, dir, "config", "user.email", "test@example.com")
+	gitRun(t, dir, "config", "user.name", "test")
+	writeAt(t, dir, "a.txt", "one")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "feat: dashboard visible")
+	t.Setenv("DEV_REPO_ROOT", dir)
+	t.Setenv("DEV_FEATURE", "")
+
+	h := &DashboardHandler{}
+	rec := httptest.NewRecorder()
+	h.HandleDevStatus(rec, httptest.NewRequest(http.MethodGet, "/api/dev/status", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if configured, _ := body["configured"].(bool); !configured {
+		t.Fatalf("configured = false with a real checkout")
+	}
+	if got, _ := body["headSubject"].(string); got != "feat: dashboard visible" {
+		t.Errorf("headSubject = %q, want the head commit", got)
+	}
+	if got, _ := body["rendered"].(string); !strings.Contains(got, "Rama:") {
+		t.Errorf("rendered = %q, want the report body", got)
+	}
+}
+
+// S5: the feature can be selected per request, so the dashboard can show a
+// different ODD document without restarting the gateway.
+func TestHandleDevStatus_FeatureQuery(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	gitRun(t, dir, "config", "user.email", "test@example.com")
+	gitRun(t, dir, "config", "user.name", "test")
+	writeAt(t, dir, "odd/tasks/picked.md", "# Picked\n\n## Tasks\n\n| ID | Specs | Route | Commit |\n| :- | :---- | :---- | :----- |\n| T1 | S1 | work | abc123 |\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "docs: feature")
+	t.Setenv("DEV_REPO_ROOT", dir)
+	t.Setenv("DEV_FEATURE", "ignored")
+
+	h := &DashboardHandler{}
+	rec := httptest.NewRecorder()
+	h.HandleDevStatus(rec, httptest.NewRequest(http.MethodGet, "/api/dev/status?feature=picked", nil))
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	feature, ok := body["feature"].(map[string]any)
+	if !ok {
+		t.Fatalf("feature missing from the payload: %v", body)
+	}
+	if got, _ := feature["name"].(string); got != "picked" {
+		t.Errorf("feature.name = %q, want the query parameter to win", got)
+	}
+	if got, _ := feature["done"].(float64); got != 1 {
+		t.Errorf("feature.done = %v, want 1", got)
+	}
+}
+
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func writeAt(t *testing.T, dir, name, content string) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
 	}
 }

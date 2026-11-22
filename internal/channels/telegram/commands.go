@@ -8,6 +8,7 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/devstatus"
 )
 
 // send delivers one Telegram message, splitting anything over the platform cap.
@@ -125,6 +126,8 @@ func (s *Supervisor) handleCommand(ctx context.Context, bot *tgbot.Bot, chatID i
 		s.cmdStatus(ctx, bot, chatID)
 	case "model":
 		s.cmdModel(ctx, bot, chatID, args)
+	case "estado", "avance", "dev":
+		s.cmdDevStatus(ctx, bot, chatID, args)
 	default:
 		s.send(ctx, bot, chatID, "Comando desconocido. /help para ver la lista.")
 	}
@@ -251,6 +254,34 @@ func (s *Supervisor) cmdModel(ctx context.Context, bot *tgbot.Bot, chatID int64,
 	s.send(ctx, bot, chatID, "Modelo cambiado a: "+args)
 }
 
+// cmdDevStatus reports where the development stands: the branch, the last
+// commit, the work still uncommitted and, when a feature is named, that ODD
+// document's task progress.
+//
+// It reads the repository and never writes to it. The allowed chat is already
+// fixed by the allowlist gate in handleUpdate, so this command widens what an
+// operator can *see* without widening what anyone can *do*.
+func (s *Supervisor) cmdDevStatus(ctx context.Context, bot *tgbot.Bot, chatID int64, args string) {
+	repo, err := s.repo.DevRepoRoot()
+	if err != nil {
+		s.setError(err)
+		s.send(ctx, bot, chatID, "No pude leer la configuración del repositorio.")
+		return
+	}
+	if repo == "" {
+		s.send(ctx, bot, chatID, "No hay repositorio configurado. Definí DEV_REPO_ROOT en el entorno del gateway.")
+		return
+	}
+
+	feature := strings.TrimSpace(args)
+	if feature == "" {
+		feature, _ = s.repo.DevFeatureName()
+	}
+
+	snap := devstatus.Repo{Root: repo}.Take(ctx, feature)
+	s.send(ctx, bot, chatID, snap.Render())
+}
+
 func helpText() string {
 	return strings.Join([]string{
 		"Comandos:",
@@ -260,6 +291,8 @@ func helpText() string {
 		"/model — ver el modelo actual y los disponibles",
 		"/model <id> — cambiar el modelo",
 		"/status — estado del canal",
+		"/estado — avance del desarrollo (commits, pendientes, tareas)",
+		"/estado <feature> — avance de una feature ODD concreta",
 		"/help — esta ayuda",
 	}, "\n")
 }

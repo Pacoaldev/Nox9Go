@@ -6,6 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+
+	"nox9go/proxy/internal/notify"
 	"strconv"
 	"strings"
 	"sync"
@@ -398,5 +403,202 @@ func TestSetError_IsReportedByStatus(t *testing.T) {
 	status := sup.Status()
 	if !strings.Contains(status.LastError, "token rejected") {
 		t.Errorf("LastError = %q, want the recorded failure", status.LastError)
+	}
+}
+
+// S3: /estado reports the real repository state to an authorized operator.
+func TestCmdDevStatus_ReportsRepository(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	gitRun(t, dir, "config", "user.email", "test@example.com")
+	gitRun(t, dir, "config", "user.name", "test")
+	writeAt(t, dir, "a.txt", "one")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "feat: something landed")
+
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{42}, repoRoot: dir}
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+
+	sent := runCommand(t, sup, fake, "/estado")
+
+	if len(sent) != 1 {
+		t.Fatalf("sent %d messages, want 1: %q", len(sent), sent)
+	}
+	if !strings.Contains(sent[0], "feat: something landed") {
+		t.Errorf("reply = %q, want the last commit subject", sent[0])
+	}
+}
+
+// S3: with no checkout configured the report says so instead of reading the
+// gateway's own working directory, which would be an unrelated repository.
+func TestCmdDevStatus_Unconfigured(t *testing.T) {
+	fake := newFakeTelegram(t)
+	sup := NewSupervisor(&fakeRepo{token: "111:secret", allowed: []int64{42}}, func(int64) bool { return true })
+
+	sent := runCommand(t, sup, fake, "/estado")
+
+	if len(sent) != 1 || !strings.Contains(sent[0], "DEV_REPO_ROOT") {
+		t.Errorf("reply = %q, want it to name the variable that enables the report", sent)
+	}
+}
+
+// S3: /estado with no argument follows the configured feature, and with an
+// argument follows the one named in the message.
+func TestCmdDevStatus_FeatureSelection(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	gitRun(t, dir, "config", "user.email", "test@example.com")
+	gitRun(t, dir, "config", "user.name", "test")
+	writeAt(t, dir, "odd/tasks/alpha.md", "# Alpha\n\n## Tasks\n\n| ID | Specs | Route | Commit |\n| :- | :---- | :---- | :----- |\n| T1 | S1 | first | abc123 |\n")
+	writeAt(t, dir, "odd/tasks/beta.md", "# Beta\n\n## Tasks\n\n| ID | Specs | Route | Commit |\n| :- | :---- | :---- | :----- |\n| T1 | S1 | first | — |\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "docs: features")
+
+	tests := []struct {
+		name    string
+		command string
+		want    string
+	}{
+		{name: "argument wins", command: "/estado beta", want: "Avance — beta"},
+		{name: "configured default", command: "/estado", want: "Avance — alpha"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := newFakeTelegram(t)
+			repo := &fakeRepo{token: "111:secret", allowed: []int64{42}, repoRoot: dir, feature: "alpha"}
+			sup := NewSupervisor(repo, func(int64) bool { return true })
+
+			sent := runCommand(t, sup, fake, tt.command)
+
+			if len(sent) != 1 {
+				t.Fatalf("sent %d messages, want 1", len(sent))
+			}
+			if !strings.Contains(sent[0], tt.want) {
+				t.Errorf("reply = %q, want it to contain %q", sent[0], tt.want)
+			}
+		})
+	}
+}
+
+// The development report is behind the same allowlist as every other command:
+// an unauthorized user learns nothing about the repository.
+func TestCmdDevStatus_RefusedToStrangers(t *testing.T) {
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{42}, repoRoot: t.TempDir()}
+	sup := NewSupervisor(repo, func(id int64) bool { return id == 42 })
+
+	sup.handleUpdate(context.Background(), fake.bot(t), &models.Update{
+		Message: &models.Message{
+			Text: "/estado",
+			From: &models.User{ID: 999},
+			Chat: models.Chat{ID: 999},
+		},
+	})
+
+	if sent := fake.messages(); len(sent) != 0 {
+		t.Errorf("replied %d times to an unauthorized user, want 0", len(sent))
+	}
+}
+
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func writeAt(t *testing.T, dir, name, content string) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+}
+
+// S4: a development event reaches the allowed chat once, with the text the
+// operator reads.
+func TestForwardPendingEvents_DeliversToAllowedChat(t *testing.T) {
+	spool := notify.NewSpool(filepath.Join(t.TempDir(), "events.jsonl"))
+	if err := spool.Append(notify.Event{Kind: notify.KindCommit, Title: "abc123 feat: landed"}); err != nil {
+		t.Fatalf("Append() = %v", err)
+	}
+
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{42}}
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+
+	sup.forwardPendingEvents(context.Background(), fake.bot(t), repo, spool)
+
+	sent := fake.messages()
+	if len(sent) != 1 {
+		t.Fatalf("sent %d messages, want 1: %q", len(sent), sent)
+	}
+	if !strings.Contains(sent[0], "abc123 feat: landed") {
+		t.Errorf("message = %q, want the event title", sent[0])
+	}
+
+	// Draining again must not repeat it.
+	sup.forwardPendingEvents(context.Background(), fake.bot(t), repo, spool)
+	if again := fake.messages(); len(again) != 1 {
+		t.Errorf("event forwarded twice: %d messages", len(again))
+	}
+}
+
+// S4: an empty allowlist blocks delivery even when an event is waiting. The
+// poll loop already refuses to start in that state; this guard means a config
+// change mid-flight cannot leak a report.
+func TestForwardPendingEvents_EmptyAllowlistDeliversNothing(t *testing.T) {
+	spool := notify.NewSpool(filepath.Join(t.TempDir(), "events.jsonl"))
+	if err := spool.Append(notify.Event{Title: "should not arrive"}); err != nil {
+		t.Fatalf("Append() = %v", err)
+	}
+
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret"}
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+
+	sup.forwardPendingEvents(context.Background(), fake.bot(t), repo, spool)
+
+	if sent := fake.messages(); len(sent) != 0 {
+		t.Errorf("delivered %d messages with no allowlist, want 0", len(sent))
+	}
+}
+
+// S4: an empty spool sends nothing, so a quiet period is silence rather than a
+// heartbeat the operator has to scroll past.
+func TestForwardPendingEvents_EmptySpoolIsSilent(t *testing.T) {
+	spool := notify.NewSpool(filepath.Join(t.TempDir(), "events.jsonl"))
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{42}}
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+
+	sup.forwardPendingEvents(context.Background(), fake.bot(t), repo, spool)
+
+	if sent := fake.messages(); len(sent) != 0 {
+		t.Errorf("sent %d messages for an empty spool, want 0", len(sent))
+	}
+}
+
+// S4: every allowed chat gets the event, because an operator may have more than
+// one device paired with the bot.
+func TestForwardPendingEvents_AllAllowedChats(t *testing.T) {
+	spool := notify.NewSpool(filepath.Join(t.TempDir(), "events.jsonl"))
+	_ = spool.Append(notify.Event{Title: "broadcast"})
+
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{42, 99}}
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+
+	sup.forwardPendingEvents(context.Background(), fake.bot(t), repo, spool)
+
+	if sent := fake.messages(); len(sent) != 2 {
+		t.Errorf("sent %d messages, want one per allowed chat (2)", len(sent))
 	}
 }

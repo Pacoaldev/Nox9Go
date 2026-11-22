@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/notify"
 )
 
 // fakeRepo is the storage surface the channel needs. It exists so the lifecycle
@@ -15,6 +16,12 @@ type fakeRepo struct {
 	token   string
 	allowed []int64
 	model   string
+
+	// repoTarget is the checkout the development report reads, and feature is
+	// the ODD document it follows by default.
+	repoRoot  string
+	feature   string
+	spoolPath string
 }
 
 func (f *fakeRepo) TelegramToken() (string, error) { return f.token, nil }
@@ -42,6 +49,9 @@ func (f *fakeRepo) TelegramTranscript(int64, int) ([]db.TelegramTranscriptMessag
 }
 
 func (f *fakeRepo) EnsureTelegramAPIKey() (string, error) { return "sk-fake", nil }
+func (f *fakeRepo) DevRepoRoot() (string, error)          { return f.repoRoot, nil }
+func (f *fakeRepo) DevFeatureName() (string, error)       { return f.feature, nil }
+func (f *fakeRepo) DevSpool() (*notify.Spool, error)      { return notify.NewSpool(f.spoolPath), nil }
 
 func (f *fakeRepo) GetTelegramChannelConfig() (*Config, error) {
 	return &Config{

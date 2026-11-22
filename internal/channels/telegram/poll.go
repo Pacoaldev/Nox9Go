@@ -3,9 +3,11 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"nox9go/proxy/internal/notify"
 )
 
 // poll is the loop body. It runs one long-poll bot until ctx is cancelled, which
@@ -42,6 +44,10 @@ func (s *Supervisor) poll(ctx context.Context, repo Repo) {
 	s.username = me.Username
 	s.mu.Unlock()
 
+	// The development feed runs alongside the poll loop: Start blocks, so the
+	// drain owns its own goroutine and stops with the same context.
+	go s.drainNotifications(ctx, bot, repo)
+
 	// Start blocks until ctx is cancelled. It logs every update payload at debug
 	// level through the library's own logger, which is why the errors handler is
 	// overridden above.
@@ -51,6 +57,71 @@ func (s *Supervisor) poll(ctx context.Context, repo Repo) {
 		// A close failure during shutdown is not worth reporting as a channel
 		// fault: the loop is already gone.
 		_ = err
+	}
+}
+
+// drainNotifications forwards development events to the allowed chats.
+//
+// It is the read side of internal/notify: a development session appends, this
+// forwards. Nothing it sends can come back as an instruction, so the feed
+// widens what the operator sees without widening what the bot can do.
+func (s *Supervisor) drainNotifications(ctx context.Context, bot *tgbot.Bot, repo Repo) {
+	spool, err := repo.DevSpool()
+	if err != nil {
+		s.setError(err)
+		return
+	}
+	if spool == nil || spool.Path == "" {
+		// No feed configured: the channel still answers /estado on demand.
+		return
+	}
+
+	// One poll of the event queue per interval. The interval is a constant
+	// rather than a setting because a development event is not urgent enough to
+	// justify tuning, and a shorter one would spend the bot's rate limit.
+	const interval = 5 * time.Second
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.forwardPendingEvents(ctx, bot, repo, spool)
+		}
+	}
+}
+
+// forwardPendingEvents drains the spool once and sends whatever it found.
+func (s *Supervisor) forwardPendingEvents(ctx context.Context, bot *tgbot.Bot, repo Repo, spool *notify.Spool) {
+	events, err := spool.Drain()
+	if err != nil {
+		s.setError(err)
+		return
+	}
+	if len(events) == 0 {
+		return
+	}
+
+	cfg, err := repo.GetTelegramChannelConfig()
+	if err != nil {
+		s.setError(err)
+		return
+	}
+	// Fail-closed: an event is only ever delivered to an allowlisted chat. A
+	// channel with no allowlist already refuses to poll, and this guard means a
+	// config change mid-flight cannot leak a report to nobody.
+	if len(cfg.AllowedUserIDs) == 0 {
+		return
+	}
+
+	for _, event := range events {
+		text := event.Render()
+		for _, chatID := range cfg.AllowedUserIDs {
+			s.send(ctx, bot, chatID, text)
+		}
 	}
 }
 
