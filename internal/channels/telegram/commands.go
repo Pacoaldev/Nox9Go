@@ -29,6 +29,39 @@ func (s *Supervisor) send(ctx context.Context, bot *tgbot.Bot, chatID int64, tex
 	}
 }
 
+// sendHTML delivers one Telegram message parsed as HTML.
+//
+// It exists beside send rather than replacing it: model replies and gateway
+// errors are plain text, and a reply containing "a < b" must not be parsed as
+// markup. Only text this package formats itself goes through here, and that
+// text escapes every repository value it interpolates.
+func (s *Supervisor) sendHTML(ctx context.Context, bot *tgbot.Bot, chatID int64, text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	for _, part := range splitMessage(text, maxTelegramMessage) {
+		_, err := bot.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:    chatID,
+			Text:      part,
+			ParseMode: models.ParseModeHTML,
+		})
+		if err != nil {
+			// A rejected markup falls back to plain text instead of leaving the
+			// operator with nothing: the report is still readable without
+			// formatting, and a formatting bug must never silence it.
+			s.send(ctx, bot, chatID, stripHTML(part))
+			return
+		}
+	}
+}
+
+// stripHTML removes the tags this package emits, for the plain-text fallback.
+func stripHTML(text string) string {
+	r := strings.NewReplacer("<b>", "", "</b>", "", "<code>", "", "</code>", "",
+		"&lt;", "<", "&gt;", ">", "&amp;", "&")
+	return r.Replace(text)
+}
+
 // sendKeyboard sends one message carrying the cancel reply keyboard (S7).
 // A reply keyboard persists in the chat, which is deliberate: the button stays
 // reachable while the operator reads a long reply, and a press when nothing is
@@ -390,7 +423,7 @@ func (s *Supervisor) cmdDevStatus(ctx context.Context, bot *tgbot.Bot, chatID in
 	}
 
 	snap := devstatus.Repo{Root: repo}.Take(ctx, feature)
-	s.send(ctx, bot, chatID, snap.Render())
+	s.sendHTML(ctx, bot, chatID, snap.RenderHTML())
 }
 
 func helpText() string {

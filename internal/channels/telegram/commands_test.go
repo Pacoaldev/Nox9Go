@@ -30,6 +30,7 @@ type fakeTelegram struct {
 	mu      sync.Mutex
 	sent    []string
 	markups []string
+	modes   []string
 	srv     *httptest.Server
 }
 
@@ -47,6 +48,7 @@ func newFakeTelegram(t *testing.T) *fakeTelegram {
 			f.mu.Lock()
 			f.sent = append(f.sent, r.FormValue("text"))
 			f.markups = append(f.markups, r.FormValue("reply_markup"))
+			f.modes = append(f.modes, r.FormValue("parse_mode"))
 			f.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
@@ -73,6 +75,12 @@ func (f *fakeTelegram) bot(t *testing.T) *tgbot.Bot {
 		t.Fatalf("tgbot.New() = %v", err)
 	}
 	return b
+}
+
+func (f *fakeTelegram) parseModes() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.modes...)
 }
 
 func (f *fakeTelegram) replyMarkups() []string {
@@ -471,8 +479,8 @@ func TestCmdDevStatus_FeatureSelection(t *testing.T) {
 		command string
 		want    string
 	}{
-		{name: "argument wins", command: "/estado beta", want: "Avance — beta"},
-		{name: "configured default", command: "/estado", want: "Avance — alpha"},
+		{name: "argument wins", command: "/estado beta", want: "<b>beta</b>"},
+		{name: "configured default", command: "/estado", want: "<b>alpha</b>"},
 	}
 
 	for _, tt := range tests {
@@ -909,4 +917,17 @@ func usingKeyboard(t *testing.T, sup *Supervisor, fake *fakeTelegram, text strin
 			Chat: models.Chat{ID: 42},
 		},
 	})
+}
+
+// The report is sent parsed as HTML, and a request that Telegram rejects falls
+// back to readable plain text instead of leaving the operator with nothing.
+func TestCmdDevStatus_SendsHTML(t *testing.T) {
+	fake := newFakeTelegram(t)
+	sup := NewSupervisor(&fakeRepo{token: "111:secret", allowed: []int64{42}}, func(int64) bool { return true })
+
+	sup.sendHTML(context.Background(), fake.bot(t), 42, "<b>hola</b>")
+
+	if modes := fake.parseModes(); len(modes) == 0 || modes[0] != "HTML" {
+		t.Errorf("parse_mode = %v, want HTML", modes)
+	}
 }

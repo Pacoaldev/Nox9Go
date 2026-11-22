@@ -421,3 +421,89 @@ func humanSince(d time.Duration) string {
 		return fmt.Sprintf("%d días", int(d.Hours()/24))
 	}
 }
+
+// RenderHTML formats the report for a Telegram message.
+//
+// It is a second rendering rather than a replacement: the dashboard serves
+// Render() as plain text, and a client that asked for text must not receive
+// markup. Every value that comes from the repository — branch names, commit
+// subjects, file paths, task titles — is escaped, because a commit subject
+// containing a stray < would otherwise break the message or, worse, inject
+// formatting the operator did not write. Telegram parses only the tags this
+// function emits.
+func (s Snapshot) RenderHTML() string {
+	if !s.RepoKnown {
+		return "No hay repositorio configurado, así que no puedo leer el avance."
+	}
+
+	var b strings.Builder
+
+	if s.Feature != nil {
+		fmt.Fprintf(&b, "<b>%s</b>\n", esc(s.Feature.Name))
+		if s.Feature.Total > 0 {
+			done, total := s.Feature.Done, s.Feature.Total
+			fmt.Fprintf(&b, "%s <b>%d/%d</b> tareas\n", progressBar(done, total), done, total)
+			if pending := s.Feature.pendingTasks(); len(pending) > 0 {
+				fmt.Fprintf(&b, "Siguiente: <code>%s</code>\n", esc(pending[0].ID))
+			}
+		} else {
+			b.WriteString("El documento no tiene tareas.\n")
+		}
+		b.WriteString("\n")
+	}
+
+	fmt.Fprintf(&b, "Rama: <code>%s</code>\n", esc(fallback(s.Branch, "?")))
+	if s.Head != "" {
+		fmt.Fprintf(&b, "Último: <code>%s</code> %s\n", esc(s.Head), esc(truncate(s.HeadSubject, 60)))
+		if !s.HeadWhen.IsZero() {
+			fmt.Fprintf(&b, "Hace %s\n", esc(humanSince(time.Since(s.HeadWhen))))
+		}
+	}
+
+	if len(s.Commits) > 0 {
+		b.WriteString("\n<b>Commits recientes</b>\n")
+		for _, c := range s.Commits {
+			fmt.Fprintf(&b, "· <code>%s</code> %s\n", esc(c.Hash), esc(truncate(c.Subject, 60)))
+		}
+	}
+
+	b.WriteString("\n")
+	switch len(s.Changes) {
+	case 0:
+		b.WriteString("✅ Árbol limpio, todo commiteado.")
+	default:
+		fmt.Fprintf(&b, "✏️ <b>Sin commitear (%d)</b>\n", len(s.Changes))
+		for i, ch := range s.Changes {
+			if i >= 20 {
+				fmt.Fprintf(&b, "… y %d más\n", len(s.Changes)-20)
+				break
+			}
+			fmt.Fprintf(&b, "· %s <code>%s</code>\n", esc(ch.Status), esc(truncate(ch.Path, 60)))
+		}
+	}
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// progressBar renders completion as filled and empty blocks. A bar is one
+// glanceable fact; without it the operator has to read two numbers and divide.
+func progressBar(done, total int) string {
+	if total <= 0 {
+		return ""
+	}
+	const width = 8
+	filled := done * width / total
+	if filled > width {
+		filled = width
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+}
+
+// esc escapes the three characters Telegram's HTML parser treats as markup.
+func esc(s string) string {
+	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+	return r.Replace(s)
+}

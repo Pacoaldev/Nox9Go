@@ -288,3 +288,32 @@ func TestListFeatures(t *testing.T) {
 		}
 	}
 }
+
+// The Telegram report is formatted, and a repository value that contains
+// markup characters must travel escaped: an unescaped "<" either breaks the
+// message or injects formatting the operator never wrote.
+func TestRenderHTML_EscapesRepositoryValues(t *testing.T) {
+	snap := Snapshot{
+		RepoKnown:   true,
+		Branch:      "feat/a<b",
+		Head:        "abc1234",
+		HeadSubject: "fix: compare a < b & keep it",
+		Feature:     &Feature{Name: "telegram-channel", Total: 7, Done: 7},
+		Changes:     []Change{{Status: "M", Path: "web/src/a<b.svelte"}},
+	}
+
+	got := snap.RenderHTML()
+
+	if strings.Contains(got, "a<b") || strings.Contains(got, "& keep") {
+		t.Errorf("an unescaped repository value reached the message:\n%s", got)
+	}
+	if !strings.Contains(got, "a&lt;b") || !strings.Contains(got, "&amp;") {
+		t.Errorf("expected escaped values:\n%s", got)
+	}
+	// Formatting that this package owns is present.
+	for _, want := range []string{"<b>telegram-channel</b>", "<code>abc1234</code>", "████████", "7/7"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
