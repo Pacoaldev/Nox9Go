@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"testing"
 
 	"nox9go/proxy/internal/db"
@@ -17,6 +18,13 @@ func newWiringRepo(t *testing.T) *db.Repo {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
+	// An in-memory SQLite database belongs to one connection: the pool hands a
+	// later query a fresh, empty database instead of the one CreateTables just
+	// filled. The supervisor reads the allowlist from its own goroutine while
+	// this test reads the same repository, so leaving the pool free to open a
+	// second connection produced "no such table: telegramChannel" under
+	// -shuffle, where only the timing decides which connection answers.
+	conn.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = conn.Close() })
 	if err := dbtest.CreateTables(conn); err != nil {
 		t.Fatalf("CreateTables() = %v", err)
@@ -138,4 +146,37 @@ func TestSharedTelegramRuntime_PublishesAcrossBoot(t *testing.T) {
 	// A dashboard save after the publish reconciles the live loop instead of
 	// hitting the nil path.
 	rt.Reconcile()
+}
+
+// The wiring helper opened ":memory:", and an in-memory SQLite database is
+// per-connection: the moment the pool serves a query from a second connection,
+// that connection sees an empty database. The supervisor reads the allowlist
+// from its own goroutine while the test reads the config, so the read landed on
+// a schema-less connection and CI failed with "no such table: telegramChannel"
+// under -shuffle, where the timing decides which connection answers.
+func TestNewWiringRepo_ServesConcurrentReaders(t *testing.T) {
+	repo := newWiringRepo(t)
+	if err := repo.SaveTelegramToken("123456:secret"); err != nil {
+		t.Fatalf("SaveTelegramToken() = %v", err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 5; j++ {
+				if _, err := repo.GetTelegramChannelConfig(); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent read failed: %v", err)
+	}
 }

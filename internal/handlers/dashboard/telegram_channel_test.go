@@ -24,6 +24,10 @@ func newTelegramDashboardRepo(t *testing.T) *db.Repo {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
+	// In-memory SQLite is per-connection, and this repository is read from HTTP
+	// handlers running in their own goroutines: a second pool connection would
+	// query an empty database and report "no such table" at random.
+	conn.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = conn.Close() })
 	if err := dbtest.CreateTables(conn); err != nil {
 		t.Fatalf("CreateTables() = %v", err)
