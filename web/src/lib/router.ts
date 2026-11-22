@@ -20,6 +20,7 @@ export type ActiveTab =
   | 'media-video'
   | 'media-systemone'
   | 'media-web'
+  | 'channels'
   | 'proxy-pools'
   | 'skills'
   | 'console-log'
@@ -48,6 +49,7 @@ export const TAB_ROUTES: Record<ActiveTab, string> = {
   'media-video': '/dashboard/media-providers/video',
   'media-systemone': '/dashboard/media-providers/systemone',
   'media-web': '/dashboard/media-providers/web',
+  channels: '/dashboard/channels',
   'proxy-pools': '/dashboard/proxy-pools',
   skills: '/dashboard/skills',
   'console-log': '/dashboard/console-log',
@@ -150,6 +152,7 @@ const ROUTE_TO_TAB: Record<string, ActiveTab> = {
   '/media': 'media-web',
 
   // proxy pools
+  '/dashboard/channels': 'channels',
   '/dashboard/proxy-pools': 'proxy-pools',
   '/proxy-pools': 'proxy-pools',
 

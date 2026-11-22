@@ -524,6 +524,19 @@ export interface HeadroomExtrasResponse {
   error?: string
 }
 
+/** Telegram channel settings as the dashboard renders them. */
+export interface TelegramChannelStatus {
+  enabled: boolean
+  tokenPresent: boolean
+  tokenMasked: string
+  allowedUserIds: number[]
+  model: string
+  /** Why the channel is stopped: disabled | no_token | no_allowlist | running. */
+  state: string
+  botUsername: string
+  lastError: string
+}
+
 export interface ProxyPool {
   id: string
   name: string
@@ -2293,6 +2306,19 @@ export const api = {
     request<HeadroomExtrasResponse>('/api/headroom/extras', {
       method: 'DELETE',
       body: JSON.stringify({ extras }),
+    }),
+  // Telegram channel. The token is write-only: the API returns it masked, so
+  // this client has no way to read a working credential back out.
+  getTelegramChannel: () => request<TelegramChannelStatus>('/api/channels/telegram'),
+  setTelegramToken: (token: string) =>
+    request<TelegramChannelStatus>('/api/channels/telegram/token', {
+      method: 'PUT',
+      body: JSON.stringify({ token }),
+    }),
+  setTelegramAllowlist: (userIds: number[]) =>
+    request<TelegramChannelStatus>('/api/channels/telegram/allowlist', {
+      method: 'PUT',
+      body: JSON.stringify({ userIds }),
     }),
   // Proxy Pools
   getProxyPools: (includeUsage = true) =>
