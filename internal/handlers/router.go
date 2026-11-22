@@ -187,6 +187,9 @@ func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.C
 		ts = chatH.TokenSaver
 	}
 	dashH := dashboard.NewDashboardHandler(repo, ts)
+	if chatH != nil {
+		dashH.ChatHandler = chatH
+	}
 	if tg != nil {
 		dashH.ReconcileTelegramChannel = tg.Reconcile
 	}
@@ -249,6 +252,7 @@ func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.C
 	// there is no /allow command on the bot, so authorization is a deliberate
 	// dashboard action and never a message a stranger can send.
 	r.Get("/api/channels/telegram", dashH.HandleGetTelegramChannel)
+	r.Get("/api/channels/telegram/models", dashH.HandleTelegramModels)
 	r.Put("/api/channels/telegram/token", dashH.HandleSetTelegramToken)
 	r.Put("/api/channels/telegram/allowlist", dashH.HandleSetTelegramAllowlist)
 

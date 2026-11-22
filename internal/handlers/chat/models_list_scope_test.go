@@ -380,16 +380,16 @@ func TestModelsListModeFromQuery(t *testing.T) {
 		query string
 		want  ModelsListMode
 	}{
-		{"absent params keep upstream default", "", modeListAll},
-		{"explicit connected narrows", "?connected=1", modeListConnected},
-		{"connected accepts true", "?connected=true", modeListConnected},
-		{"connected accepts yes", "?connected=yes", modeListConnected},
-		{"explicit all forces catalog", "?all=1", modeListCatalog},
-		{"all accepts true", "?all=true", modeListCatalog},
-		{"connected wins over all", "?all=1&connected=1", modeListConnected},
-		{"valueless all is ignored", "?all", modeListAll},
-		{"unknown value is ignored", "?connected=maybe", modeListAll},
-		{"unrelated params ignored", "?limit=10", modeListAll},
+		{"absent params keep upstream default", "", ModeListAll},
+		{"explicit connected narrows", "?connected=1", ModeListConnected},
+		{"connected accepts true", "?connected=true", ModeListConnected},
+		{"connected accepts yes", "?connected=yes", ModeListConnected},
+		{"explicit all forces catalog", "?all=1", ModeListCatalog},
+		{"all accepts true", "?all=true", ModeListCatalog},
+		{"connected wins over all", "?all=1&connected=1", ModeListConnected},
+		{"valueless all is ignored", "?all", ModeListAll},
+		{"unknown value is ignored", "?connected=maybe", ModeListAll},
+		{"unrelated params ignored", "?limit=10", ModeListAll},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -235,24 +235,24 @@ func (h *ChatHandler) disabledModelIndex() map[string]map[string]bool {
 }
 
 // ModelsListMode selects which provider set buildModelsList walks. The zero
-// value is modeListAll, so every existing caller keeps the upstream-faithful
+// value is ModeListAll, so every existing caller keeps the upstream-faithful
 // behaviour: static catalog dump when no connection rows exist, otherwise one
 // model set per active connection.
 type ModelsListMode int
 
 const (
-	// modeListAll is the upstream default: catalog dump on a fresh install,
+	// ModeListAll is the upstream default: catalog dump on a fresh install,
 	// connection-scoped otherwise.
-	modeListAll ModelsListMode = iota
-	// modeListConnected restricts output to providers that have an active
+	ModeListAll ModelsListMode = iota
+	// ModeListConnected restricts output to providers that have an active
 	// connection, plus registry noAuth providers (usable without credentials).
 	// With no connection rows at all this yields the noAuth subset instead of
 	// the full 1300-entry catalog, which is what a client asking for "what can
 	// I actually call" wants.
-	modeListConnected
-	// modeListCatalog forces the full static catalog dump plus custom models
+	ModeListConnected
+	// ModeListCatalog forces the full static catalog dump plus custom models
 	// even when connections exist, for explicit discovery requests.
-	modeListCatalog
+	ModeListCatalog
 )
 
 // ModelsListResult carries the model list plus the metadata the handler echoes
@@ -267,9 +267,9 @@ type ModelsListResult struct {
 // modelsListModeString maps a mode to the wire value published as "mode".
 func modelsListModeString(mode ModelsListMode) string {
 	switch mode {
-	case modeListConnected:
+	case ModeListConnected:
 		return "connected"
-	case modeListCatalog:
+	case ModeListCatalog:
 		return "catalog"
 	default:
 		return "all"
@@ -331,11 +331,11 @@ func isUsableProvider(providerID string, usable map[string]bool) bool {
 	return canon != "" && usable[canon]
 }
 
-// buildModelsListResult mirrors upstream buildModelsList(["llm"]) and reports
+// BuildModelsListResult mirrors upstream buildModelsList(["llm"]) and reports
 // the mode it used. Combos come first, then one model set per active
 // connection, with the static catalog dump only when the connections table
-// itself is empty (and unconditionally in modeListCatalog).
-func (h *ChatHandler) buildModelsListResult(ctx context.Context, mode ModelsListMode) ModelsListResult {
+// itself is empty (and unconditionally in ModeListCatalog).
+func (h *ChatHandler) BuildModelsListResult(ctx context.Context, mode ModelsListMode) ModelsListResult {
 	var allConns []*models.ProviderConnection
 	if h.Repo != nil {
 		allConns, _ = h.Repo.GetProviderConnections("", false)
@@ -384,7 +384,7 @@ func activeConnections(conns []*models.ProviderConnection) []*models.ProviderCon
 // buildModelsList is the upstream-faithful entry point used by model lookup.
 func (h *ChatHandler) buildModelsList(ctx context.Context) []ModelInfoObject {
 	conns := h.allConnections()
-	return h.buildModelsListForMode(ctx, modeListAll, conns, activeConnections(conns), nil)
+	return h.buildModelsListForMode(ctx, ModeListAll, conns, activeConnections(conns), nil)
 }
 
 // allConnections returns every provider connection row, or nil without a Repo.
@@ -397,7 +397,7 @@ func (h *ChatHandler) allConnections() []*models.ProviderConnection {
 }
 
 // buildModelsListForMode is the shared builder. usable may be nil for
-// modeListAll, in which case no provider filtering is applied.
+// ModeListAll, in which case no provider filtering is applied.
 func (h *ChatHandler) buildModelsListForMode(
 	ctx context.Context,
 	mode ModelsListMode,
@@ -411,7 +411,7 @@ func (h *ChatHandler) buildModelsListForMode(
 	isDisabled := func(provider, modelID string) bool {
 		return disabled[provider][modelID]
 	}
-	filterConnected := mode == modeListConnected && usable != nil
+	filterConnected := mode == ModeListConnected && usable != nil
 
 	// 1. Combos first (upstream pushes them before provider models).
 	data = h.appendCombos(data, seen)
@@ -430,11 +430,11 @@ func (h *ChatHandler) buildModelsListForMode(
 	// operator explicitly switched off. A provider whose rows are ALL inactive
 	// still publishes nothing, since filterConnected keeps it out of the dump.
 	catalogWhenEmpty := len(activeConns) == 0
-	if catalogWhenEmpty && len(allConns) > 0 && !filterConnected && mode != modeListCatalog {
+	if catalogWhenEmpty && len(allConns) > 0 && !filterConnected && mode != ModeListCatalog {
 		filterConnected = true
 	}
 
-	if catalogWhenEmpty || mode == modeListCatalog {
+	if catalogWhenEmpty || mode == ModeListCatalog {
 		for alias, models := range providers.ProviderModels {
 			if canon := providers.ResolveAlias(alias); canon != alias && providers.GetProviderAlias(canon) != alias {
 				continue

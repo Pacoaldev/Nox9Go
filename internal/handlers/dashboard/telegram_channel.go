@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"nox9go/proxy/internal/handlerutil"
+	"nox9go/proxy/internal/handlers/chat"
 )
 
 // decodeTelegramBody reads a request body into dst. The size cap is the point:
@@ -179,4 +180,30 @@ func looksLikeBotToken(token string) bool {
 		}
 	}
 	return true
+}
+
+// HandleTelegramModels lists the model ids this gateway can dispatch, for the
+// bot's /model command (S6).
+//
+// The /v1/models route needs a client API key, which the bot does not have and
+// must not need: it is this process talking to itself over the loopback. The
+// id providers used to offer a list straight out of the catalog, which goes
+// stale the moment a connection ages out — the same stale-catalog trap that
+// AGENTS.md §0.3 documents for github and clinepass. Building the same list
+// the /v1/models route builds, minus the per-key access filter (the caller is
+// the operator's own process), keeps it truthful.
+func (h *DashboardHandler) HandleTelegramModels(w http.ResponseWriter, r *http.Request) {
+	if h.ChatHandler == nil {
+		handlerutil.WriteJSONError(w, http.StatusServiceUnavailable,
+			"models are unavailable while the engine is not wired")
+		return
+	}
+	result := h.ChatHandler.BuildModelsListResult(r.Context(), chat.ModeListConnected)
+	ids := make([]string, 0, len(result.Models))
+	for _, m := range result.Models {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"models": ids})
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"nox9go/proxy/internal/db"
+	"nox9go/proxy/internal/handlers/chat"
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/middleware"
 	"nox9go/proxy/internal/observ"
@@ -39,6 +40,10 @@ type DashboardHandler struct {
 	TelegramLiveStatus interface {
 		Status() (state, botUsername, lastError string)
 	}
+	// ChatHandler is the engine's handler, used to list the models the gateway
+	// can dispatch for the bot's /model command. Optional: tests have none and
+	// the endpoint then reports the unavailability instead of failing.
+	ChatHandler *chat.ChatHandler
 }
 
 // NewDashboardHandler initializes a DashboardHandler with the provided Repo.
