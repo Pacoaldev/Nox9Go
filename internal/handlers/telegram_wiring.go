@@ -87,6 +87,17 @@ func (rt *TelegramRuntime) Reconcile() {
 	rt.sup.Reconcile(context.Background())
 }
 
+// Status returns the live channel state for the dashboard. The nil case means
+// "the runtime has not started yet", which the handler reports as disabled
+// rather than inventing state.
+func (rt *TelegramRuntime) Status() (state, botUsername, lastError string) {
+	if rt == nil || rt.sup == nil {
+		return string(telegram.StateDisabled), "", ""
+	}
+	st := rt.sup.Status()
+	return string(st.State), st.BotUsername, st.LastError
+}
+
 // Stop halts the poll loop. It is called from the server's shutdown path: a
 // goroutine left polling would keep calling Telegram after the gateway is gone.
 func (rt *TelegramRuntime) Stop(ctx context.Context) {

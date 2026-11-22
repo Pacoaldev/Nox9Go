@@ -189,6 +189,7 @@ func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.C
 	dashH := dashboard.NewDashboardHandler(repo, ts)
 	if tg != nil {
 		dashH.ReconcileTelegramChannel = tg.Reconcile
+		dashH.TelegramLiveStatus = tg
 	}
 	if chatH != nil {
 		dashH.SemanticCache = chatH.SemanticCache

@@ -33,6 +33,12 @@ type DashboardHandler struct {
 	// settings change. It is optional: a handler built outside a boot has none,
 	// and a save then takes effect on the next start.
 	ReconcileTelegramChannel func()
+	// TelegramLiveStatus reports the poll loop's live state for the read
+	// endpoint. Optional: tests and tooling have none and the read then falls
+	// back to the stored configuration.
+	TelegramLiveStatus interface {
+		Status() (state, botUsername, lastError string)
+	}
 }
 
 // NewDashboardHandler initializes a DashboardHandler with the provided Repo.

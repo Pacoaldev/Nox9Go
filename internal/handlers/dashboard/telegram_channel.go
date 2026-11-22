@@ -34,6 +34,12 @@ type telegramStatus struct {
 	LastError      string  `json:"lastError"`
 }
 
+// TelegramLiveStatus is the source of the live channel state. Optional: a
+// handler built outside a boot has none and falls back to the stored decision.
+type TelegramLiveStatus interface {
+	Status() (state, botUsername, lastError string)
+}
+
 // HandleGetTelegramChannel returns the channel's stored settings.
 //
 // It reports the state from storage rather than from a live supervisor so the
@@ -67,6 +73,19 @@ func (h *DashboardHandler) HandleGetTelegramChannel(w http.ResponseWriter, r *ht
 		status.State = "no_allowlist"
 	} else if cfg.Enabled {
 		status.State = "running"
+	}
+	// The stored decision is the fallback; the live loop is the truth. A green
+	// banner that says running while the poll loop is dead is worse than an
+	// honest error, because it kills the first place an operator looks.
+	if h.TelegramLiveStatus != nil {
+		state, botUsername, lastError := h.TelegramLiveStatus.Status()
+		if lastError != "" {
+			status.State = "error"
+			status.LastError = lastError
+		} else if state != "" {
+			status.State = state
+			status.BotUsername = botUsername
+		}
 	}
 
 	handlerutil.WriteJSON(w, http.StatusOK, status)
