@@ -44,6 +44,16 @@ func SharedTelegramRuntime() *TelegramRuntime {
 	return telegramHolder.rt
 }
 
+// sharedTelegramStatus resolves the runtime at request time instead of at route
+// mount time. The router is built before OnStart runs, so a mount-time capture
+// of SharedTelegramRuntime() froze nil forever and the dashboard kept reporting
+// the stored decision instead of the live loop.
+type sharedTelegramStatus struct{}
+
+func (sharedTelegramStatus) Status() (state, botUsername, lastError string) {
+	return SharedTelegramRuntime().Status()
+}
+
 // startTelegramChannel wires and starts the channel for a booted gateway.
 //
 // It is a no-op when the channel is not configured: no token or no allowlist

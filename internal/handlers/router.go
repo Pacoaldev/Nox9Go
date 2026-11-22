@@ -189,8 +189,10 @@ func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.C
 	dashH := dashboard.NewDashboardHandler(repo, ts)
 	if tg != nil {
 		dashH.ReconcileTelegramChannel = tg.Reconcile
-		dashH.TelegramLiveStatus = tg
 	}
+	// Live status is resolved per request: the runtime does not exist yet when
+	// the routes mount, so capturing it here would freeze nil.
+	dashH.TelegramLiveStatus = sharedTelegramStatus{}
 	if chatH != nil {
 		dashH.SemanticCache = chatH.SemanticCache
 		// The engine's handler holds the limiter the data plane meters provider
