@@ -26,12 +26,13 @@ const (
 // and the task table on each render, never cached in the Supervisor, so the
 // panel can never show a state the channel has already left.
 type PanelState struct {
-	Mode            db.BotMode
-	ModelOrCombo    string
-	TaskStatus      TaskStatus
-	PendingApproval string
-	LastAction      string
-	AutoApprove     bool
+	Mode               db.BotMode
+	ModelOrCombo       string
+	TaskStatus         TaskStatus
+	PendingApproval    string
+	LastAction         string
+	CurrentInstruction string
+	AutoApprove        bool
 }
 
 // Callback data prefix. Every value this package emits starts with it, so a
@@ -131,6 +132,10 @@ func renderAgentPanel(s PanelState) (string, models.ReplyMarkup) {
 	switch {
 	case status == TaskPendingApproval && s.PendingApproval != "":
 		fmt.Fprintf(&b, "Pendiente: <code>%s</code>\n", esc(s.PendingApproval))
+	case s.CurrentInstruction != "":
+		// A task the operator already submitted stays visible while it runs, so
+		// the panel answers "what is it doing" before "what should I type".
+		fmt.Fprintf(&b, "Tarea: %s\n", esc(truncate(s.CurrentInstruction, 80)))
 	case s.LastAction != "":
 		fmt.Fprintf(&b, "%s\n", esc(s.LastAction))
 	default:
@@ -190,4 +195,13 @@ func taskStatusLabel(s TaskStatus) string {
 func esc(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 	return r.Replace(s)
+}
+
+// truncate cuts a value to max characters with an ellipsis, for a panel line
+// that must stay inside one phone row.
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-1] + "…"
 }

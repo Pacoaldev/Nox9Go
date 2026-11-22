@@ -291,3 +291,19 @@ func TestResolveTask_RefusesInvalidTransition(t *testing.T) {
 		t.Errorf("task status = %q, want it unchanged at idle", repo.task.Status)
 	}
 }
+
+// A running task keeps its instruction on the panel instead of inviting the
+// operator to type another one, which is what a screenshot showed as confusing.
+func TestRenderAgentPanel_RunningShowsInstruction(t *testing.T) {
+	text, _ := render(t, PanelState{
+		Mode:               db.ModeAgent,
+		TaskStatus:         TaskRunning,
+		CurrentInstruction: "desplegar la rama feat/telegram",
+	})
+	if !strings.Contains(text, "desplegar la rama") {
+		t.Errorf("panel lost the running instruction:\n%s", text)
+	}
+	if strings.Contains(text, "Enviá una instrucción") {
+		t.Errorf("panel asked for another task while one runs:\n%s", text)
+	}
+}

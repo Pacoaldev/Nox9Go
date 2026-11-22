@@ -32,6 +32,11 @@ func (s *Supervisor) panelState(chatID int64) PanelState {
 		if state.TaskStatus == TaskPendingApproval {
 			state.PendingApproval = task.Instruction
 		}
+		// A task under supervision keeps its instruction on the panel while it
+		// runs, which is what the operator is watching for.
+		if state.TaskStatus == TaskRunning {
+			state.CurrentInstruction = task.Instruction
+		}
 		if state.TaskStatus == "" {
 			state.TaskStatus = TaskIdle
 		}
