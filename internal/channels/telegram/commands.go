@@ -253,7 +253,13 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 // handleCommand routes a bot command. None of these call a provider.
 func (s *Supervisor) handleCommand(ctx context.Context, bot *tgbot.Bot, chatID int64, cmd, args string) {
 	switch cmd {
-	case "start", "help":
+	case "start":
+		s.send(ctx, bot, chatID, helpText())
+		// /start is what a fresh chat sends. Showing the panel right after the
+		// help makes the two modes reachable without knowing /panel exists.
+		s.cmdPanel(ctx, bot, chatID)
+	case "help":
+		// A lookup, not a fresh chat: it answers without redrawing the panel.
 		s.send(ctx, bot, chatID, helpText())
 	case "new":
 		s.cmdNew(ctx, bot, chatID)
@@ -497,9 +503,27 @@ func helpText() string {
 		"/pi <orden> — dejar una orden para la sesión de desarrollo",
 		"/estado — avance del desarrollo (commits, pendientes, tareas)",
 		"/estado <feature> — avance de una feature ODD concreta",
+		"/panel — abrir el panel de modo (chat o agente)",
 		"/help — esta ayuda",
 	}, "\n")
 }
 
 // ensure db stays referenced by the interface docs above.
 var _ = db.TelegramSession{}
+
+// botCommands is the menu Telegram draws for the bot. It mirrors helpText, and
+// /panel leads on purpose: the mode panel is the entry point for everything
+// else, and an operator opening Telegram Web with no menu had no way to find it.
+func botCommands() []models.BotCommand {
+	return []models.BotCommand{
+		{Command: "panel", Description: "Abrir el panel de modo (chat o agente)"},
+		{Command: "new", Description: "Abrir una sesión"},
+		{Command: "end", Description: "Cerrar y archivar la sesión"},
+		{Command: "model", Description: "Ver o cambiar el modelo"},
+		{Command: "sessions", Description: "Ver las últimas sesiones"},
+		{Command: "cancel", Description: "Cancelar el turno en vuelo"},
+		{Command: "status", Description: "Estado del canal"},
+		{Command: "estado", Description: "Avance del desarrollo"},
+		{Command: "help", Description: "Ayuda"},
+	}
+}

@@ -114,14 +114,15 @@ func runCommand(t *testing.T, sup *Supervisor, fake *fakeTelegram, text string) 
 // here instead of spending tokens.
 func TestCommands_AnsweredLocally(t *testing.T) {
 	tests := []struct {
-		name     string
-		command  string
-		wantText string
+		name         string
+		command      string
+		wantText     string
+		wantMessages int
 	}{
-		{name: "start offers help", command: "/start", wantText: "/new"},
-		{name: "help offers help", command: "/help", wantText: "/new"},
-		{name: "new opens a session", command: "/new", wantText: "abierta"},
-		{name: "unknown command is refused", command: "/nonsense", wantText: "desconocido"},
+		{name: "start offers help and the panel", command: "/start", wantText: "/new", wantMessages: 2},
+		{name: "help offers help", command: "/help", wantText: "/new", wantMessages: 1},
+		{name: "new opens a session", command: "/new", wantText: "abierta", wantMessages: 1},
+		{name: "unknown command is refused", command: "/nonsense", wantText: "desconocido", wantMessages: 1},
 	}
 
 	for _, tt := range tests {
@@ -131,8 +132,10 @@ func TestCommands_AnsweredLocally(t *testing.T) {
 
 			sent := runCommand(t, sup, fake, tt.command)
 
-			if len(sent) != 1 {
-				t.Fatalf("sent %d messages, want exactly 1: %q", len(sent), sent)
+			// /start is a fresh chat's first message, so it answers with the help
+			// and then opens the mode panel; /help is a lookup and answers once.
+			if len(sent) != tt.wantMessages {
+				t.Fatalf("sent %d messages, want %d: %q", len(sent), tt.wantMessages, sent)
 			}
 			if !strings.Contains(sent[0], tt.wantText) {
 				t.Errorf("reply = %q, want it to contain %q", sent[0], tt.wantText)
@@ -295,8 +298,10 @@ func TestHandleUpdate_AcceptsAuthorizedUser(t *testing.T) {
 		},
 	})
 
-	if sent := fake.messages(); len(sent) != 1 {
-		t.Errorf("replied %d times to an authorized user, want 1", len(sent))
+	// /start answers with the help and then the mode panel, so an authorized
+	// first message produces both; the point here is that it is answered at all.
+	if sent := fake.messages(); len(sent) != 2 {
+		t.Errorf("replied %d times to an authorized user, want 2", len(sent))
 	}
 }
 

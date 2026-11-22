@@ -43,6 +43,14 @@ func (s *Supervisor) poll(ctx context.Context, repo Repo) {
 	s.mu.Lock()
 	s.username = me.Username
 	s.mu.Unlock()
+	// Telegram Web and the mobile clients draw a command menu button from this
+	// registration. Without it the chat opens with nothing to tap, which is
+	// how the modes stayed undiscoverable until /panel was typed by hand.
+	if _, err := bot.SetMyCommands(ctx, &tgbot.SetMyCommandsParams{Commands: botCommands()}); err != nil {
+		// A failed registration is cosmetic for users who know the commands,
+		// so it is reported but never blocks the channel from running.
+		s.setError(fmt.Errorf("telegram: register commands: %w", err))
+	}
 
 	// The development feed runs alongside the poll loop: Start blocks, so the
 	// drain owns its own goroutine and stops with the same context.
