@@ -42,6 +42,9 @@ This is a **public** fork (`github.com/Pacoaldev/Nox9Go`): CI runs on GitHub Act
 - **The dashboard API requires auth.** The CLI token travels in the `x-9r-cli-token` header (`sha256(machine-id + "9r-cli-auth" + cli-secret).hex[:16]`, files in the data dir). Without it: `401`. An unknown route: `404`. That pair is the cheap way to prove the wiring is alive.
 - **CI lives in `.github/workflows/ci.yml`.** It builds the frontend from the lockfile, runs the `svelte-check` ratchet and `oxlint`, builds the SPA, then `go vet`, `go test ./...`, a clean-tree build, the race detector, `gitleaks`, `govulncheck`, the update-manifest check and the end-to-end (Playwright) suite. Most gates have a local equivalent in §8; gitleaks, the manifest check and the e2e suite are the exceptions, so for those CI is the only place they run unless the tools are installed locally.
 - **`make` must be 3.82 or newer.** The Makefile reads `VERSION` with `$(file <VERSION)`, and under 3.81 that expands to empty and embeds an empty version. Every target below works under `sh` and `cmd.exe`, but this one needs the newer Make.
+- **A `bun` script does not run in a clean environment: bun loads the project's `.env` first.** Every key in it — `ROUTER_MASTER_KEY`, `CLOUDFLARE_ACCOUNT_ID`, the OAuth client secrets, `DEV_*` — lands in `process.env` and is inherited by anything the script spawns, so `bun` + `execFileSync("go", ["test", …])` runs the suite with credentials a plain `go test` never sees. That is a leak, and it also changes results: with `CLOUDFLARE_ACCOUNT_ID` present, `TestHandleValidateProvider_CloudflareRequiresAccountID` fails because the handler finds an account id the test just said is missing, which is a red that never appears in CI. A bun script that spawns Go tests must build its own whitelisted `env` (`scripts/diff-coverage.mjs` does).
+- **`make cross` fails on a machine whose Make path has spaces.** The recipe recurses with an unquoted `$(MAKE) -j …`, so `C:/Program Files (x86)/GnuWin32/bin/make` is split by the shell (`syntax error near unexpected token \`('`). The five `CGO_ENABLED=0` builds it would run are the same as `cross-one`; run them directly or quote `"$(MAKE)"`.
+- **`make vet-svelte` needs bun 1.4.x.** It starts with `bun install --frozen-lockfile`, and `web/bun.lock` is `lockfileVersion: 2`, so an older bun refuses the install (`UnknownLockfileVersion`) and the target fails before checking anything. With `web/node_modules` already present, `cd web && bun run ratchet:svelte` is the same check.
 
 ### 0.3 Provider model availability (why some models fail)
 
@@ -624,6 +627,14 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
 # Update-manifest check (what the updater trusts; CI runs the same)
 bun scripts/gen-version-manifest.mjs --check
+
+# Patch-coverage prediction — run BEFORE the push, not after Codecov says so.
+# Answers "would codecov/patch flag this?" against Go's own profile: changed
+# lines that no cover block contains are not counted, because formatting,
+# comments and declarations have no coverage either way. Pass --worktree to
+# include uncommitted changes.
+bun scripts/diff-coverage.mjs                      # base origin/main, target 67.9
+bun scripts/diff-coverage.mjs --worktree --base main
 
 # End-to-end suite (real gateway + Playwright; browsers need `bunx playwright install --with-deps chromium` once)
 cd web; bun run e2e
