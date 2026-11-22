@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -28,6 +29,29 @@ func (s *Supervisor) send(ctx context.Context, bot *tgbot.Bot, chatID int64, tex
 	}
 }
 
+// sendKeyboard sends one message carrying the cancel reply keyboard (S7).
+// A reply keyboard persists in the chat, which is deliberate: the button stays
+// reachable while the operator reads a long reply, and a press when nothing is
+// in flight gets the same honest nothing-to-cancel answer.
+func (s *Supervisor) sendKeyboard(ctx context.Context, bot *tgbot.Bot, chatID int64, text string) {
+	markup, err := json.Marshal(&models.ReplyKeyboardMarkup{
+		Keyboard:       [][]models.KeyboardButton{{{Text: "Cancelar"}}},
+		ResizeKeyboard: true,
+		IsPersistent:   true,
+	})
+	if err != nil {
+		s.send(ctx, bot, chatID, text)
+		return
+	}
+	if _, err := bot.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: markup,
+	}); err != nil {
+		s.setError(fmt.Errorf("telegram: send keyboard: %w", err))
+	}
+}
+
 // replyToChat resolves the chat a message came from.
 func replyToChat(msg *models.Message) int64 { return msg.Chat.ID }
 
@@ -38,6 +62,15 @@ func (s *Supervisor) handleMessage(ctx context.Context, bot *tgbot.Bot, msg *mod
 
 	if cmd, args, isCommand := parseCommand(msg.Text); isCommand {
 		s.handleCommand(ctx, bot, chatID, cmd, args)
+		return
+	}
+
+	// The cancel keyboard button arrives as plain text. It is intercepted here
+	// rather than forwarded to a model that was never asked for it; when no
+	// turn is in flight the operator gets the same honest nothing-to-cancel
+	// answer the /cancel command gives.
+	if strings.TrimSpace(msg.Text) == "Cancelar" {
+		s.cmdCancel(ctx, bot, chatID)
 		return
 	}
 
@@ -95,12 +128,36 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 		s.send(ctx, bot, chatID, "No pude emitir la clave del canal.")
 		return
 	}
-	reply, err := forwardText(ctx, baseURL, apiKey, model, messages)
-	if err != nil {
+	// S7: the turn runs on a derived context the /cancel command can abort.
+	// The parent ctx is not replaced: a cancelled poll loop must still stop the
+	// turn, and the registration only adds a second way to cancel it.
+	turnCtx, cancelTurn := context.WithCancel(ctx)
+	defer cancelTurn()
+	s.beginTurn(chatID, cancelTurn)
+
+	// S7: the visible cancel control. The reply keyboard travels with an
+	// ack so the operator sees, in the moment the turn starts, what a tap
+	// does; the command text is accepted anywhere so a stale keyboard after a
+	// restart still cancels honestly ("no hay nada en vuelo").
+	s.sendKeyboard(ctx, bot, chatID, "En vuelo — cancelá con el botón o /cancel.")
+
+	reply, turnErr := forwardText(turnCtx, baseURL, apiKey, model, messages)
+
+	// Removed before anything else, so a turn that finished normally is never
+	// left cancelable and a late /cancel reports nothing in flight.
+	s.endTurn(chatID)
+
+	if turnErr != nil {
+		if ctx.Err() != nil || turnCtx.Err() != nil {
+			// A cancelled turn sends no completion and leaves no assistant row:
+			// the request never produced an answer worth keeping.
+			s.send(ctx, bot, chatID, "Turno cancelado. El mensaje sigue en el historial: mandá /new o volvé a preguntar.")
+			return
+		}
 		// The failure is reported to the user because a silent turn looks like
 		// the bot is broken, and the cause is usually a model or provider choice
 		// the operator can act on.
-		s.send(ctx, bot, chatID, "Error del gateway: "+err.Error())
+		s.send(ctx, bot, chatID, "Error del gateway: "+turnErr.Error())
 		return
 	}
 
@@ -126,6 +183,8 @@ func (s *Supervisor) handleCommand(ctx context.Context, bot *tgbot.Bot, chatID i
 		s.cmdStatus(ctx, bot, chatID)
 	case "model":
 		s.cmdModel(ctx, bot, chatID, args)
+	case "cancel":
+		s.cmdCancel(ctx, bot, chatID)
 	case "estado", "avance", "dev":
 		s.cmdDevStatus(ctx, bot, chatID, args)
 	default:
@@ -254,6 +313,20 @@ func (s *Supervisor) cmdModel(ctx context.Context, bot *tgbot.Bot, chatID int64,
 	s.send(ctx, bot, chatID, "Modelo cambiado a: "+args)
 }
 
+// cmdCancel aborts the chat's in-flight turn (S7).
+//
+// "Cancelar" (the label a reply-keyboard button shows) is accepted alongside
+// the slash command, because a tap on the keyboard sends that text as an
+// ordinary message; treating it as a command keeps the button honest instead
+// of leaking the word into a model that was never asked for it.
+func (s *Supervisor) cmdCancel(ctx context.Context, bot *tgbot.Bot, chatID int64) {
+	if s.cancelTurn(chatID) {
+		s.send(ctx, bot, chatID, "Cancelando el turno en vuelo.")
+		return
+	}
+	s.send(ctx, bot, chatID, "No hay nada en vuelo que cancelar.")
+}
+
 // cmdDevStatus reports where the development stands: the branch, the last
 // commit, the work still uncommitted and, when a feature is named, that ODD
 // document's task progress.
@@ -291,6 +364,7 @@ func helpText() string {
 		"/model — ver el modelo actual y los disponibles",
 		"/model <id> — cambiar el modelo",
 		"/status — estado del canal",
+		"/cancel — cancelar el turno en vuelo",
 		"/estado — avance del desarrollo (commits, pendientes, tareas)",
 		"/estado <feature> — avance de una feature ODD concreta",
 		"/help — esta ayuda",

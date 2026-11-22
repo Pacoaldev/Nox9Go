@@ -114,8 +114,13 @@ type Supervisor struct {
 	// exit without talking to Telegram.
 	runLoop func(ctx context.Context, repo Repo)
 
-	mu       sync.Mutex
-	cancel   context.CancelFunc
+	mu     sync.Mutex
+	cancel context.CancelFunc
+
+	// inFlight holds the cancel function of the turn each chat currently has
+	// running (S7). A chat has at most one: a second message while one is in
+	// flight is handled after the first returns, not concurrently.
+	inFlight map[int64]context.CancelFunc
 	done     chan struct{}
 	status   Status
 	username string
@@ -126,9 +131,10 @@ type Supervisor struct {
 // stored list.
 func NewSupervisor(repo Repo, allowed func(int64) bool) *Supervisor {
 	s := &Supervisor{
-		repo:    repo,
-		allowed: allowed,
-		status:  Status{State: StateDisabled},
+		repo:     repo,
+		allowed:  allowed,
+		status:   Status{State: StateDisabled},
+		inFlight: make(map[int64]context.CancelFunc),
 	}
 	s.runLoop = s.poll
 	return s
@@ -260,6 +266,43 @@ func (s *Supervisor) stopLoop() {
 	if done != nil {
 		<-done
 	}
+}
+
+// beginTurn registers a chat's in-flight turn so /cancel can abort it (S7).
+func (s *Supervisor) beginTurn(chatID int64, cancel context.CancelFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inFlight[chatID] = cancel
+}
+
+// endTurn removes the registration. It runs on every completed turn, so it
+// tolerates an entry a cancel already removed.
+func (s *Supervisor) endTurn(chatID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.inFlight, chatID)
+}
+
+// turnInFlight reports whether the chat has a turn running.
+func (s *Supervisor) turnInFlight(chatID int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.inFlight[chatID]
+	return ok
+}
+
+// cancelTurn aborts the chat's in-flight turn through its context and clears
+// the registration. The bool separates an idle cancel from a successful one:
+// an operator must be able to tell "cancelled" from "the button did nothing".
+func (s *Supervisor) cancelTurn(chatID int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cancel, ok := s.inFlight[chatID]
+	if ok {
+		delete(s.inFlight, chatID)
+		cancel()
+	}
+	return ok
 }
 
 // setError records a failure the operator needs to see, in place of the state

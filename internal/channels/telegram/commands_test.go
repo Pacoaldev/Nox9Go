@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,11 +11,13 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/notify"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -24,9 +27,10 @@ import (
 // test asserts what the operator would have read in the chat, which is the only
 // observable effect of a command.
 type fakeTelegram struct {
-	mu   sync.Mutex
-	sent []string
-	srv  *httptest.Server
+	mu      sync.Mutex
+	sent    []string
+	markups []string
+	srv     *httptest.Server
 }
 
 func newFakeTelegram(t *testing.T) *fakeTelegram {
@@ -42,6 +46,7 @@ func newFakeTelegram(t *testing.T) *fakeTelegram {
 			}
 			f.mu.Lock()
 			f.sent = append(f.sent, r.FormValue("text"))
+			f.markups = append(f.markups, r.FormValue("reply_markup"))
 			f.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
@@ -68,6 +73,12 @@ func (f *fakeTelegram) bot(t *testing.T) *tgbot.Bot {
 		t.Fatalf("tgbot.New() = %v", err)
 	}
 	return b
+}
+
+func (f *fakeTelegram) replyMarkups() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.markups...)
 }
 
 func (f *fakeTelegram) messages() []string {
@@ -600,5 +611,212 @@ func TestForwardPendingEvents_AllAllowedChats(t *testing.T) {
 
 	if sent := fake.messages(); len(sent) != 2 {
 		t.Errorf("sent %d messages, want one per allowed chat (2)", len(sent))
+	}
+}
+
+// S7: a turn in flight can be cancelled. The cancel must cut the upstream
+// request through its context, and the aborted turn must not send a completion
+// or reach the transcript.
+func TestCmdCancel(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+	}{
+		{name: "the /cancel command", text: "/cancel"},
+		{name: "the keyboard button label", text: "Cancelar"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := newFakeTelegram(t)
+			sup := NewSupervisor(&fakeRepo{token: "111:secret", allowed: []int64{42}}, func(int64) bool { return true })
+
+			// No turn in flight: the cancel must say so instead of pretending.
+			sent := runCommand(t, sup, fake, "/cancel")
+			if len(sent) != 1 || !strings.Contains(sent[0], "nada en vuelo") {
+				t.Fatalf("idle cancel reply = %q, want an explicit nothing-in-flight", sent)
+			}
+
+			// A turn in flight: register one whose context we can observe.
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			sup.beginTurn(42, cancel)
+			if !sup.turnInFlight(42) {
+				t.Fatalf("turnInFlight = false right after beginTurn")
+			}
+
+			_ = runCommand(t, sup, fake, tt.text)
+
+			// The observable effect of a cancel is the context being done: a
+			// test that only read a boolean would pass even if the abort never
+			// reached the request.
+			select {
+			case <-ctx.Done():
+			default:
+				t.Errorf("the in-flight context is still alive after %q", tt.text)
+			}
+
+			// The slot is released, so a second cancel is an idle cancel.
+			sent = runCommand(t, sup, fake, "/cancel")
+			if len(sent) == 1 && strings.Contains(sent[0], "Cancelando") {
+				t.Errorf("cancel succeeded twice for one in-flight turn")
+			}
+		})
+	}
+}
+
+// The registry is keyed by chat, so one chat cannot cancel another's turn.
+func TestBeginTurn_IsolatedPerChat(t *testing.T) {
+	sup := NewSupervisor(&fakeRepo{token: "111:secret"}, func(int64) bool { return true })
+
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sup.beginTurn(42, cancel)
+
+	if sup.turnInFlight(99) {
+		t.Errorf("chat 99 sees a turn it never started")
+	}
+}
+
+// endTurn removes the entry, which is what happens on every normal completion.
+func TestEndTurn(t *testing.T) {
+	sup := NewSupervisor(&fakeRepo{token: "111:secret"}, func(int64) bool { return true })
+	sup.beginTurn(42, func() {})
+	sup.endTurn(42)
+
+	if sup.turnInFlight(42) {
+		t.Errorf("turn still in flight after endTurn")
+	}
+}
+
+// S7: while a turn is in flight the bot shows a cancel control. The
+// acknowledgment the turn starts with carries the "Cancelar" reply keyboard,
+// which is the control an operator sees on the phone.
+func TestTurnStarts_WithVisibleCancelControl(t *testing.T) {
+	// A slow upstream keeps the turn in flight long enough for the assertions
+	// to run against a real in-flight registration.
+	block := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-block
+	}))
+	defer upstream.Close()
+	defer close(block)
+
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{42}, model: "test-model"}
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+	sup.SetGateway(upstream.URL, "sk-test")
+
+	repo.session = &db.TelegramSession{ID: 1, ChatID: 42}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sup.handleUpdate(context.Background(), fake.bot(t), &models.Update{
+			Message: &models.Message{
+				Text: "hola",
+				From: &models.User{ID: 42},
+				Chat: models.Chat{ID: 42},
+			},
+		})
+	}()
+
+	// The turn registers before the ack is sent, so the wait is for the visible
+	// control rather than for a race the test would lose half the time.
+	deadline := time.After(3 * time.Second)
+	var sawControl bool
+	for !sawControl {
+		select {
+		case <-deadline:
+			t.Fatalf("the cancel control never appeared: messages=%v markups=%v", fake.messages(), fake.replyMarkups())
+		case <-time.After(50 * time.Millisecond):
+			for _, m := range fake.replyMarkups() {
+				// The bot library base64-encodes a multipart form field that
+				// carries non-ASCII text, so the markup is decoded before it is
+				// searched; matching the raw string would be testing the
+				// encoding instead of the keyboard.
+				if decoded, err := base64.StdEncoding.DecodeString(m); err == nil {
+					m = string(decoded)
+				}
+				if strings.Contains(m, "Cancelar") {
+					sawControl = true
+				}
+			}
+		}
+	}
+	if !sup.turnInFlight(42) {
+		t.Errorf("no turn registered while the upstream is still running")
+	}
+
+	// The finish path releases the slot so the next message is not stranded.
+	sup.cancelTurn(42)
+	<-done
+}
+
+// S7: a cancelled turn sends no completion and records no assistant row. The
+// upstream never answers, the context aborts, and the transcript keeps only
+// what the user asked.
+func TestCancelledTurn_LeavesNoAssistantRow(t *testing.T) {
+	// The upstream blocks until the test releases it. It must not block on
+	// r.Context().Done(): the assertion below is precisely that the client
+	// aborts, and a handler waiting on the very signal under test leaves both
+	// the handler and the deferred Close() hanging when the abort never comes.
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer upstream.Close()
+	defer close(release)
+
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{42}, model: "test-model"}
+	repo.session = &db.TelegramSession{ID: 7, ChatID: 42}
+	var appended []string
+	repo.appended = func(role, content string) { appended = append(appended, role) }
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+	sup.SetGateway(upstream.URL, "sk-test")
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sup.handleUpdate(context.Background(), fake.bot(t), &models.Update{
+			Message: &models.Message{
+				Text: "pregunta larga",
+				From: &models.User{ID: 42},
+				Chat: models.Chat{ID: 42},
+			},
+		})
+	}()
+
+	// Wait for the turn to register, then cancel it the way /cancel does.
+	deadline := time.After(3 * time.Second)
+	for sup.turnInFlight(42) == false {
+		select {
+		case <-deadline:
+			t.Fatalf("the turn never registered")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+
+	sent := runCommand(t, sup, fake, "/cancel")
+	// The turn's own ack is in this capture too, so the cancel confirmation is
+	// the message the command added, not necessarily the only one sent.
+	if len(sent) == 0 || !strings.Contains(sent[len(sent)-1], "Cancelando") {
+		t.Fatalf("cancel reply = %q, want the cancelling confirmation last", sent)
+	}
+	<-done
+
+	for _, role := range appended {
+		if role == "assistant" {
+			t.Errorf("a cancelled turn recorded an assistant row: %v", appended)
+		}
+	}
+	// The user's message is still there, so the transcript is honest about
+	// what was asked even though no answer came.
+	if len(appended) == 0 || appended[0] != "user" {
+		t.Errorf("the user message is missing from the transcript: %v", appended)
 	}
 }

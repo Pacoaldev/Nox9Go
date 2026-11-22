@@ -22,6 +22,14 @@ type fakeRepo struct {
 	repoRoot  string
 	feature   string
 	spoolPath string
+
+	// session, when set, is the active session every chat reads back, so a
+	// test can drive the forward path without a database.
+	session *db.TelegramSession
+
+	// appended, when set, records every transcript write, so a test can assert
+	// what a turn actually stored.
+	appended func(role, content string)
 }
 
 func (f *fakeRepo) TelegramToken() (string, error) { return f.token, nil }
@@ -30,7 +38,9 @@ func (f *fakeRepo) TelegramChannelModel() (string, error) { return f.model, nil 
 
 func (f *fakeRepo) SetTelegramChannelModel(m string) error { f.model = m; return nil }
 
-func (f *fakeRepo) ActiveTelegramSession(int64) (*db.TelegramSession, error) { return nil, nil }
+func (f *fakeRepo) ActiveTelegramSession(int64) (*db.TelegramSession, error) {
+	return f.session, nil
+}
 
 func (f *fakeRepo) StartTelegramSession(chatID int64, title string) (*db.TelegramSession, error) {
 	return &db.TelegramSession{ID: 1, ChatID: chatID, Title: title}, nil
@@ -42,7 +52,12 @@ func (f *fakeRepo) ListTelegramSessions(int64, int) ([]db.TelegramSession, error
 	return nil, nil
 }
 
-func (f *fakeRepo) AppendTelegramMessage(int64, string, string) error { return nil }
+func (f *fakeRepo) AppendTelegramMessage(sessionID int64, role, content string) error {
+	if f.appended != nil {
+		f.appended(role, content)
+	}
+	return nil
+}
 
 func (f *fakeRepo) TelegramTranscript(int64, int) ([]db.TelegramTranscriptMessage, error) {
 	return nil, nil
