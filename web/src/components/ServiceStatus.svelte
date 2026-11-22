@@ -22,6 +22,7 @@
     idle: 'Inactivo',
     unknown: 'Comprobando...',
   }
+
 </script>
 
 {#if collapsed}
@@ -37,6 +38,10 @@
     <span
       class="size-3 rounded-full transition-colors {STATE_CLASSES[status.database]}"
       title="Base de datos SQLite: {STATE_LABELS[status.database]}"
+    ></span>
+    <span
+      class="size-3 rounded-full transition-colors {STATE_CLASSES[status.telegram]}"
+      title="Canal Telegram: {STATE_LABELS[status.telegram]}"
     ></span>
   </div>
 {:else}
@@ -61,6 +66,15 @@
     >
       <span class="size-1.5 rounded-full {STATE_CLASSES[status.database]}"></span>
       <span>DB</span>
+    </div>
+
+    <!-- Canal Telegram -->
+    <div
+      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border-subtle bg-surface-2 text-[11px] font-mono text-text-muted"
+      title="Canal Telegram: {STATE_LABELS[status.telegram]}"
+    >
+      <span class="size-1.5 rounded-full {STATE_CLASSES[status.telegram]}"></span>
+      <span>Bot</span>
     </div>
   </div>
 {/if}

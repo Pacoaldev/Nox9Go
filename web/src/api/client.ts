@@ -2265,6 +2265,7 @@ export const api = {
       gateway?: { ok?: boolean }
       database?: { ok?: boolean }
       tunnel?: { enabled?: boolean; running?: boolean }
+      telegram?: { state?: string }
       today?: { requests?: number; promptTokens?: number; completionTokens?: number }
       alerts?: { connections?: number; locked?: number }
     }>('/api/dashboard/status'),

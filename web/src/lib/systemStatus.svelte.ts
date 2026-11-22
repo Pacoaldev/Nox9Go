@@ -8,6 +8,7 @@ export interface DashboardStatusSnapshot {
   gateway: ServiceState
   database: ServiceState
   tunnel: ServiceState
+  telegram: ServiceState
   latencyMs: number | null
   requestsToday: number
   promptTokensToday: number
@@ -23,6 +24,7 @@ let current = $state<DashboardStatusSnapshot>({
   gateway: 'unknown',
   database: 'unknown',
   tunnel: 'unknown',
+  telegram: 'unknown',
   latencyMs: null,
   requestsToday: 0,
   promptTokensToday: 0,
@@ -54,6 +56,12 @@ export async function refreshDashboardStatus(): Promise<void> {
     const tRunning = res.tunnel?.running === true
     const tunnelState: ServiceState = tEnabled ? (tRunning ? 'ok' : 'error') : 'idle'
 
+    // The chatbot badge is binary on purpose: the live poll loop reporting
+    // "running" is the only thing that proves an active Telegram connection.
+    // Missing or non-running states render as idle rather than as an error,
+    // because a channel that is merely off is not a failure.
+    const telegramState: ServiceState = res.telegram?.state === 'running' ? 'ok' : 'idle'
+
     const prompt = Number(res.today?.promptTokens ?? 0)
     const completion = Number(res.today?.completionTokens ?? 0)
 
@@ -61,6 +69,7 @@ export async function refreshDashboardStatus(): Promise<void> {
       gateway: gwOk ? 'ok' : 'error',
       database: dbOk ? 'ok' : 'error',
       tunnel: tunnelState,
+      telegram: telegramState,
       latencyMs: gwOk ? elapsed : null,
       requestsToday: Number(res.today?.requests ?? 0),
       promptTokensToday: prompt,

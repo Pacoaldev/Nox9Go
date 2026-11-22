@@ -35,10 +35,23 @@ func (h *DashboardHandler) HandleStatus(w http.ResponseWriter, r *http.Request) 
 	requestsToday, promptToday, completionToday := todayUsageTotals(h.Repo, time.Now())
 	alertConnections, lockedConnections := connectionAlertCount(h.Repo)
 
+	// The Telegram badge in the sidebar reads the live poll-loop state. It is a
+	// mutex-guarded read on the shared runtime, not a network probe, so the
+	// status poll stays cheap. The nil case reports disabled: the badge must
+	// never show an active chatbot the process cannot prove it has.
+	telegramState := "disabled"
+	if h.TelegramLiveStatus != nil {
+		state, _, _ := h.TelegramLiveStatus.Status()
+		if state != "" {
+			telegramState = state
+		}
+	}
+
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"gateway":  map[string]any{"ok": true},
 		"database": map[string]any{"ok": databaseOK},
 		"tunnel":   map[string]any{"enabled": tunnelEnabled, "running": tunnelRunning},
+		"telegram": map[string]any{"state": telegramState},
 		"today": map[string]any{
 			"requests":         requestsToday,
 			"promptTokens":     promptToday,

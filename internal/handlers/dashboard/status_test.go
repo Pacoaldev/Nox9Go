@@ -65,6 +65,7 @@ func TestHandleStatus(t *testing.T) {
 		Gateway  map[string]any `json:"gateway"`
 		Database map[string]any `json:"database"`
 		Tunnel   map[string]any `json:"tunnel"`
+		Telegram map[string]any `json:"telegram"`
 		Today    map[string]any `json:"today"`
 		Alerts   map[string]any `json:"alerts"`
 	}
@@ -77,6 +78,12 @@ func TestHandleStatus(t *testing.T) {
 	}
 	if payload.Database["ok"] != true {
 		t.Errorf("database.ok = %v, want true", payload.Database["ok"])
+	}
+	// No live runtime in this handler: the nil case must report the disabled
+	// state instead of an empty string, so the badge never reports a phantom
+	// active chatbot.
+	if payload.Telegram["state"] != "disabled" {
+		t.Errorf("telegram.state = %v, want disabled (nil live status fallback)", payload.Telegram["state"])
 	}
 	if reqCount, ok := payload.Today["requests"].(float64); !ok || int(reqCount) != 42 {
 		t.Errorf("today.requests = %v, want 42", payload.Today["requests"])
