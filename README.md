@@ -181,6 +181,50 @@ El mismo gateway puede enrutar:
 - Búsqueda web
 - Lectura de páginas
 
+### Canal de Telegram
+
+Puedes manejar el gateway desde tu propio chat de Telegram: las sesiones conversan a través de `/v1/chat/completions` de esta misma instancia, así que el bot es un cliente del gateway que corre debajo, no una segunda implementación.
+
+Se activa en **Panel → Canales**: pega el token del bot (se guarda cifrado, nunca en claro), escribe tu ID de Telegram en la lista de permitidos y guarda. El canal es **fail-closed**: sin token, sin lista de permitidos o desactivado, el bucle no arranca y nadie recibe respuesta. Un mensaje de un chat fuera de la lista se descarta en silencio.
+
+#### Dos modos
+
+| Modo | Qué hace el texto libre |
+| :--- | :--- |
+| **Chat** | Conversa: se envía al modelo de la sesión activa y la respuesta vuelve al chat. |
+| **Agente** | Trabaja: el texto se registra como tarea de desarrollo y espera tu aprobación (o `Auto: ON`). |
+
+Cada modo tiene su propio teclado fijo (dock), así que las acciones quedan a un toque sin tener que memorizar comandos:
+
+- **Modo Chat:** nueva sesión · modelos · sesiones · estado del canal · cancelar turno · cerrar sesión · cambiar a Modo Agente.
+- **Modo Agente:** tarea actual · estado de desarrollo · feature ODD · estado del canal · cancelar turno · ver sesiones · cambiar a Modo Chat.
+
+Los selectores de modelos, sesiones y features ODD se abren como **paneles inline** que se editan en el sitio en vez de inundar el chat, y tocar una sesión la retoma (archiva la anterior y reactiva la elegida).
+
+#### Comandos
+
+| Comando | Para qué |
+| :--- | :--- |
+| `/start` | Ayuda + panel del modo actual (lo primero que hay que tocar). |
+| `/panel` | Abre el panel de modo (chat o agente). |
+| `/new` | Abre una sesión; archiva la anterior. |
+| `/end` | Cierra y archiva la sesión. |
+| `/sessions` | Lista las últimas sesiones. |
+| `/model` | Lista los modelos que el gateway puede despachar de verdad. |
+| `/model <id>` | Cambia el modelo de la sesión. |
+| `/status` | Estado real del canal. |
+| `/cancel` | Cancela el turno en vuelo. |
+| `/pi <orden>` | Envía una orden a la sesión de desarrollo. |
+| `/estado` | Avance del desarrollo: rama, commits, pendientes. |
+| `/estado <feature>` | Avance de una feature ODD concreta. |
+| `/help` | La ayuda, sin abrir panel. |
+
+#### Del bot a la sesión de desarrollo
+
+El bot no ejecuta nada por sí mismo: escribe la instrucción en una bandeja (`DEV_INBOX_PATH`, por defecto en el directorio de datos) que **la sesión de desarrollo drena y ejecuta**, y vuelve a contar el resultado por el feed de eventos. `Aprobar`, `Auto: ON` y `/pi` entregan la orden por esa misma vía, y el estado de la tarea sigue el resultado real: `running` se escribe solo cuando la orden fue aceptada, y un envío rechazado guarda el motivo y lo muestra en el panel en vez de fingir que el trabajo está en marcha.
+
+> El panel **Tarea actual** informa estado, instrucción y motivo sin enviar nada. Una tarea que quedó en `running` porque el gateway se reinició se cierra como fallida al arrancar, con la causa a la vista: es preferible admitir que la orden se perdió antes que mostrar “Ejecutando” para siempre.
+
 ---
 
 ## Screenshots

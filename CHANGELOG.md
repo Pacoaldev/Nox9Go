@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.5] - Unreleased
+## [1.1.5] - 2026-11-22
 
 ### Telegram bot UX (2026-11-22)
 - **The chat and the agent have their own modes, and the bot says which one is listening.** Free text used to have one meaning, so the operator could not keep a conversation and hand work to the development session from the same chat. `/panel` (and the mode buttons) switch between them: chat mode forwards the text as conversation through the active session, agent mode records it as a task awaiting the operator's own approval. The mode is stored per chat, shown in the panel header, and readable from the dashboard (`GET`/`PUT /api/channels/telegram`).
