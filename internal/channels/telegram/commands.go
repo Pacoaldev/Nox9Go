@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -213,7 +214,8 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 	// turn, and the registration only adds a second way to cancel it.
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	defer cancelTurn()
-	s.beginTurn(chatID, cancelTurn)
+	turnDone := s.beginTurn(chatID, cancelTurn)
+	defer close(turnDone)
 
 	// S7: the visible cancel control. The reply keyboard travels with an
 	// ack so the operator sees, in the moment the turn starts, what a tap
@@ -438,7 +440,16 @@ func (s *Supervisor) cmdPi(ctx context.Context, bot *tgbot.Bot, chatID int64, ar
 // ordinary message; treating it as a command keeps the button honest instead
 // of leaking the word into a model that was never asked for it.
 func (s *Supervisor) cmdCancel(ctx context.Context, bot *tgbot.Bot, chatID int64) {
-	if s.cancelTurn(chatID) {
+	done, ok := s.cancelTurn(chatID)
+	if ok {
+		// The dying turn sends its own last words ("Turno cancelado...").
+		// Waiting for it keeps the confirmation last and the chat readable;
+		// a timeout only guards a turn stuck in a syscall, in which case the
+		// confirmation still arrives, just unordered.
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
 		s.send(ctx, bot, chatID, "Cancelando el turno en vuelo.")
 		return
 	}

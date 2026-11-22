@@ -132,10 +132,12 @@ type Supervisor struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 
-	// inFlight holds the cancel function of the turn each chat currently has
-	// running (S7). A chat has at most one: a second message while one is in
-	// flight is handled after the first returns, not concurrently.
-	inFlight map[int64]context.CancelFunc
+	// inFlight holds the cancel function and the completion channel of the turn
+	// each chat currently has running (S7). A chat has at most one: a second
+	// message while one is in flight is handled after the first returns, not
+	// concurrently. done is closed by the turn itself, so a canceller that must
+	// not race the turn's dying words can wait for it.
+	inFlight map[int64]turnHandle
 	// panels holds the message id of each chat's mode panel (S4). Editing that
 	// message is what makes a mode switch change the panel instead of stacking
 	// a second one.
@@ -153,7 +155,7 @@ func NewSupervisor(repo Repo, allowed func(int64) bool) *Supervisor {
 		repo:     repo,
 		allowed:  allowed,
 		status:   Status{State: StateDisabled},
-		inFlight: make(map[int64]context.CancelFunc),
+		inFlight: make(map[int64]turnHandle),
 	}
 	s.runLoop = s.poll
 	return s
@@ -288,10 +290,20 @@ func (s *Supervisor) stopLoop() {
 }
 
 // beginTurn registers a chat's in-flight turn so /cancel can abort it (S7).
-func (s *Supervisor) beginTurn(chatID int64, cancel context.CancelFunc) {
+// turnHandle pairs a turn's abort with its completion signal.
+type turnHandle struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+// beginTurn registers a turn and hands back its done channel, which the turn
+// closes when its handler returns.
+func (s *Supervisor) beginTurn(chatID int64, cancel context.CancelFunc) chan struct{} {
+	done := make(chan struct{})
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.inFlight[chatID] = cancel
+	s.inFlight[chatID] = turnHandle{cancel: cancel, done: done}
+	return done
 }
 
 // endTurn removes the registration. It runs on every completed turn, so it
@@ -313,15 +325,15 @@ func (s *Supervisor) turnInFlight(chatID int64) bool {
 // cancelTurn aborts the chat's in-flight turn through its context and clears
 // the registration. The bool separates an idle cancel from a successful one:
 // an operator must be able to tell "cancelled" from "the button did nothing".
-func (s *Supervisor) cancelTurn(chatID int64) bool {
+func (s *Supervisor) cancelTurn(chatID int64) (chan struct{}, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	cancel, ok := s.inFlight[chatID]
+	handle, ok := s.inFlight[chatID]
 	if ok {
 		delete(s.inFlight, chatID)
-		cancel()
+		handle.cancel()
 	}
-	return ok
+	return handle.done, ok
 }
 
 // setError records a failure the operator needs to see, in place of the state
