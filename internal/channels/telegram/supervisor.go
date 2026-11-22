@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"nox9go/proxy/internal/db"
 )
 
 // State is the channel's externally visible condition, reported to the
@@ -53,6 +55,19 @@ type Config struct {
 type Repo interface {
 	TelegramToken() (string, error)
 	GetTelegramChannelConfig() (*Config, error)
+
+	// Sessions. A chat with no active session is idle: stray input is answered
+	// with a hint and never reaches a provider.
+	ActiveTelegramSession(chatID int64) (*db.TelegramSession, error)
+	StartTelegramSession(chatID int64, title string) (*db.TelegramSession, error)
+	ArchiveTelegramSession(sessionID int64) error
+	ListTelegramSessions(chatID int64, limit int) ([]db.TelegramSession, error)
+	AppendTelegramMessage(sessionID int64, role, content string) error
+	TelegramTranscript(sessionID int64, limit int) ([]db.TelegramTranscriptMessage, error)
+
+	// The model chosen with /model.
+	TelegramChannelModel() (string, error)
+	SetTelegramChannelModel(model string) error
 }
 
 // Status is the supervisor's snapshot.
@@ -70,6 +85,12 @@ type Status struct {
 type Supervisor struct {
 	repo    Repo
 	allowed func(int64) bool
+
+	// gatewayURL is this instance's own listener, and cliToken authenticates the
+	// bot to it. A Telegram turn therefore travels the same route as an API
+	// client: combos, failover and usage accounting all apply.
+	gatewayURL string
+	cliToken   string
 
 	// runLoop is the loop body. It is a field so tests can observe start and
 	// exit without talking to Telegram.
@@ -93,6 +114,23 @@ func NewSupervisor(repo Repo, allowed func(int64) bool) *Supervisor {
 	}
 	s.runLoop = s.poll
 	return s
+}
+
+// SetGateway tells the supervisor where this instance listens and how to
+// authenticate to itself. It is separate from NewSupervisor because the listener
+// address is only known after the server is bound.
+func (s *Supervisor) SetGateway(baseURL, cliToken string) {
+	s.mu.Lock()
+	s.gatewayURL = baseURL
+	s.cliToken = cliToken
+	s.mu.Unlock()
+}
+
+// gateway returns the configured self-URL and token.
+func (s *Supervisor) gateway() (baseURL, cliToken string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.gatewayURL, s.cliToken
 }
 
 // Allowed reports whether a Telegram user may use the bot. It reads the stored

@@ -76,11 +76,3 @@ func (s *Supervisor) handleUpdate(ctx context.Context, bot *tgbot.Bot, update *m
 
 	s.handleMessage(ctx, bot, msg)
 }
-
-// handleMessage is the authorized path. T3/T4 fill in forwarding and sessions;
-// for now it acknowledges so the gate is observable end to end.
-func (s *Supervisor) handleMessage(ctx context.Context, bot *tgbot.Bot, msg *models.Message) {
-	_ = ctx
-	_ = bot
-	_ = msg
-}

@@ -22,6 +22,7 @@ var telegramChannelTables = []tableDef{
 			{"id", "INTEGER PRIMARY KEY CHECK (id = 1)"},
 			{"tokenWrappedDEK", "TEXT NOT NULL DEFAULT ''"},
 			{"tokenCiphertext", "TEXT NOT NULL DEFAULT ''"},
+			{"defaultModel", "TEXT NOT NULL DEFAULT ''"},
 			{"updatedAt", "TEXT NOT NULL DEFAULT ''"},
 		},
 	},
@@ -30,6 +31,38 @@ var telegramChannelTables = []tableDef{
 		columns: [][2]string{
 			{"userId", "INTEGER PRIMARY KEY"},
 			{"addedAt", "TEXT NOT NULL DEFAULT ''"},
+		},
+	},
+	{
+		// One active session per chat. archivedAt marks a session that /end
+		// closed; a new row is started by /new rather than reopening the old one,
+		// so the archive stays a readable history.
+		name: "telegramSession",
+		columns: [][2]string{
+			{"id", "INTEGER PRIMARY KEY AUTOINCREMENT"},
+			{"chatId", "INTEGER NOT NULL"},
+			{"title", "TEXT NOT NULL DEFAULT ''"},
+			{"createdAt", "TEXT NOT NULL"},
+			{"archivedAt", "TEXT NOT NULL DEFAULT ''"},
+		},
+		indexes: []string{
+			"CREATE INDEX IF NOT EXISTS idx_tg_session_chat ON telegramSession(chatId, archivedAt)",
+		},
+	},
+	{
+		// The conversation as the gateway sees it: role plus content, in order.
+		// Replaying these rows into the messages array is what makes multi-turn
+		// context work without a second copy of the transcript anywhere.
+		name: "telegramMessage",
+		columns: [][2]string{
+			{"id", "INTEGER PRIMARY KEY AUTOINCREMENT"},
+			{"sessionId", "INTEGER NOT NULL"},
+			{"role", "TEXT NOT NULL"},
+			{"content", "TEXT NOT NULL"},
+			{"createdAt", "TEXT NOT NULL"},
+		},
+		indexes: []string{
+			"CREATE INDEX IF NOT EXISTS idx_tg_msg_session ON telegramMessage(sessionId, id)",
 		},
 	},
 }

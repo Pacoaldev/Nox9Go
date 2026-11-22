@@ -5,6 +5,8 @@ import (
 
 	"testing"
 	"time"
+
+	"nox9go/proxy/internal/db"
 )
 
 // fakeRepo is the storage surface the channel needs. It exists so the lifecycle
@@ -12,9 +14,32 @@ import (
 type fakeRepo struct {
 	token   string
 	allowed []int64
+	model   string
 }
 
 func (f *fakeRepo) TelegramToken() (string, error) { return f.token, nil }
+
+func (f *fakeRepo) TelegramChannelModel() (string, error) { return f.model, nil }
+
+func (f *fakeRepo) SetTelegramChannelModel(m string) error { f.model = m; return nil }
+
+func (f *fakeRepo) ActiveTelegramSession(int64) (*db.TelegramSession, error) { return nil, nil }
+
+func (f *fakeRepo) StartTelegramSession(chatID int64, title string) (*db.TelegramSession, error) {
+	return &db.TelegramSession{ID: 1, ChatID: chatID, Title: title}, nil
+}
+
+func (f *fakeRepo) ArchiveTelegramSession(int64) error { return nil }
+
+func (f *fakeRepo) ListTelegramSessions(int64, int) ([]db.TelegramSession, error) {
+	return nil, nil
+}
+
+func (f *fakeRepo) AppendTelegramMessage(int64, string, string) error { return nil }
+
+func (f *fakeRepo) TelegramTranscript(int64, int) ([]db.TelegramTranscriptMessage, error) {
+	return nil, nil
+}
 
 func (f *fakeRepo) GetTelegramChannelConfig() (*Config, error) {
 	return &Config{
