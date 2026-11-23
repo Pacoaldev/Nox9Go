@@ -103,6 +103,9 @@ stitch-screenshots/
 /docs/tabla_saldos.md
 /scripts/audit-ci.ps1
 /scripts/sync-providers.mjs
+# Personal workspace launchers - not part of the distributed project.
+/scripts/ensure-herdr-agent.ps1
+/scripts/start-herdr-workspace.ps1
 *.code-workspace
 # Per-machine tooling: a prompt-filter list that belongs to whoever installed it.
 /.rtk/
