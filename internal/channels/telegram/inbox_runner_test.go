@@ -4,23 +4,48 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"nox9go/proxy/internal/notify"
 )
 
+// writeOrderScript writes a runner script the host platform can actually
+// execute, and returns its path. runOrderScript spawns PowerShell, which only
+// exists on Windows, so a POSIX host gets a shell script instead; this keeps the
+// suite green on the Linux CI runners without weakening what it asserts.
+func writeOrderScript(t *testing.T, name, powershell, shell string) string {
+	t.Helper()
+
+	root := t.TempDir()
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(root, name+".ps1")
+		if err := os.WriteFile(path, []byte(powershell), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	path := filepath.Join(root, name+".sh")
+	if err := os.WriteFile(path, []byte(shell), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestPollInboxOnce_runsScriptAndReportsOutcome(t *testing.T) {
 	root := t.TempDir()
 	inboxPath := filepath.Join(root, "inbox.jsonl")
 	spoolPath := filepath.Join(root, "events.jsonl")
-	script := filepath.Join(root, "ok.ps1")
-	if err := os.WriteFile(script, []byte(`
+	script := writeOrderScript(t, "ok", `
 $ErrorActionPreference = 'Stop'
 if ($env:NOX9GO_ORDER_DETAIL -ne 'hola') { throw 'wrong detail' }
 exit 0
-`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+`, `#!/bin/sh
+set -eu
+if [ "$NOX9GO_ORDER_DETAIL" != 'hola' ]; then echo 'wrong detail' >&2; exit 1; fi
+exit 0
+`)
 	inbox := notify.NewSpool(inboxPath)
 	if err := inbox.Append(notify.Event{Kind: notify.KindOrder, Title: "Orden desde Telegram", Detail: "hola", TaskID: "abc"}); err != nil {
 		t.Fatal(err)
@@ -55,10 +80,7 @@ func TestPollInboxOnce_blockedDoesNotCompleteOrder(t *testing.T) {
 	root := t.TempDir()
 	inboxPath := filepath.Join(root, "inbox.jsonl")
 	spoolPath := filepath.Join(root, "events.jsonl")
-	script := filepath.Join(root, "blocked.ps1")
-	if err := os.WriteFile(script, []byte("exit 2"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	script := writeOrderScript(t, "blocked", "exit 2", "#!/bin/sh\nexit 2\n")
 	inbox := notify.NewSpool(inboxPath)
 	if err := inbox.Append(notify.Event{Kind: notify.KindOrder, Title: "Orden", Detail: "x", TaskID: "t1"}); err != nil {
 		t.Fatal(err)
@@ -77,10 +99,7 @@ func TestPollInboxOnce_blockedDoesNotCompleteOrder(t *testing.T) {
 }
 
 func TestRunOrderScript_herdrBlockedExit(t *testing.T) {
-	script := filepath.Join(t.TempDir(), "blocked.ps1")
-	if err := os.WriteFile(script, []byte("exit 2"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	script := writeOrderScript(t, "blocked", "exit 2", "#!/bin/sh\nexit 2\n")
 	outcome, _ := runOrderScript(context.Background(), script, notify.Event{Detail: "x"})
 	if outcome != orderRunBlocked {
 		t.Fatalf("outcome = %v, want blocked", outcome)
