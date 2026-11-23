@@ -16,8 +16,10 @@ import (
 // design (L0b); the first-design spellings below are accepted as aliases so a
 // keyboard already sitting in a chat keeps working after the rename.
 // dockRefreshText is intentionally quiet: reply keyboards need a message, but
-// repeating the hub legend on every tap floods the thread.
-const dockRefreshText = "\u200b"
+// repeating the hub legend on every tap floods the thread. U+2800 (Braille
+// blank) still renders as nothing visible; U+200b (zero-width space) started
+// being rejected by the Bot API with "text must be non-empty".
+const dockRefreshText = "\u2800"
 
 const (
 	dockChatNew      = "💬 Nueva sesión"
