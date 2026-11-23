@@ -210,6 +210,74 @@ func TestLoadFeature_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestParseTaskRow_StatusColumnMarksDone(t *testing.T) {
+	line := "| T1 | S1 | inline | — | done — `keyboard.go` |"
+	task, ok := parseTaskRow(line)
+	if !ok {
+		t.Fatal("parseTaskRow returned false")
+	}
+	if !task.Done() {
+		t.Fatalf("commit %q should count as done", task.Commit)
+	}
+}
+
+func TestLoadFeature_OperatorTaskDocs(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "odd", "tasks")); err != nil {
+		t.Skip("odd/tasks not present")
+	}
+
+	want := map[string]struct{ done, total int }{
+		"telegram-dock":              {6, 6},
+		"telegram-images":            {5, 5},
+		"tokensaver-qoder-pool-sync":   {6, 6},
+		"telegram-modes":             {4, 4},
+		"telegram-agent-exec":        {4, 4},
+		"mcp-image-generation":       {6, 6},
+	}
+	for name, w := range want {
+		f := Repo{Root: root}.loadFeature(name)
+		if f == nil {
+			t.Fatalf("%s: missing document", name)
+		}
+		if f.Total != w.total {
+			t.Errorf("%s: total=%d want %d", name, f.Total, w.total)
+		}
+		if f.Done != w.done {
+			t.Errorf("%s: done=%d want %d (commit column still —?)", name, f.Done, w.done)
+		}
+	}
+}
+
+func TestParseProseTaskLine_formats(t *testing.T) {
+	tests := []struct {
+		line string
+		want bool
+		done bool
+	}{
+		{line: "- T1 [S1] work inline — done", want: true, done: true},
+		{line: "T1 (S4) foo. Commit: feat(telegram): wire.", want: true, done: true},
+		{line: "E2 (verify): tests ok. Committed 9c2270bf.", want: false, done: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.line[:12], func(t *testing.T) {
+			task, ok := parseProseTaskLine(tt.line)
+			if ok != tt.want {
+				t.Fatalf("ok=%v want %v", ok, tt.want)
+			}
+			if !tt.want {
+				return
+			}
+			if task.Done() != tt.done {
+				t.Fatalf("Done()=%v commit=%q", task.Done(), task.Commit)
+			}
+		})
+	}
+}
+
 // A commit cell of "—" is not a commit. Treating the placeholder as a value
 // would report 100% complete the moment a document was written.
 func TestTask_Done(t *testing.T) {

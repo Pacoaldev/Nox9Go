@@ -4,6 +4,7 @@
 
 ### Fixes
 - **Telegram `order_done` carries the agent answer, not the instruction echo.** The inbox runner wrote the original prompt into the feed `detail`, so `orden lista` repeated what you typed while the panel still closed. Completion events now use the order script stdout; Herdr runner prints the pane tail when Herdr reports `done`. Task correlation stays on `task_id`.
+- **Development task progress reads ODD variants.** The dashboard and `/estado` now honour a fifth `Status` column with `done`, prose `T1 … — done` bullets, and `Commit:` lines in single-line task specs — not only pipe tables with a hash in the Commit column (`internal/devstatus`).
 - **Telegram order feed is readable on a phone.** Herdr runner output is delta-only with status-bar noise stripped and a length cap; `order_done` / `order_failed` / `blocker` events post a short HTML header and the body in a separate `<pre>` block instead of one terminal paste (`feed_render.go`, `poll.go`).
 
 ### Features

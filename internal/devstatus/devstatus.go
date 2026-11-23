@@ -208,6 +208,9 @@ func (r Repo) loadFeature(name string) *Feature {
 		}
 		task, ok := parseTaskRow(line)
 		if !ok {
+			task, ok = parseProseTaskLine(line)
+		}
+		if !ok {
 			continue
 		}
 		feature.Tasks = append(feature.Tasks, task)
@@ -258,12 +261,77 @@ func parseTaskRow(line string) (Task, bool) {
 		return Task{}, false
 	}
 
+	commit := cells[3]
+	if len(cells) >= 5 && !commitMarksDone(commit) && commitMarksDone(cells[4]) {
+		commit = commitFromExtraCell(cells[4])
+	}
+
 	return Task{
 		ID:     cells[0],
 		Specs:  cells[1],
 		Route:  cells[2],
-		Commit: cells[3],
+		Commit: commit,
 	}, true
+}
+
+var (
+	proseTaskID    = regexp.MustCompile(`^(T\d+)\b`)
+	proseCommitHex = regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
+)
+
+// parseProseTaskLine reads ODD task bullets and single-line specs (no pipe table).
+func parseProseTaskLine(line string) (Task, bool) {
+	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, "- ") {
+		line = strings.TrimSpace(line[2:])
+	}
+	if line == "" || !strings.HasPrefix(line, "T") {
+		return Task{}, false
+	}
+	m := proseTaskID.FindStringSubmatch(line)
+	if m == nil {
+		return Task{}, false
+	}
+	commit := proseTaskCommit(line)
+	return Task{ID: m[1], Commit: commit}, true
+}
+
+func proseTaskCommit(line string) string {
+	lower := strings.ToLower(line)
+	if strings.Contains(lower, "— done") || strings.Contains(lower, "- done") {
+		return "done"
+	}
+	if idx := strings.Index(line, "Commit:"); idx >= 0 {
+		rest := strings.TrimSpace(line[idx+len("Commit:"):])
+		rest = strings.TrimRight(rest, ".")
+		if rest != "" {
+			return rest
+		}
+	}
+	if h := proseCommitHex.FindString(line); h != "" {
+		return h
+	}
+	return ""
+}
+
+func commitMarksDone(commit string) bool {
+	commit = strings.TrimSpace(commit)
+	return commit != "" && commit != "—" && commit != "-"
+}
+
+// commitFromExtraCell honours a trailing Status column that says "done".
+func commitFromExtraCell(cell string) string {
+	cell = strings.TrimSpace(cell)
+	if cell == "" {
+		return ""
+	}
+	if strings.Contains(strings.ToLower(cell), "done") {
+		if h := proseCommitHex.FindString(cell); h != "" {
+			return h
+		}
+		return "done"
+	}
+	return cell
 }
 
 // ---------------------------------------------------------------------------
