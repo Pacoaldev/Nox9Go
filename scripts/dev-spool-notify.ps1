@@ -1,5 +1,5 @@
 # Append one development event to the Telegram feed spool.
-# Usage: .\scripts\dev-spool-notify.ps1 -Kind order_done -Detail "same instruction as the task"
+# Usage: .\scripts\dev-spool-notify.ps1 -Kind order_done -Detail "agent answer text" -TaskId <correlation id>
 param(
     [ValidateSet('order_done', 'order_failed', 'task', 'info', 'commit', 'check', 'blocker')]
     [string]$Kind = 'order_done',

@@ -40,10 +40,12 @@ func TestPollInboxOnce_runsScriptAndReportsOutcome(t *testing.T) {
 	script := writeOrderScript(t, "ok", `
 $ErrorActionPreference = 'Stop'
 if ($env:NOX9GO_ORDER_DETAIL -ne 'hola') { throw 'wrong detail' }
+Write-Output 'respuesta del agente'
 exit 0
 `, `#!/bin/sh
 set -eu
 if [ "$NOX9GO_ORDER_DETAIL" != 'hola' ]; then echo 'wrong detail' >&2; exit 1; fi
+echo 'respuesta del agente'
 exit 0
 `)
 	inbox := notify.NewSpool(inboxPath)
@@ -73,6 +75,18 @@ exit 0
 	}
 	if events[0].TaskID != "abc" {
 		t.Errorf("task_id = %q", events[0].TaskID)
+	}
+	if events[0].Detail != "respuesta del agente" {
+		t.Errorf("detail = %q, want agent stdout not instruction", events[0].Detail)
+	}
+}
+
+func TestOrderDoneDetail_prefersRunnerOutput(t *testing.T) {
+	if got := orderDoneDetail("  salida  "); got != "salida" {
+		t.Fatalf("got %q", got)
+	}
+	if got := orderDoneDetail(""); got != "" {
+		t.Fatalf("empty stdout => %q, want empty", got)
 	}
 }
 

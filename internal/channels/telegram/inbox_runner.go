@@ -104,7 +104,7 @@ func (s *Supervisor) pollInboxOnce(ctx context.Context, repo Repo, script string
 			if err := spool.Append(notify.Event{
 				Kind:   notify.KindOrderDone,
 				Title:  "Orden completada",
-				Detail: strings.TrimSpace(event.Detail),
+				Detail: orderDoneDetail(detail),
 				TaskID: strings.TrimSpace(event.TaskID),
 			}); err != nil {
 				s.setError(fmt.Errorf("telegram: order outcome spool: %w", err))
@@ -213,4 +213,10 @@ func firstNonEmpty(parts ...string) string {
 		}
 	}
 	return ""
+}
+
+// orderDoneDetail is what the feed shows when an order finishes. Task matching
+// uses task_id, so detail carries the runner stdout — not the instruction.
+func orderDoneDetail(runnerOutput string) string {
+	return strings.TrimSpace(runnerOutput)
 }

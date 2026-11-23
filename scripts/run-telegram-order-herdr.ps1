@@ -59,6 +59,58 @@ function Test-AgentBlocked {
     return ($Text -match 'Allow once|Allow for this session|allow guarded|↑↓ navigate')
 }
 
+function Test-HerdrNoiseLine {
+    param([string]$Line)
+    $t = $Line.Trim()
+    if (-not $t) { return $true }
+    if ($t -match '^(main|master|develop)\s+[±+\-]') { return $true }
+    if ($t -match '\bctx\s*\[|usage\s*·\s*alt\+u|\$0\.000') { return $true }
+    if ($t -match '^type, or / for commands') { return $true }
+    if ($t -match '^\d+\s+files?\s+[+\-]') { return $true }
+    if ($t -match '^[│┃─┌┐└┘├┤╭╮╰╯■□●○\s]+$') { return $true }
+    return $false
+}
+
+function Format-HerdrReplyForTelegram {
+    param(
+        [string]$Before,
+        [string]$After,
+        [int]$MaxLines = 25,
+        [int]$MaxChars = 3500
+    )
+    $beforeLines = @($Before -split "`r?`n" | ForEach-Object { $_.TrimEnd() })
+    $afterLines = @($After -split "`r?`n" | ForEach-Object { $_.TrimEnd() })
+    $start = 0
+    while ($start -lt $beforeLines.Count -and $start -lt $afterLines.Count -and
+        $beforeLines[$start] -eq $afterLines[$start]) {
+        $start++
+    }
+    $delta = @()
+    if ($start -lt $afterLines.Count) {
+        $delta = $afterLines[$start..($afterLines.Count - 1)]
+    }
+    $kept = foreach ($line in $delta) {
+        if (-not (Test-HerdrNoiseLine $line)) { $line }
+    }
+    $kept = @($kept | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($kept.Count -gt $MaxLines) {
+        $kept = $kept[($kept.Count - $MaxLines)..($kept.Count - 1)]
+    }
+    $text = ($kept -join "`n").Trim()
+    if ($text.Length -gt $MaxChars) {
+        $text = $text.Substring($text.Length - $MaxChars)
+    }
+    return $text
+}
+
+function Write-HerdrTelegramReply {
+    param([string]$After)
+    $formatted = Format-HerdrReplyForTelegram -Before $before -After $After
+    if ($formatted) {
+        Write-Output $formatted
+    }
+}
+
 # Herdr often keeps Pi on "idle" even after a finished turn, so --until done can
 # time out while the panel already answered. Snapshot terminal text before submit.
 & herdr agent focus $target 2>&1 | Out-Null
@@ -67,7 +119,7 @@ $before = (Read-AgentTail $target).Trim()
 $promptRaw = (& herdr agent prompt $target $detail 2>&1) | Out-String
 if ($LASTEXITCODE -ne 0) {
     if ($promptRaw -match 'agent_blocked') {
-        Write-Output (Read-AgentTail $target).Trim()
+        Write-HerdrTelegramReply (Read-AgentTail $target).Trim()
         exit 2
     }
     Write-Error $promptRaw.Trim()
@@ -76,7 +128,7 @@ if ($LASTEXITCODE -ne 0) {
 # order never reached Pi. Reporting that as a blocker is the honest answer.
 $afterPrompt = (Read-AgentTail $target).Trim()
 if (Test-AgentBlocked $afterPrompt) {
-    Write-Output $afterPrompt
+    Write-HerdrTelegramReply $afterPrompt
     exit 2
 }
 
@@ -95,10 +147,12 @@ $stableTicks = 0
 while ([datetime]::UtcNow -lt $deadline) {
     $status = Get-HerdrAgentStatus $target
     if ($status -eq 'blocked') {
-        Write-Output (Read-AgentTail $target).Trim()
+        Write-HerdrTelegramReply (Read-AgentTail $target).Trim()
         exit 2
     }
     if ($status -eq 'done') {
+        $tail = (Read-AgentTail $target).Trim()
+        if ($tail -ne $before) { Write-HerdrTelegramReply $tail }
         exit 0
     }
     $snap = (Read-AgentTail $target).Trim()
@@ -114,10 +168,10 @@ while ([datetime]::UtcNow -lt $deadline) {
         # permission prompt is not a finished turn, so that case is a blocker.
         if ($stableTicks -ge 1) {
             if (Test-AgentBlocked $snap) {
-                Write-Output $snap
+                Write-HerdrTelegramReply $snap
                 exit 2
             }
-            Write-Output $snap
+            Write-HerdrTelegramReply $snap
             exit 0
         }
     }
@@ -131,10 +185,12 @@ $stableTicks = 0
 while ([datetime]::UtcNow -lt $deadline) {
     $status = Get-HerdrAgentStatus $target
     if ($status -eq 'blocked') {
-        Write-Output (Read-AgentTail $target).Trim()
+        Write-HerdrTelegramReply (Read-AgentTail $target).Trim()
         exit 2
     }
     if ($status -eq 'done') {
+        $tail = (Read-AgentTail $target).Trim()
+        if ($tail -ne $before) { Write-HerdrTelegramReply $tail }
         exit 0
     }
 
@@ -150,10 +206,10 @@ while ([datetime]::UtcNow -lt $deadline) {
         # unless what settled is a permission prompt waiting on the operator.
         if ($stableTicks -ge 2 -and $status -eq 'idle') {
             if (Test-AgentBlocked $snap) {
-                Write-Output $snap
+                Write-HerdrTelegramReply $snap
                 exit 2
             }
-            Write-Output $snap
+            Write-HerdrTelegramReply $snap
             exit 0
         }
     }
@@ -162,11 +218,11 @@ while ([datetime]::UtcNow -lt $deadline) {
 
 $tail = (Read-AgentTail $target).Trim()
 if (Test-AgentBlocked $tail) {
-    Write-Output $tail
+    Write-HerdrTelegramReply $tail
     exit 2
 }
 if ($tail -ne $before) {
-    Write-Output $tail
+    Write-HerdrTelegramReply $tail
     Write-Warning 'Herdr wait timed out but terminal output changed; treating as completed.'
     exit 0
 }

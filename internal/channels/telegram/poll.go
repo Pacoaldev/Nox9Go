@@ -144,7 +144,7 @@ func (s *Supervisor) forwardPendingEvents(ctx context.Context, bot *tgbot.Bot, r
 			if !feedEventForwards(feedScope(scopeVal), event) {
 				continue
 			}
-			s.send(ctx, bot, chatID, text)
+			s.sendFeedEvent(ctx, bot, chatID, event, text)
 		}
 	}
 }

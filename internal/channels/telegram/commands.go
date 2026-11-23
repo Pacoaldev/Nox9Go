@@ -60,8 +60,23 @@ func (s *Supervisor) sendHTML(ctx context.Context, bot *tgbot.Bot, chatID int64,
 // stripHTML removes the tags this package emits, for the plain-text fallback.
 func stripHTML(text string) string {
 	r := strings.NewReplacer("<b>", "", "</b>", "", "<code>", "", "</code>", "",
+		"<pre>", "", "</pre>", "",
 		"&lt;", "<", "&gt;", ">", "&amp;", "&")
 	return r.Replace(text)
+}
+
+// sendFeedEvent delivers one drained spool event. Order outcomes use a short HTML
+// header and a separate pre block so the operator reads the answer, not a dump
+// glued to the title line.
+func (s *Supervisor) sendFeedEvent(ctx context.Context, bot *tgbot.Bot, chatID int64, event notify.Event, plain string) {
+	if !feedUsesRichLayout(event.Kind) {
+		s.send(ctx, bot, chatID, plain)
+		return
+	}
+	s.sendHTML(ctx, bot, chatID, feedEventHeaderHTML(event))
+	for _, part := range feedEventBodyHTML(event.Detail) {
+		s.sendHTML(ctx, bot, chatID, part)
+	}
 }
 
 // sendKeyboard sends one message carrying the mode's dock (S3/S7).
