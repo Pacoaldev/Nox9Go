@@ -15,11 +15,12 @@ import (
 // instead of a command someone has to remember. The labels are the second
 // design (L0b); the first-design spellings below are accepted as aliases so a
 // keyboard already sitting in a chat keeps working after the rename.
-// dockRefreshText is intentionally quiet: reply keyboards need a message, but
-// repeating the hub legend on every tap floods the thread. U+2800 (Braille
-// blank) still renders as nothing visible; U+200b (zero-width space) started
-// being rejected by the Bot API with "text must be non-empty".
-const dockRefreshText = "\u2800"
+// dockRefreshText is what a dock refresh says. The dock used to travel on a
+// "silent" message made of an invisible character (U+200B, then U+2800), but
+// the Bot API now rejects every invisible-only payload with "text must be
+// non-empty". The refresh therefore says a visible one-liner and keeps its
+// meaning in the thread instead of pretending to be empty.
+const dockRefreshText = "⌨️"
 
 const (
 	dockChatNew      = "💬 Nueva sesión"
@@ -224,10 +225,12 @@ func (s *Supervisor) sendDock(ctx context.Context, bot *tgbot.Bot, chatID int64)
 
 // dockResendRequired reports whether a dock button changes the reply keyboard.
 // Actions that only open the panel or print status should not post another
-// keyboard refresh message.
+// keyboard refresh message — and neither should "no action at all", which is
+// what the callback catch-all passes: if the keyboard is already on screen it
+// needs no copy of itself on every press.
 func dockResendRequired(action dockAction) bool {
 	switch action {
-	case dockActHubMenu, dockActStatus, dockActTask, dockActAutonomy, dockActDev,
+	case dockActNone, dockActHubMenu, dockActStatus, dockActTask, dockActAutonomy, dockActDev,
 		dockActNew, dockActEnd, dockActCancel, dockActModels, dockActSessions, dockActFeatures:
 		return false
 	default:

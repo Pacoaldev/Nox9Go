@@ -154,9 +154,13 @@ func (s *Supervisor) handleCallbackQuery(ctx context.Context, bot *tgbot.Bot, q 
 
 	s.dispatchCallback(ctx, bot, chatID, q)
 
-	// S3: a press re-sends the mode's dock, so the keyboard on screen is the one
-	// the press left the chat in and the next action is still one tap away.
-	s.sendDock(ctx, bot, chatID)
+	// The keyboard Telegram shows persists between messages; re-sending it on
+	// every press only spams the thread. A refresh travels when the dock is
+	// actually new to the chat (never drawn since the process started, or the
+	// operator removed it) or when the press itself changed the keyboard —
+	// switchMode, the dock router and the hide/show action already re-send in
+	// those cases, so the catch-all here only fills the gap.
+	s.sendDockIfNeeded(ctx, bot, chatID, dockActNone)
 }
 
 // dispatchCallback runs one callback's effect.
