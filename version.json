@@ -15,5 +15,5 @@
     "darwin_amd64": "887e56f06a7814a78885300859da1dace8b4e22b5485ffb026d744dcb62054fc",
     "darwin_arm64": "397ba43d5b5f0a8e61a724d34f21cad46a91b011a651e3b47cc250c55afc0eb7"
   },
-  "releaseNotes": "NOX9GO v1.1.6 — Telegram: ordenes Herdr, feed legible, respuesta del agente en order_done, badge del bot en el dashboard; panel Development con progreso ODD ampliado; poolside oculto; mejoras de tooling (diff-coverage, tests SQLite in-memory)."
+  "releaseNotes": "NOX9GO v1.1.6 — Telegram: Herdr orders, readable agent replies on order_done, bot status badge; Development ODD progress; poolside hidden; diff-coverage and in-memory SQLite test pinning."
 }
