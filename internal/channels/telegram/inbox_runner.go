@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -135,12 +136,23 @@ const (
 	orderRunFailed
 )
 
+// orderRunnerCommand builds the process that runs an order script. DEV_ORDER_RUNNER
+// is operator configuration, so the interpreter is never assumed: PowerShell is the
+// Windows default, while a POSIX host gets the script run through /bin/sh. Spawning
+// "powershell" on Linux aborted every order with "executable file not found".
+func orderRunnerCommand(ctx context.Context, script string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script)
+	}
+	return exec.CommandContext(ctx, "/bin/sh", script)
+}
+
 func runOrderScript(ctx context.Context, script string, event notify.Event) (orderRunOutcome, string) {
 	workDir := strings.TrimSpace(config.DevRepoRoot())
 	if workDir == "" {
 		workDir = "."
 	}
-	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script)
+	cmd := orderRunnerCommand(ctx, script)
 	cmd.Dir = workDir
 	cmd.Env = append(os.Environ(),
 		"NOX9GO_ORDER_ID="+strings.TrimSpace(event.ID),
