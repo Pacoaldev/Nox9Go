@@ -10,6 +10,7 @@ import (
 	"github.com/go-telegram/bot/models"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/devstatus"
+	"nox9go/proxy/internal/log"
 	"nox9go/proxy/internal/notify"
 )
 
@@ -298,10 +299,13 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 	turnDone := s.beginTurn(chatID, cancelTurn)
 	defer close(turnDone)
 
-	// S7: the visible cancel control. The reply keyboard travels with an
-	// ack so the operator sees, in the moment the turn starts, what a tap
-	// does; the command text is accepted anywhere so a stale keyboard after a
-	// restart still cancels honestly ("no hay nada en vuelo").
+	// Turn timing is logged without any conversation content: the Console Log
+	// filter "telegram" is how an operator answers "why is the bot slow" —
+	// a long gap after "turn started" points at the gateway or provider, a
+	// long gap before it points at the channel's own queue.
+	turnStart := time.Now()
+	log.Info("telegram", "turn started", "chat", chatID, "model", model)
+
 	s.sendKeyboard(ctx, bot, chatID, "En vuelo — cancelá con el botón o /cancel.")
 
 	reply, turnErr := forwardText(turnCtx, baseURL, apiKey, model, messages)
@@ -309,6 +313,10 @@ func (s *Supervisor) handleChat(ctx context.Context, bot *tgbot.Bot, msg *models
 	// Removed before anything else, so a turn that finished normally is never
 	// left cancelable and a late /cancel reports nothing in flight.
 	s.endTurn(chatID)
+
+	// The duration is the operator's slow-turn answer: everything between
+	// "turn started" and here was spent inside the gateway or the provider.
+	log.Info("telegram", "turn completed", "chat", chatID, "duration", time.Since(turnStart).Round(time.Millisecond))
 
 	if turnErr != nil {
 		if ctx.Err() != nil || turnCtx.Err() != nil {
