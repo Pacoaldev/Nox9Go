@@ -50,7 +50,7 @@ func TestTelegramAgentTask_RoundTrip(t *testing.T) {
 		t.Errorf("default task status = %q, want idle", task.Status)
 	}
 
-	if err := repo.SetTelegramAgentTask(42, "desplegar", "pending_approval"); err != nil {
+	if err := repo.SetTelegramAgentTask(42, "desplegar", "pending_approval", "abcd1234"); err != nil {
 		t.Fatalf("SetTelegramAgentTask() error = %v", err)
 	}
 	got, err := repo.GetTelegramAgentTask(42)
@@ -62,7 +62,7 @@ func TestTelegramAgentTask_RoundTrip(t *testing.T) {
 	}
 
 	// A second chat is independent: one row per chat, not one global task.
-	if err := repo.SetTelegramAgentTask(7, "otra", "running"); err != nil {
+	if err := repo.SetTelegramAgentTask(7, "otra", "running", ""); err != nil {
 		t.Fatalf("SetTelegramAgentTask() error = %v", err)
 	}
 	first, _ := repo.GetTelegramAgentTask(42)

@@ -9,6 +9,10 @@ var telegramChatSettingTables = []tableDef{
 		columns: [][2]string{
 			{"chatId", "INTEGER PRIMARY KEY"},
 			{"autoApprove", "INTEGER NOT NULL DEFAULT 0"},
+			{"dockHidden", "INTEGER NOT NULL DEFAULT 0"},
+			{"feedScope", "INTEGER NOT NULL DEFAULT 0"},
+			{"agentCompactDock", "INTEGER NOT NULL DEFAULT 0"},
+			{"placeholderHint", "INTEGER NOT NULL DEFAULT 0"},
 			{"updatedAt", "TEXT NOT NULL DEFAULT ''"},
 		},
 	},

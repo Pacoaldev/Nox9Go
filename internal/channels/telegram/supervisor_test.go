@@ -40,7 +40,11 @@ type fakeRepo struct {
 	// task is the agent task this chat is supervising, and autoApprove its
 	// skip-the-approval preference.
 	task        db.TelegramAgentTask
-	autoApprove bool
+	autoApprove      bool
+	dockHidden       bool
+	feedScope        int
+	agentCompactDock bool
+	placeholderHint  int
 
 	// sessions is what ListTelegramSessions reports, and resumed records the id
 	// a retake handed to the storage helper, so a test asserts the button
@@ -74,11 +78,15 @@ func (f *fakeRepo) GetTelegramAgentTask(chatID int64) (*db.TelegramAgentTask, er
 	return &task, nil
 }
 
-func (f *fakeRepo) SetTelegramAgentTask(chatID int64, instruction, status string) error {
+func (f *fakeRepo) SetTelegramAgentTask(chatID int64, instruction, status, correlationID string) error {
+	if correlationID == "" {
+		correlationID = f.task.CorrelationID
+	}
 	f.task = db.TelegramAgentTask{
-		ChatID:      chatID,
-		Instruction: instruction,
-		Status:      status,
+		ChatID:        chatID,
+		Instruction:   instruction,
+		Status:        status,
+		CorrelationID: correlationID,
 	}
 	return nil
 }
@@ -87,6 +95,37 @@ func (f *fakeRepo) TelegramAutoApprove(chatID int64) (bool, error) { return f.au
 
 func (f *fakeRepo) SetTelegramAutoApprove(chatID int64, on bool) error {
 	f.autoApprove = on
+	return nil
+}
+
+func (f *fakeRepo) TelegramDockHidden(chatID int64) (bool, error) { return f.dockHidden, nil }
+
+func (f *fakeRepo) SetTelegramDockHidden(chatID int64, hidden bool) error {
+	f.dockHidden = hidden
+	return nil
+}
+
+func (f *fakeRepo) TelegramFeedScope(chatID int64) (int, error) { return f.feedScope, nil }
+
+func (f *fakeRepo) SetTelegramFeedScope(chatID int64, scope int) error {
+	f.feedScope = scope
+	return nil
+}
+
+func (f *fakeRepo) TelegramAgentCompactDock(chatID int64) (bool, error) { return f.agentCompactDock, nil }
+
+func (f *fakeRepo) SetTelegramAgentCompactDock(chatID int64, on bool) error {
+	f.agentCompactDock = on
+	return nil
+}
+
+func (f *fakeRepo) TelegramPlaceholderHint(chatID int64) (int, error) { return f.placeholderHint, nil }
+
+func (f *fakeRepo) AdvanceTelegramPlaceholderHint(chatID int64, modulo int) error {
+	if modulo < 1 {
+		modulo = 1
+	}
+	f.placeholderHint = (f.placeholderHint + 1) % modulo
 	return nil
 }
 

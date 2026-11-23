@@ -140,6 +140,8 @@ func TestKind_Label(t *testing.T) {
 		{KindCommit, "commit"},
 		{KindCheck, "check"},
 		{KindBlocker, "decisión"},
+		{KindOrderDone, "orden lista"},
+		{KindOrderFailed, "orden fallida"},
 		{KindInfo, "info"},
 		{Kind("unknown"), "info"},
 	}

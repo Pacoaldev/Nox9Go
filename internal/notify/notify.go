@@ -36,6 +36,10 @@ const (
 	// KindOrder is an instruction the operator submitted for the development
 	// session to act on. It flows bot -> file, the reverse of every other kind.
 	KindOrder Kind = "order"
+	// KindOrderDone is the development session acknowledging an order finished.
+	KindOrderDone Kind = "order_done"
+	// KindOrderFailed is the session reporting that an order could not finish.
+	KindOrderFailed Kind = "order_failed"
 )
 
 // Event is one line of the spool.
@@ -49,6 +53,8 @@ type Event struct {
 	Title string `json:"title"`
 	// Detail is optional context, already formatted for reading.
 	Detail string `json:"detail,omitempty"`
+	// TaskID correlates an order with the Telegram agent task that created it.
+	TaskID string `json:"task_id,omitempty"`
 }
 
 // Render formats an event as the Telegram message text.
@@ -74,6 +80,10 @@ func (k Kind) Label() string {
 		return "decisión"
 	case KindOrder:
 		return "orden"
+	case KindOrderDone:
+		return "orden lista"
+	case KindOrderFailed:
+		return "orden fallida"
 	default:
 		return "info"
 	}

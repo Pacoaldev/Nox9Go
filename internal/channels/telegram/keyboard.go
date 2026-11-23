@@ -15,6 +15,10 @@ import (
 // instead of a command someone has to remember. The labels are the second
 // design (L0b); the first-design spellings below are accepted as aliases so a
 // keyboard already sitting in a chat keeps working after the rename.
+// dockRefreshText is intentionally quiet: reply keyboards need a message, but
+// repeating the hub legend on every tap floods the thread.
+const dockRefreshText = "\u200b"
+
 const (
 	dockChatNew      = "💬 Nueva sesión"
 	dockChatModels   = "🧠 Modelos IA"
@@ -27,6 +31,7 @@ const (
 	dockAgentTask     = "📋 Tarea actual"
 	dockAgentDev      = "📊 Estado dev"
 	dockAgentFeature  = "🎯 Feature ODD"
+	dockAgentAutonomy = "⚙️ Autonomía"
 	dockAgentSessions = "🗂️ Ver sesiones"
 	dockAgentToChat   = "💬 Cambiar a Modo Chat"
 )
@@ -62,6 +67,10 @@ const (
 	dockActFeatures
 	dockActToAgent
 	dockActToChat
+	dockActAutonomy
+	dockActHubMenu
+	dockActHubMode
+	dockActHubKeys
 )
 
 // dockActions is the routing table: button label to action.
@@ -82,6 +91,11 @@ var dockActions = map[string]dockAction{
 	dockAgentFeature:  dockActFeatures,
 	dockAgentSessions: dockActSessions,
 	dockAgentToChat:   dockActToChat,
+	dockAgentAutonomy: dockActAutonomy,
+	dockHubMenu:       dockActHubMenu,
+	dockHubMode:       dockActHubMode,
+	dockHubKeys:       dockActHubKeys,
+	dockHubKeysOn:     dockActHubKeys,
 
 	// First-design spellings (S1), still on screen in older chats.
 	"💬 Nueva sesion de chat":     dockActNew,
@@ -94,26 +108,8 @@ var dockActions = map[string]dockAction{
 	"Cancelar":                   dockActCancel,
 }
 
-// dockRows is the keyboard layout per mode. One action per row where it deserves
-// the width, two where they pair, and the way to the other mode last.
-func dockRows(mode db.BotMode) [][]string {
-	if mode == db.ModeAgent {
-		return [][]string{
-			{dockAgentTask},
-			{dockAgentDev, dockAgentFeature},
-			{dockStatus, dockCancel},
-			{dockAgentSessions},
-			{dockAgentToChat},
-		}
-	}
-	return [][]string{
-		{dockChatNew},
-		{dockChatModels, dockChatSessions},
-		{dockStatus, dockCancel},
-		{dockChatEnd},
-		{dockChatToAgent},
-	}
-}
+// dockRows is the hub layout shared by both modes.
+func dockRows(mode db.BotMode) [][]string { return hubDockRows() }
 
 // dockPlaceholder is the text drawn in the empty input field for a mode.
 func dockPlaceholder(mode db.BotMode) string {
@@ -123,23 +119,20 @@ func dockPlaceholder(mode db.BotMode) string {
 	return dockChatPlaceholder
 }
 
-// dockHint is the line that travels with the keyboard. A reply keyboard only
-// lives on the message that carried it, so it is re-sent with a line saying
-// which panel the chat is in.
-func dockHint(mode db.BotMode) string {
-	if mode == db.ModeAgent {
-		return "Panel Agente — " + dockAgentPlaceholder
+// dockMarkup builds the hub keyboard with a rotating placeholder hint.
+func dockMarkupForTurn(mode db.BotMode, placeholder string, inFlight bool) models.ReplyKeyboardMarkup {
+	kb := dockMarkup(mode, placeholder)
+	if inFlight {
+		kb.Keyboard = append(kb.Keyboard, []models.KeyboardButton{{Text: dockCancel}})
 	}
-	return "Panel Chat — " + dockChatPlaceholder
+	return kb
 }
 
-// dockMarkup builds the reply keyboard for a mode.
-//
-// The struct is handed to the library, never a marshaled string: the parameter
-// is an interface, and a string arrives quoted, which Telegram rejects with
-// "can't parse reply keyboard markup JSON object".
-func dockMarkup(mode db.BotMode) models.ReplyKeyboardMarkup {
-	rows := dockRows(mode)
+func dockMarkup(mode db.BotMode, placeholder string) models.ReplyKeyboardMarkup {
+	if strings.TrimSpace(placeholder) == "" {
+		placeholder = dockPlaceholder(mode)
+	}
+	rows := hubDockRows()
 	keyboard := make([][]models.KeyboardButton, 0, len(rows))
 	for _, row := range rows {
 		buttons := make([]models.KeyboardButton, 0, len(row))
@@ -152,8 +145,25 @@ func dockMarkup(mode db.BotMode) models.ReplyKeyboardMarkup {
 		Keyboard:              keyboard,
 		ResizeKeyboard:        true,
 		IsPersistent:          true,
-		InputFieldPlaceholder: dockPlaceholder(mode),
+		InputFieldPlaceholder: placeholder,
 	}
+}
+
+func (s *Supervisor) nextDockPlaceholder(chatID int64, mode db.BotMode) string {
+	hints := chatPlaceholderHints
+	if mode == db.ModeAgent {
+		hints = agentPlaceholderHints
+	}
+	mod := len(hints)
+	if mod == 0 {
+		return dockPlaceholder(mode)
+	}
+	idx, err := s.repo.TelegramPlaceholderHint(chatID)
+	if err != nil {
+		s.setError(err)
+	}
+	_ = s.repo.AdvanceTelegramPlaceholderHint(chatID, mod)
+	return placeholderHint(mode, idx)
 }
 
 // resolveDock maps a button's text to its action. The match is exact on the
@@ -181,13 +191,83 @@ func (s *Supervisor) currentMode() db.BotMode {
 // the only entry point that does not need a command to be memorized.
 func (s *Supervisor) sendDock(ctx context.Context, bot *tgbot.Bot, chatID int64) {
 	mode := s.currentMode()
+	hidden, err := s.repo.TelegramDockHidden(chatID)
+	if err != nil {
+		s.setError(err)
+		hidden = false
+	}
+	if hidden {
+		if _, err := bot.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID:              chatID,
+			Text:                dockHiddenHint(mode),
+			ReplyMarkup:         models.ReplyKeyboardRemove{RemoveKeyboard: true},
+			DisableNotification: true,
+		}); err != nil {
+			s.setError(fmt.Errorf("telegram: hide dock: %w", err))
+		}
+		s.setDockReady(chatID, false)
+		return
+	}
 	if _, err := bot.SendMessage(ctx, &tgbot.SendMessageParams{
-		ChatID:      chatID,
-		Text:        dockHint(mode),
-		ReplyMarkup: dockMarkup(mode),
+		ChatID:                  chatID,
+		Text:                    dockRefreshText,
+		ReplyMarkup:             dockMarkup(mode, s.nextDockPlaceholder(chatID, mode)),
+		DisableNotification:     true,
 	}); err != nil {
 		s.setError(fmt.Errorf("telegram: send dock: %w", err))
+		return
 	}
+	s.setDockReady(chatID, true)
+}
+
+// dockResendRequired reports whether a dock button changes the reply keyboard.
+// Actions that only open the panel or print status should not post another
+// keyboard refresh message.
+func dockResendRequired(action dockAction) bool {
+	switch action {
+	case dockActHubMenu, dockActStatus, dockActTask, dockActAutonomy, dockActDev,
+		dockActNew, dockActEnd, dockActCancel, dockActModels, dockActSessions, dockActFeatures:
+		return false
+	default:
+		return true
+	}
+}
+
+func (s *Supervisor) dockReady(chatID int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dockReadyChats[chatID]
+}
+
+func (s *Supervisor) setDockReady(chatID int64, ready bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dockReadyChats == nil {
+		s.dockReadyChats = make(map[int64]bool)
+	}
+	s.dockReadyChats[chatID] = ready
+}
+
+func (s *Supervisor) sendDockIfNeeded(ctx context.Context, bot *tgbot.Bot, chatID int64, action dockAction) {
+	if s.dockReady(chatID) && !dockResendRequired(action) {
+		return
+	}
+	s.sendDock(ctx, bot, chatID)
+}
+
+func dockHiddenHint(mode db.BotMode) string {
+	return "⌨️ Teclado oculto — abrí /panel y tocá «Mostrar teclado»."
+}
+
+// setDockHidden persists the preference and redraws the dock on screen.
+func (s *Supervisor) setDockHidden(ctx context.Context, bot *tgbot.Bot, chatID int64, hidden bool) {
+	if err := s.repo.SetTelegramDockHidden(chatID, hidden); err != nil {
+		s.setError(err)
+		s.send(ctx, bot, chatID, "No pude guardar la preferencia del teclado.")
+		return
+	}
+	s.updatePanel(ctx, bot, chatID)
+	s.sendDock(ctx, bot, chatID)
 }
 
 // handleDock runs the action a button names and re-sends the dock.
@@ -197,6 +277,23 @@ func (s *Supervisor) sendDock(ctx context.Context, bot *tgbot.Bot, chatID int64)
 // /status typed and 📡 Estado canal tapped cannot drift apart.
 func (s *Supervisor) handleDock(ctx context.Context, bot *tgbot.Bot, chatID int64, action dockAction) {
 	switch action {
+	case dockActHubMenu:
+		s.openPanel(ctx, bot, chatID)
+	case dockActHubMode:
+		mode := s.currentMode()
+		if mode == db.ModeAgent {
+			s.switchMode(ctx, bot, chatID, db.ModeChat)
+		} else {
+			s.switchMode(ctx, bot, chatID, db.ModeAgent)
+		}
+	case dockActHubKeys:
+		hidden, err := s.repo.TelegramDockHidden(chatID)
+		if err != nil {
+			s.setError(err)
+		} else {
+			s.setDockHidden(ctx, bot, chatID, !hidden)
+			return
+		}
 	case dockActNew:
 		s.cmdNew(ctx, bot, chatID)
 	case dockActEnd:
@@ -210,6 +307,8 @@ func (s *Supervisor) handleDock(ctx context.Context, bot *tgbot.Bot, chatID int6
 		// opens it, so the operator can check on the work without sending
 		// anything to the development session.
 		s.showTaskPanel(ctx, bot, chatID)
+	case dockActAutonomy:
+		s.send(ctx, bot, chatID, s.autonomyText(chatID))
 	case dockActDev:
 		s.cmdDevStatus(ctx, bot, chatID, "")
 	case dockActModels:
@@ -223,9 +322,7 @@ func (s *Supervisor) handleDock(ctx context.Context, bot *tgbot.Bot, chatID int6
 	case dockActToChat:
 		s.switchMode(ctx, bot, chatID, db.ModeChat)
 	}
-	// S3: the keyboard is re-sent after handling, so the dock survives the
-	// message the action produced and the next press is still one tap away.
-	s.sendDock(ctx, bot, chatID)
+	s.sendDockIfNeeded(ctx, bot, chatID, action)
 }
 
 // switchMode stores the mode and redraws the panel in place for it.
@@ -235,6 +332,16 @@ func (s *Supervisor) switchMode(ctx context.Context, bot *tgbot.Bot, chatID int6
 		s.send(ctx, bot, chatID, "No pude cambiar de modo.")
 		return
 	}
+	if mode == db.ModeAgent {
+		compact, err := s.repo.TelegramAgentCompactDock(chatID)
+		if err != nil {
+			s.setError(err)
+		} else if compact {
+			if err := s.repo.SetTelegramDockHidden(chatID, true); err != nil {
+				s.setError(err)
+			}
+		}
+	}
 	s.updatePanel(ctx, bot, chatID)
 }
 
@@ -243,5 +350,5 @@ func (s *Supervisor) switchMode(ctx context.Context, bot *tgbot.Bot, chatID int6
 // an order by accident.
 func (s *Supervisor) showTaskPanel(ctx context.Context, bot *tgbot.Bot, chatID int64) {
 	s.send(ctx, bot, chatID, s.taskStatusText(chatID))
-	s.sendDock(ctx, bot, chatID)
+	s.sendDockIfNeeded(ctx, bot, chatID, dockActTask)
 }

@@ -886,8 +886,8 @@ func TestSendKeyboard_SendsAJSONObject(t *testing.T) {
 	if !strings.HasPrefix(markups[0], "{") {
 		t.Errorf("reply_markup traveled as %q, want a JSON object — a quoted string is what the Bot API rejects", markups[0])
 	}
-	if !strings.Contains(markups[0], `"keyboard"`) || !strings.Contains(markups[0], "Cancelar") {
-		t.Errorf("reply_markup = %q, want a keyboard containing Cancelar", markups[0])
+	if !strings.Contains(markups[0], `"keyboard"`) || !strings.Contains(markups[0], "Menú") {
+		t.Errorf("reply_markup = %q, want a hub keyboard JSON object", markups[0])
 	}
 	if len(fake.messages()) != 1 || fake.messages()[0] != "probando" {
 		t.Errorf("messages = %v, want the ack", fake.messages())

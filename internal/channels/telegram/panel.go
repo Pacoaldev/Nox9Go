@@ -66,6 +66,11 @@ type PanelState struct {
 	LastAction         string
 	CurrentInstruction string
 	AutoApprove        bool
+	DockHidden         bool
+	FeedScope          int
+	AgentCompactDock   bool
+	CorrelationID      string
+	LastDevEvent       string
 }
 
 // Callback data prefix. Every value this package emits starts with it, so a
@@ -83,6 +88,13 @@ const (
 	cbToggleAuto = "m:ag:toggle_auto"
 	cbTaskStatus = "m:ag:status"
 	cbAutonomy   = "m:ag:autonomy"
+	cbDockHide     = "m:dock:hide"
+	cbDockShow     = "m:dock:show"
+	cbFeedCycle    = "m:pref:feed"
+	cbAgentCompact = "m:pref:compact"
+	cbChatStatus   = "m:chat:status"
+	cbChatEnd      = "m:chat:end"
+	cbDevPanel     = "m:ag:dev"
 )
 
 // maxCallbackData is Telegram's hard limit. A longer value makes the button
@@ -138,13 +150,16 @@ func renderChatPanel(s PanelState) (string, models.ReplyMarkup) {
 	b.WriteString("<b>NOX9GO · Modo Chat</b>\n\n")
 	fmt.Fprintf(&b, "Modelo/Combo: <code>%s</code>\n", esc(model))
 	b.WriteString("Los mensajes se envían como chat normal.\n")
+	writePanelMeta(&b, s)
 	if s.LastAction != "" {
 		fmt.Fprintf(&b, "\n%s\n", esc(s.LastAction))
 	}
 
 	rows := [][]inlineButton{
 		{{Text: "Modelo/Combo", Data: cbChatModel}, {Text: "Nuevo hilo", Data: cbChatReset}},
-		{{Text: "Pasar a Agente", Data: cbModeAgent}},
+		{{Text: "Sesiones", Data: cbSessionsPanel}, {Text: "Estado canal", Data: cbChatStatus}},
+		{{Text: "Cerrar sesión", Data: cbChatEnd}, {Text: "Pasar a Agente", Data: cbModeAgent}},
+		dockToggleRow(s),
 	}
 	return strings.TrimRight(b.String(), "\n"), markup(rows)
 }
@@ -161,6 +176,7 @@ func renderAgentPanel(s PanelState) (string, models.ReplyMarkup) {
 	var b strings.Builder
 	b.WriteString("<b>NOX9GO · Modo Agente</b>\n\n")
 	fmt.Fprintf(&b, "Estado: <b>%s</b>\n", esc(taskStatusLabel(status)))
+	writePanelMeta(&b, s)
 
 	switch {
 	case status == TaskPendingApproval && s.PendingApproval != "":
@@ -194,21 +210,72 @@ func renderAgentPanel(s PanelState) (string, models.ReplyMarkup) {
 			{Text: "Cancelar tarea", Data: cbCancelTask},
 			{Text: "Refrescar", Data: cbRefresh},
 		})
+	case TaskDone, TaskFailed, TaskCancelled, TaskRejected:
+		rows = append(rows, []inlineButton{{Text: "Refrescar", Data: cbRefresh}})
 	default:
 		auto := "Auto: OFF"
 		if s.AutoApprove {
 			auto = "Auto: ON"
 		}
+		compact := "Compacto: OFF"
+		if s.AgentCompactDock {
+			compact = "Compacto: ON"
+		}
 		rows = append(rows, []inlineButton{
 			{Text: auto, Data: cbToggleAuto},
 			{Text: "Refrescar", Data: cbRefresh},
 		})
+		rows = append(rows, []inlineButton{
+			{Text: feedScopeLabel(feedScope(s.FeedScope)), Data: cbFeedCycle},
+			{Text: compact, Data: cbAgentCompact},
+		})
 	}
-	rows = append(rows,
-		[]inlineButton{{Text: "Estado / Paso", Data: cbTaskStatus}, {Text: "Autonomía", Data: cbAutonomy}},
-		[]inlineButton{{Text: "Cambiar a Chat", Data: cbModeChat}},
-	)
+	rows = append(rows, agentNavRows(s)...)
+	rows = append(rows, agentPanelFooterRows(s)...)
 	return strings.TrimRight(b.String(), "\n"), markup(rows)
+}
+
+// agentPanelFooterRows keeps task extras on the inline panel only when the dock
+// does not already expose them, so the operator is not offered the same action
+// twice on one screen.
+func agentPanelFooterRows(s PanelState) [][]inlineButton {
+	rows := [][]inlineButton{dockToggleRow(s)}
+	if s.DockHidden {
+		aux := []inlineButton{{Text: "📋 Estado tarea", Data: cbTaskStatus}}
+		if s.TaskStatus == TaskIdle || s.TaskStatus == "" {
+			aux = append(aux, inlineButton{Text: "Autonomía", Data: cbAutonomy})
+		}
+		rows = append([][]inlineButton{aux}, rows...)
+	}
+	rows = append(rows, []inlineButton{{Text: "Cambiar a Chat", Data: cbModeChat}})
+	return rows
+}
+
+func writePanelMeta(b *strings.Builder, s PanelState) {
+	if s.CorrelationID != "" {
+		fmt.Fprintf(b, "ID tarea: <code>%s</code>\n", esc(s.CorrelationID))
+	}
+	if s.LastDevEvent != "" {
+		fmt.Fprintf(b, "Último evento: %s\n", esc(s.LastDevEvent))
+	}
+}
+
+func agentNavRows(s PanelState) [][]inlineButton {
+	switch s.TaskStatus {
+	case TaskRunning, TaskPendingApproval:
+		return nil
+	}
+	return [][]inlineButton{
+		{{Text: "📋 Estado tarea", Data: cbTaskStatus}, {Text: "Estado dev", Data: cbDevPanel}},
+		{{Text: "Feature ODD", Data: cbFeaturesPanel}, {Text: "Sesiones", Data: cbSessionsPanel}},
+	}
+}
+
+func dockToggleRow(s PanelState) []inlineButton {
+	if s.DockHidden {
+		return []inlineButton{{Text: "🔼 Mostrar teclado", Data: cbDockShow}}
+	}
+	return []inlineButton{{Text: "🔽 Ocultar teclado", Data: cbDockHide}}
 }
 
 // taskStatusLabel is the operator-facing wording for a state.

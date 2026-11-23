@@ -55,6 +55,7 @@ func (s *Supervisor) poll(ctx context.Context, repo Repo) {
 	// The development feed runs alongside the poll loop: Start blocks, so the
 	// drain owns its own goroutine and stops with the same context.
 	go s.drainNotifications(ctx, bot, repo)
+	go s.drainInboxOrders(ctx, repo)
 
 	// Start blocks until ctx is cancelled. It logs every update payload at debug
 	// level through the library's own logger, which is why the errors handler is
@@ -125,9 +126,24 @@ func (s *Supervisor) forwardPendingEvents(ctx context.Context, bot *tgbot.Bot, r
 		return
 	}
 
+	stamp := ""
 	for _, event := range events {
 		text := event.Render()
+		if stamp == "" {
+			stamp = event.At.UTC().Format("15:04")
+		}
+		short := event.Kind.Label() + ": " + event.Title
 		for _, chatID := range cfg.AllowedUserIDs {
+			s.rememberDevFeedLine(chatID, stamp, short)
+			s.reconcileTaskFromDevEvent(ctx, bot, chatID, event)
+			scopeVal, err := repo.TelegramFeedScope(chatID)
+			if err != nil {
+				s.setError(err)
+				scopeVal = 0
+			}
+			if !feedEventForwards(feedScope(scopeVal), event) {
+				continue
+			}
 			s.send(ctx, bot, chatID, text)
 		}
 	}

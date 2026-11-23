@@ -47,7 +47,7 @@ func TestRenderChatPanel(t *testing.T) {
 			t.Errorf("chat panel missing %q:\n%s", want, text)
 		}
 	}
-	want := []string{"m:chat:model", "m:chat:reset", "m:mode:agent"}
+	want := []string{"m:chat:model", "m:chat:reset", "m:dock:sessions", "m:chat:status", "m:chat:end", "m:mode:agent", "m:dock:hide"}
 	if strings.Join(data, ",") != strings.Join(want, ",") {
 		t.Errorf("chat panel buttons = %v, want %v", data, want)
 	}
@@ -99,6 +99,19 @@ func TestRenderAgentPanel_ControlsFollowState(t *testing.T) {
 			notWant:    []string{"m:ag:approve", "m:ag:cancel"},
 			wantStatus: "Inactivo",
 		},
+		{
+			name:       "dock visible hides duplicate status buttons",
+			state:      PanelState{Mode: db.ModeAgent, TaskStatus: TaskRunning, DockHidden: false},
+			notWant:    []string{"m:ag:status", "m:ag:autonomy"},
+			wantStatus: "Ejecutando",
+		},
+		{
+			name:       "dock hidden restores task status on the inline panel",
+			state:      PanelState{Mode: db.ModeAgent, TaskStatus: TaskRunning, DockHidden: true},
+			wantData:   []string{"m:ag:status"},
+			notWant:    []string{"m:ag:autonomy"},
+			wantStatus: "Ejecutando",
+		},
 	}
 
 	for _, tt := range tests {
@@ -132,7 +145,8 @@ func TestCallbackDataFitsTelegramLimit(t *testing.T) {
 	all := []string{
 		cbChatModel, cbChatReset, cbModeAgent, cbModeChat,
 		cbApprove, cbReject, cbCancelTask, cbRefresh,
-		cbToggleAuto, cbTaskStatus, cbAutonomy,
+		cbToggleAuto, cbTaskStatus, cbAutonomy, cbDockHide, cbDockShow,
+		cbFeedCycle, cbAgentCompact, cbChatStatus, cbChatEnd, cbDevPanel,
 	}
 	for _, v := range all {
 		if len(v) > maxCallbackData {
@@ -193,6 +207,8 @@ func TestTaskTransitionAllowed(t *testing.T) {
 		// reachable from the two states a task can be submitted from.
 		{TaskPendingApproval, TaskFailed, true},
 		{TaskRunning, TaskFailed, true},
+		{TaskRunning, TaskDone, true},
+		{TaskIdle, TaskDone, false},
 		{TaskIdle, TaskFailed, false},
 		{TaskCancelled, TaskFailed, false},
 		{TaskDone, TaskFailed, false},

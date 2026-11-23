@@ -212,6 +212,14 @@ func DevInboxPath() string {
 	return filepath.Join(ResolveDataDir(), "dev-inbox.jsonl")
 }
 
+// DevOrderRunner is the PowerShell script the Telegram channel runs for each
+// drained inbox order. Empty means orders are only queued, not executed here.
+func DevOrderRunner() string { return devValue("DEV_ORDER_RUNNER") }
+
+// HerdrAgentTarget is the live Herdr agent name (herdr agent list) for the
+// Herdr order runner script.
+func HerdrAgentTarget() string { return devValue("HERDR_AGENT_TARGET") }
+
 // envFileCandidates lists the .env locations the server itself reads: the one
 // in the working directory, then the one beside the executable so a daemon
 // started from another directory still finds the same config its CLI reports on.

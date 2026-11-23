@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -157,6 +158,19 @@ func (s *Supervisor) saveAgentAttachment(a *imageAttachment) (string, error) {
 }
 
 // extensionForMime maps the mime types Telegram serves to a file extension.
+func (s *Supervisor) sendAgentImageConfirmation(ctx context.Context, bot *tgbot.Bot, chatID int64, path string, a *imageAttachment) {
+	caption := "Imagen guardada.\n" + path
+	file := &models.InputFileUpload{Filename: filepath.Base(path), Data: bytes.NewReader(a.Data)}
+	if _, err := bot.SendPhoto(ctx, &tgbot.SendPhotoParams{
+		ChatID:  chatID,
+		Photo:   file,
+		Caption: caption,
+	}); err != nil {
+		s.setError(fmt.Errorf("telegram: send photo ack: %w", err))
+		s.send(ctx, bot, chatID, caption)
+	}
+}
+
 func extensionForMime(mime string) string {
 	switch mime {
 	case "image/png":

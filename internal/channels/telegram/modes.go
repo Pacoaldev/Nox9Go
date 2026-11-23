@@ -30,12 +30,13 @@ func (s *Supervisor) panelState(chatID int64) PanelState {
 	if task, err := s.repo.GetTelegramAgentTask(chatID); err == nil {
 		status, reason := parseTaskStatus(task.Status)
 		state.TaskStatus = status
+		state.CorrelationID = task.CorrelationID
 		switch status {
 		case TaskPendingApproval:
 			state.PendingApproval = task.Instruction
-		case TaskRunning:
+		case TaskRunning, TaskDone:
 			// A task under supervision keeps its instruction on the panel while it
-			// runs, which is what the operator is watching for.
+			// runs or after it completes, which is what the operator is watching for.
 			state.CurrentInstruction = task.Instruction
 		case TaskFailed:
 			state.CurrentInstruction = task.Instruction
@@ -46,6 +47,16 @@ func (s *Supervisor) panelState(chatID int64) PanelState {
 	if auto, err := s.repo.TelegramAutoApprove(chatID); err == nil {
 		state.AutoApprove = auto
 	}
+	if hidden, err := s.repo.TelegramDockHidden(chatID); err == nil {
+		state.DockHidden = hidden
+	}
+	if scope, err := s.repo.TelegramFeedScope(chatID); err == nil {
+		state.FeedScope = scope
+	}
+	if compact, err := s.repo.TelegramAgentCompactDock(chatID); err == nil {
+		state.AgentCompactDock = compact
+	}
+	state.LastDevEvent = s.lastDevFeedLine(chatID)
 	return state
 }
 
@@ -65,6 +76,38 @@ func (s *Supervisor) cmdPanel(ctx context.Context, bot *tgbot.Bot, chatID int64)
 		return
 	}
 	s.rememberPanel(chatID, sent.ID)
+	s.pinPanelMessage(ctx, bot, chatID, sent.ID)
+}
+
+// openPanel focuses the single inline panel: refresh when it exists, open once
+// when it does not. Hub "Menú" must not stack a second panel in the thread.
+func (s *Supervisor) openPanel(ctx context.Context, bot *tgbot.Bot, chatID int64) {
+	if s.panelMessage(chatID) == 0 {
+		s.cmdPanel(ctx, bot, chatID)
+		return
+	}
+	s.updatePanel(ctx, bot, chatID)
+}
+
+func (s *Supervisor) pinPanelMessage(ctx context.Context, bot *tgbot.Bot, chatID int64, messageID int) {
+	if messageID == 0 {
+		return
+	}
+	_, err := bot.PinChatMessage(ctx, &tgbot.PinChatMessageParams{
+		ChatID:              chatID,
+		MessageID:           messageID,
+		DisableNotification: true,
+	})
+	if err == nil {
+		return
+	}
+	// Private chats without pin permission still work; only report unexpected faults.
+	if strings.Contains(err.Error(), "not enough rights") ||
+		strings.Contains(err.Error(), "CHAT_ADMIN_REQUIRED") ||
+		strings.Contains(err.Error(), "can't pin") {
+		return
+	}
+	s.setError(fmt.Errorf("telegram: pin panel: %w", err))
 }
 
 // updatePanel redraws the panel in place (S4). When no panel message is known
@@ -214,6 +257,57 @@ func (s *Supervisor) dispatchCallback(ctx context.Context, bot *tgbot.Bot, chatI
 		answer("Autonomía")
 		s.send(ctx, bot, chatID, s.autonomyText(chatID))
 
+	case cbDockHide:
+		answer("Teclado oculto")
+		s.setDockHidden(ctx, bot, chatID, true)
+
+	case cbDockShow:
+		answer("Teclado visible")
+		s.setDockHidden(ctx, bot, chatID, false)
+
+	case cbFeedCycle:
+		scope, err := s.repo.TelegramFeedScope(chatID)
+		if err != nil {
+			s.setError(err)
+			answer("No pude leer el feed.")
+			return
+		}
+		next := int(feedScope(scope).next())
+		if err := s.repo.SetTelegramFeedScope(chatID, next); err != nil {
+			s.setError(err)
+			answer("No pude guardar el feed.")
+			return
+		}
+		answer(feedScopeLabel(feedScope(next)))
+		s.updatePanel(ctx, bot, chatID)
+
+	case cbAgentCompact:
+		on, err := s.repo.TelegramAgentCompactDock(chatID)
+		if err != nil {
+			s.setError(err)
+			answer("No pude leer compacto.")
+			return
+		}
+		if err := s.repo.SetTelegramAgentCompactDock(chatID, !on); err != nil {
+			s.setError(err)
+			answer("No pude guardar compacto.")
+			return
+		}
+		answer("Compacto actualizado")
+		s.updatePanel(ctx, bot, chatID)
+
+	case cbChatStatus:
+		answer("Estado")
+		s.cmdStatus(ctx, bot, chatID)
+
+	case cbChatEnd:
+		answer("Cerrar")
+		s.cmdEnd(ctx, bot, chatID)
+
+	case cbDevPanel:
+		answer("Dev")
+		s.cmdDevStatus(ctx, bot, chatID, "")
+
 	default:
 		answer("Botón desconocido.")
 	}
@@ -243,8 +337,8 @@ func (s *Supervisor) resolveTask(ctx context.Context, bot *tgbot.Bot, chatID int
 	// accepted the order, so a submit that failed can never leave the panel
 	// claiming progress that is not happening.
 	if target == TaskRunning {
-		if err := s.submitOrder(task.Instruction); err != nil {
-			s.recordFailedTask(ctx, bot, chatID, task.Instruction, err)
+		if err := s.submitOrder(chatID, task.Instruction, task.CorrelationID); err != nil {
+			s.recordFailedTask(ctx, bot, chatID, task.Instruction, task.CorrelationID, err)
 			return
 		}
 	}
@@ -256,7 +350,7 @@ func (s *Supervisor) resolveTask(ctx context.Context, bot *tgbot.Bot, chatID int
 		note = cancelRunningNote
 	}
 
-	if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, string(target)); err != nil {
+	if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, string(target), ""); err != nil {
 		s.setError(err)
 		s.send(ctx, bot, chatID, "No pude actualizar la tarea.")
 		return
@@ -280,6 +374,8 @@ func taskTransitionAllowed(from, to TaskStatus) bool {
 		return from == TaskPendingApproval
 	case TaskCancelled:
 		return from == TaskPendingApproval || from == TaskRunning
+	case TaskDone:
+		return from == TaskRunning
 	case TaskFailed:
 		// S3: failure is the recorded outcome of a submit the spool refused, or
 		// of a session reporting back. Both are reachable from the states a task

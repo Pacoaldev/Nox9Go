@@ -83,9 +83,17 @@ type Repo interface {
 	// The task an agent-mode chat is supervising, and whether this chat skips
 	// the approval step.
 	GetTelegramAgentTask(chatID int64) (*db.TelegramAgentTask, error)
-	SetTelegramAgentTask(chatID int64, instruction, status string) error
+	SetTelegramAgentTask(chatID int64, instruction, status, correlationID string) error
 	TelegramAutoApprove(chatID int64) (bool, error)
 	SetTelegramAutoApprove(chatID int64, on bool) error
+	TelegramDockHidden(chatID int64) (bool, error)
+	SetTelegramDockHidden(chatID int64, hidden bool) error
+	TelegramFeedScope(chatID int64) (int, error)
+	SetTelegramFeedScope(chatID int64, scope int) error
+	TelegramAgentCompactDock(chatID int64) (bool, error)
+	SetTelegramAgentCompactDock(chatID int64, on bool) error
+	TelegramPlaceholderHint(chatID int64) (int, error)
+	AdvanceTelegramPlaceholderHint(chatID int64, modulo int) error
 
 	// The channel's own client API key, issued on first use. A turn carries it
 	// as Bearer because the engine's chat route guards itself with RequireApiKey,
@@ -147,7 +155,10 @@ type Supervisor struct {
 	// panels holds the message id of each chat's mode panel (S4). Editing that
 	// message is what makes a mode switch change the panel instead of stacking
 	// a second one.
-	panels   map[int64]int
+	panels        map[int64]int
+	dockReadyChats map[int64]bool
+	// lastDev is the newest development feed line shown per chat (panel copy).
+	lastDev       map[int64]string
 	done     chan struct{}
 	status   Status
 	username string
@@ -282,7 +293,7 @@ func (s *Supervisor) closeOrphanedTask() {
 			continue
 		}
 		status := encodeTaskStatus(TaskFailed, "orden perdida al reiniciar el canal")
-		if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, status); err != nil {
+		if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, status, ""); err != nil {
 			s.setError(err)
 		}
 	}

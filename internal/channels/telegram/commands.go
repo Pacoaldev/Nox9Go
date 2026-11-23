@@ -82,7 +82,11 @@ func (s *Supervisor) sendKeyboard(ctx context.Context, bot *tgbot.Bot, chatID in
 	// parse reply keyboard markup JSON object" — which failed every chat turn,
 	// because this ack precedes the forward. The marshal also served as the
 	// struct-shape check; the compiler now does that job.
-	markup := dockMarkup(s.currentMode())
+	markup := dockMarkupForTurn(
+		s.currentMode(),
+		s.nextDockPlaceholder(chatID, s.currentMode()),
+		s.turnInFlight(chatID),
+	)
 	if _, err := bot.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        text,
@@ -170,11 +174,13 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 		return
 	}
 
+	correlationID := newTaskCorrelationID()
 	auto, err := s.repo.TelegramAutoApprove(chatID)
 	if err != nil {
 		s.setError(err)
 	}
 
+	var savedPath string
 	// An attached image is saved under the gateway data dir and referenced by
 	// absolute path, so the development session can open it directly.
 	if attachment != nil {
@@ -184,6 +190,7 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 			s.send(ctx, bot, chatID, "No pude guardar la imagen.")
 			return
 		}
+		savedPath = path
 		instruction = instruction + "\n[Imagen adjunta: " + path + "]"
 	}
 
@@ -192,14 +199,14 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 		// S2: auto-approve is the approval path with the waiting step removed, so
 		// the order is submitted before the task says anything (S3). A task whose
 		// order never left the gateway is recorded as failed, not as running.
-		if err := s.submitOrder(instruction); err != nil {
-			s.recordFailedTask(ctx, bot, chatID, instruction, err)
+		if err := s.submitOrder(chatID, instruction, correlationID); err != nil {
+			s.recordFailedTask(ctx, bot, chatID, instruction, correlationID, err)
 			s.updatePanel(ctx, bot, chatID)
 			return
 		}
 		status = string(TaskRunning)
 	}
-	if err := s.repo.SetTelegramAgentTask(chatID, instruction, status); err != nil {
+	if err := s.repo.SetTelegramAgentTask(chatID, instruction, status, correlationID); err != nil {
 		s.setError(err)
 		s.send(ctx, bot, chatID, "No pude registrar la tarea.")
 		return
@@ -209,7 +216,11 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 	case TaskPendingApproval:
 		s.send(ctx, bot, chatID, "Tarea registrada. Espera tu aprobación.")
 	case TaskRunning:
-		s.send(ctx, bot, chatID, "Tarea registrada y enviada a la sesión de desarrollo.")
+		s.send(ctx, bot, chatID, fmt.Sprintf(
+			"Tarea [%s] registrada y enviada a la sesión de desarrollo.", correlationID))
+	}
+	if attachment != nil && savedPath != "" {
+		s.sendAgentImageConfirmation(ctx, bot, chatID, savedPath, attachment)
 	}
 	s.updatePanel(ctx, bot, chatID)
 }
@@ -489,7 +500,7 @@ const orderTitle = "Orden desde Telegram"
 // there is one spool and one shape of event, and nothing here executes anything
 // itself. An error means the instruction did not leave the gateway, which is why
 // every caller must treat it as a failure rather than as progress.
-func (s *Supervisor) submitOrder(instruction string) error {
+func (s *Supervisor) submitOrder(_ int64, instruction, taskID string) error {
 	inbox, err := s.repo.DevInbox()
 	if err != nil {
 		return fmt.Errorf("telegram: open dev inbox: %w", err)
@@ -498,6 +509,7 @@ func (s *Supervisor) submitOrder(instruction string) error {
 		Kind:   notify.KindOrder,
 		Title:  orderTitle,
 		Detail: strings.TrimSpace(instruction),
+		TaskID: strings.TrimSpace(taskID),
 	}); err != nil {
 		return fmt.Errorf("telegram: append order: %w", err)
 	}
@@ -506,8 +518,8 @@ func (s *Supervisor) submitOrder(instruction string) error {
 
 // recordFailedTask stores a task as failed with the cause and tells the
 // operator, in place of leaving a status that claims it is executing.
-func (s *Supervisor) recordFailedTask(ctx context.Context, bot *tgbot.Bot, chatID int64, instruction string, cause error) {
-	if err := s.repo.SetTelegramAgentTask(chatID, instruction, encodeTaskStatus(TaskFailed, cause.Error())); err != nil {
+func (s *Supervisor) recordFailedTask(ctx context.Context, bot *tgbot.Bot, chatID int64, instruction, correlationID string, cause error) {
+	if err := s.repo.SetTelegramAgentTask(chatID, instruction, encodeTaskStatus(TaskFailed, cause.Error()), correlationID); err != nil {
 		s.setError(err)
 	}
 	s.setError(cause)
@@ -531,7 +543,7 @@ func (s *Supervisor) cmdPi(ctx context.Context, bot *tgbot.Bot, chatID int64, ar
 		return
 	}
 
-	if err := s.submitOrder(args); err != nil {
+	if err := s.submitOrder(chatID, args, ""); err != nil {
 		s.setError(err)
 		s.send(ctx, bot, chatID, "No pude registrar la orden.")
 		return

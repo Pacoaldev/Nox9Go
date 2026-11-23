@@ -62,14 +62,10 @@ func assertRows(t *testing.T, got, want [][]string) {
 // row where it deserves the width, two where they pair, and the way to the
 // other panel last.
 func TestDockMarkup_ChatRows(t *testing.T) {
-	kb := dockMarkup(db.ModeChat)
+	kb := dockMarkup(db.ModeChat, "hint chat")
 
 	assertRows(t, dockLabelsOf(t, kb), [][]string{
-		{"💬 Nueva sesión"},
-		{"🧠 Modelos IA", "🗂️ Sesiones"},
-		{"📡 Estado canal", "🛑 Cancelar turno"},
-		{"🔒 Cerrar sesión"},
-		{"🤖 Cambiar a Modo Agente"},
+		{"📋 Menú", "🔄 Modo", "⌨️ Teclado"},
 	})
 
 	if !kb.ResizeKeyboard {
@@ -78,29 +74,25 @@ func TestDockMarkup_ChatRows(t *testing.T) {
 	if !kb.IsPersistent {
 		t.Error("IsPersistent = false, want the dock to stay on screen")
 	}
-	if kb.InputFieldPlaceholder != "Chateá o elegí una opción del menú..." {
-		t.Errorf("chat placeholder = %q, want the spec text", kb.InputFieldPlaceholder)
+	if kb.InputFieldPlaceholder != "hint chat" {
+		t.Errorf("chat placeholder = %q, want the passed hint", kb.InputFieldPlaceholder)
 	}
 }
 
 // S1: the agent dock carries the task controls instead of the conversation
 // ones, because in agent mode free text is an instruction.
 func TestDockMarkup_AgentRows(t *testing.T) {
-	kb := dockMarkup(db.ModeAgent)
+	kb := dockMarkup(db.ModeAgent, "hint agent")
 
 	assertRows(t, dockLabelsOf(t, kb), [][]string{
-		{"📋 Tarea actual"},
-		{"📊 Estado dev", "🎯 Feature ODD"},
-		{"📡 Estado canal", "🛑 Cancelar turno"},
-		{"🗂️ Ver sesiones"},
-		{"💬 Cambiar a Modo Chat"},
+		{"📋 Menú", "🔄 Modo", "⌨️ Teclado"},
 	})
 
 	if !kb.ResizeKeyboard || !kb.IsPersistent {
 		t.Error("agent dock must be resized and persistent")
 	}
-	if kb.InputFieldPlaceholder != "Escribí una orden para Pi o tocá un botón..." {
-		t.Errorf("agent placeholder = %q, want the spec text", kb.InputFieldPlaceholder)
+	if kb.InputFieldPlaceholder != "hint agent" {
+		t.Errorf("agent placeholder = %q, want the passed hint", kb.InputFieldPlaceholder)
 	}
 }
 
@@ -121,6 +113,7 @@ func TestResolveDock_RoutingTable(t *testing.T) {
 		{dockChatEnd, dockActEnd},
 		{dockChatToAgent, dockActToAgent},
 		{dockAgentTask, dockActTask},
+		{dockAgentAutonomy, dockActAutonomy},
 		{dockAgentDev, dockActDev},
 		{dockAgentFeature, dockActFeatures},
 		{dockAgentSessions, dockActSessions},
