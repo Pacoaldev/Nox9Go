@@ -18,6 +18,19 @@ import (
 
 const orderRunnerInterval = 5 * time.Second
 
+// wakeOrderDrain tells the running drain that an instruction just landed. It is
+// a non-blocking send into a one-slot channel: a nudge that is already pending
+// covers this order too, because the drain reads the whole inbox per poll.
+func (s *Supervisor) wakeOrderDrain() {
+	if s == nil || s.orderWake == nil {
+		return
+	}
+	select {
+	case s.orderWake <- struct{}{}:
+	default:
+	}
+}
+
 // drainInboxOrders runs when DEV_ORDER_RUNNER points at an executable script.
 // It drains the instruction inbox and runs each order on this machine, then
 // appends order_done / order_failed to the development feed.
@@ -32,10 +45,23 @@ func (s *Supervisor) drainInboxOrders(ctx context.Context, repo Repo) {
 
 	var runMu sync.Mutex
 
+	// One immediate poll: orders queued while the gateway was down are drained
+	// on startup instead of 5s later.
+	runMu.Lock()
+	s.pollInboxOnce(ctx, repo, script)
+	runMu.Unlock()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-s.orderWake:
+			// A nudge can land while a previous order is still running, which
+			// is why it takes the same mutex: its poll then finds the newer
+			// order in the inbox instead of racing the running turn.
+			runMu.Lock()
+			s.pollInboxOnce(ctx, repo, script)
+			runMu.Unlock()
 		case <-ticker.C:
 			runMu.Lock()
 			s.pollInboxOnce(ctx, repo, script)

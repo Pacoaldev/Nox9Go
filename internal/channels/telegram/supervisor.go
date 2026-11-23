@@ -155,13 +155,19 @@ type Supervisor struct {
 	// panels holds the message id of each chat's mode panel (S4). Editing that
 	// message is what makes a mode switch change the panel instead of stacking
 	// a second one.
-	panels        map[int64]int
+	panels         map[int64]int
 	dockReadyChats map[int64]bool
 	// lastDev is the newest development feed line shown per chat (panel copy).
-	lastDev       map[int64]string
-	done     chan struct{}
-	status   Status
-	username string
+	lastDev map[int64]string
+	// orderWake nudges the order drain when an instruction lands, so the first
+	// poll does not wait for the next tick (D4). It is buffered with one slot: a
+	// second order arriving before the drain wakes is already in the inbox the
+	// next poll reads, so a dropped nudge costs nothing. A nil channel (a
+	// supervisor built by a test that never starts the drain) simply never fires.
+	orderWake chan struct{}
+	done      chan struct{}
+	status    Status
+	username  string
 }
 
 // NewSupervisor builds a supervisor for repo. allowed, when non-nil, overrides
@@ -169,10 +175,11 @@ type Supervisor struct {
 // stored list.
 func NewSupervisor(repo Repo, allowed func(int64) bool) *Supervisor {
 	s := &Supervisor{
-		repo:     repo,
-		allowed:  allowed,
-		status:   Status{State: StateDisabled},
-		inFlight: make(map[int64]turnHandle),
+		repo:      repo,
+		allowed:   allowed,
+		status:    Status{State: StateDisabled},
+		inFlight:  make(map[int64]turnHandle),
+		orderWake: make(chan struct{}, 1),
 	}
 	s.runLoop = s.poll
 	return s

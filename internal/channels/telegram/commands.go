@@ -521,6 +521,10 @@ func (s *Supervisor) submitOrder(_ int64, instruction, taskID string) error {
 	}); err != nil {
 		return fmt.Errorf("telegram: append order: %w", err)
 	}
+	// The drain normally finds an order on its next tick, up to 5s later. A
+	// nudge collapses that wait for the common case of an idle agent; a failed
+	// nudge is harmless because the tick still covers it.
+	s.wakeOrderDrain()
 	return nil
 }
 

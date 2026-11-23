@@ -63,19 +63,46 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error $promptRaw.Trim()
 }
 
-& herdr agent wait $target --until done --until blocked --timeout $waitMs
-$waitOk = ($LASTEXITCODE -eq 0)
-
-$status = Get-HerdrAgentStatus $target
-if ($status -eq 'blocked') {
-    Write-Output (Read-AgentTail $target).Trim()
-    exit 2
+# Bounded poll instead of one blocking `herdr agent wait`: the state machine
+# often keeps Pi on "idle" after a finished turn, so a wait that only returns on
+# "done" burns the full --timeout before this script can look at the panel. The
+# loop below starts looking immediately and treats new, settled terminal output
+# as a finished turn, which is what the operator sees anyway.
+$pollMs = 2000
+if ($env:HERDR_AGENT_POLL_MS) {
+    $pollMs = [int]$env:HERDR_AGENT_POLL_MS
 }
-if ($waitOk -and ($status -in @('done', 'idle'))) {
-    exit 0
+$deadline = [datetime]::UtcNow.AddMilliseconds($waitMs)
+$lastSnap = ''
+$stableTicks = 0
+while ([datetime]::UtcNow -lt $deadline) {
+    $status = Get-HerdrAgentStatus $target
+    if ($status -eq 'blocked') {
+        Write-Output (Read-AgentTail $target).Trim()
+        exit 2
+    }
+    if ($status -eq 'done') {
+        exit 0
+    }
+    $snap = (Read-AgentTail $target).Trim()
+    if ($snap -ne $before) {
+        if ($snap -eq $lastSnap) {
+            $stableTicks++
+        } else {
+            $stableTicks = 0
+            $lastSnap = $snap
+        }
+        # Two stable polls (~4s) of the same new output means the turn settled:
+        # waiting for "done" is what cost the operator minutes.
+        if ($stableTicks -ge 1) {
+            Write-Output $snap
+            exit 0
+        }
+    }
+    Start-Sleep -Milliseconds $pollMs
 }
-
-# ponytail: output-delta fallback when Herdr state machine never marks "done".
+# The last few polls above own the short deadline; a slow turn falls through to
+# the long fallback below so a real multi-minute job is still reported.
 $deadline = [datetime]::UtcNow.AddMilliseconds($timeoutMs)
 $lastSnap = ''
 $stableTicks = 0
