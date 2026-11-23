@@ -343,8 +343,19 @@ func (s *Supervisor) switchMode(ctx context.Context, bot *tgbot.Bot, chatID int6
 				s.setError(err)
 			}
 		}
+	} else if mode == db.ModeChat {
+		// Compacto hides the dock as an agent-mode convenience; the preference
+		// dies with the mode, or leaving agent mode strandes the operator
+		// keyboardless until the panel's "Mostrar teclado".
+		if err := s.repo.SetTelegramDockHidden(chatID, false); err != nil {
+			s.setError(err)
+		}
 	}
 	s.updatePanel(ctx, bot, chatID)
+	// The mode change rewrote the keyboard's labels, so the dock must be
+	// re-sent: Telegram keeps the old reply keyboard until a message carrying
+	// the new markup arrives. sendDock already honors a hidden preference.
+	s.sendDock(ctx, bot, chatID)
 }
 
 // showTaskPanel is what 📋 Tarea actual does: it reports the chat's task state
