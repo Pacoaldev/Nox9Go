@@ -344,11 +344,18 @@ func (s *Supervisor) switchMode(ctx context.Context, bot *tgbot.Bot, chatID int6
 			}
 		}
 	} else if mode == db.ModeChat {
-		// Compacto hides the dock as an agent-mode convenience; the preference
-		// dies with the mode, or leaving agent mode strandes the operator
-		// keyboardless until the panel's "Mostrar teclado".
-		if err := s.repo.SetTelegramDockHidden(chatID, false); err != nil {
+		// Compacto hides the dock when entering agent mode. That auto-hide is an
+		// agent-mode convenience and must not survive the way back: when the chat
+		// uses Compacto the leaving-agent switch re-shows the keyboard. A hide the
+		// operator set with the panel's "Ocultar teclado" in any mode is a real
+		// preference and stays.
+		compact, err := s.repo.TelegramAgentCompactDock(chatID)
+		if err != nil {
 			s.setError(err)
+		} else if compact {
+			if err := s.repo.SetTelegramDockHidden(chatID, false); err != nil {
+				s.setError(err)
+			}
 		}
 	}
 	s.updatePanel(ctx, bot, chatID)
