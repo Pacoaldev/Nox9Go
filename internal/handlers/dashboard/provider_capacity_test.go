@@ -4,6 +4,7 @@ import (
 	"context"
 	json "encoding/json/v2"
 	"net/http"
+	"strings"
 	"testing"
 
 	"nox9go/proxy/internal/db"
@@ -77,6 +78,61 @@ func TestProviderCapacity_PutRefusesNegative(t *testing.T) {
 	rec := nodeLimitsRequest(t, router, http.MethodPut, "/api/providers/bazaarlink/capacity", `{"rpm":-1}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("PUT negative rpm = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// A negative rps must be refused with the same message shape every other limit
+// uses, and must leave the stored policy untouched: a rejected write is not a
+// partial write.
+func TestProviderCapacity_PutRefusesNegativeRPS(t *testing.T) {
+	repo, cleanup := setupNodeTestDB(t)
+	defer cleanup()
+	router := setupTestRouter(repo)
+
+	if rec := nodeLimitsRequest(t, router, http.MethodPut, "/api/providers/bazaarlink/capacity", `{"rps":5}`); rec.Code != http.StatusOK {
+		t.Fatalf("PUT rps 5 = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	rec := nodeLimitsRequest(t, router, http.MethodPut, "/api/providers/bazaarlink/capacity", `{"rps":-1}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PUT negative rps = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "rps: must be zero (unlimited) or a positive count") {
+		t.Errorf("refusal body = %s, want it to name rps and the zero-or-positive rule", rec.Body.String())
+	}
+
+	get := nodeLimitsRequest(t, router, http.MethodGet, "/api/providers/bazaarlink/capacity", "")
+	var res ProviderCapacityResponse
+	if err := json.Unmarshal(get.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if res.Limits.RPS != 5 {
+		t.Errorf("rps after a refused write = %d, want the previously stored 5", res.Limits.RPS)
+	}
+}
+
+// Omitting rps from a PUT must keep the stored value, exactly like every other
+// field: the patch is triangular, not a whole-object replace.
+func TestProviderCapacity_PutOmittingRPSKeepsStored(t *testing.T) {
+	repo, cleanup := setupNodeTestDB(t)
+	defer cleanup()
+	router := setupTestRouter(repo)
+
+	if rec := nodeLimitsRequest(t, router, http.MethodPut, "/api/providers/bazaarlink/capacity", `{"rpm":60,"rps":5}`); rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	rec := nodeLimitsRequest(t, router, http.MethodPut, "/api/providers/bazaarlink/capacity", `{"rpm":90}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT without rps = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var res ProviderCapacityResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if res.Limits.RPS != 5 {
+		t.Errorf("rps = %d, want the stored 5 to survive a patch that omitted it", res.Limits.RPS)
+	}
+	if res.Limits.RPM != 90 {
+		t.Errorf("rpm = %d, want the patched 90", res.Limits.RPM)
 	}
 }
 

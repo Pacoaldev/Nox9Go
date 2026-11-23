@@ -90,6 +90,15 @@
     <div id="node-limits-fields" class="mt-4 flex flex-col gap-4">
       <div class="grid gap-4 sm:grid-cols-2">
         <Input id="node-limits-rpm" label="Requests / minute" type="number" min="0" bind:value={draft.rpm} placeholder="0" />
+        <Input
+          id="node-limits-rps"
+          label="Requests / second"
+          type="number"
+          min="0"
+          bind:value={draft.rps}
+          placeholder="0"
+          hint="For providers that publish a per-second rate (Mistral, for one). Separate from Requests / minute: the two are not convertible."
+        />
         <Input id="node-limits-tpm" label="Prompt tokens / minute" type="number" min="0" bind:value={draft.tpm} placeholder="0" />
         <Input
           id="node-limits-concurrency"

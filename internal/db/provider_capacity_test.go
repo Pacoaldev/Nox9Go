@@ -13,6 +13,7 @@ func TestProviderCapacity_RoundTrip(t *testing.T) {
 
 	want := ProviderCapacity{
 		RPM:               60,
+		RPS:               5,
 		TPM:               90_000,
 		Concurrency:       4,
 		DailyRequests:     60,
@@ -28,7 +29,7 @@ func TestProviderCapacity_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProviderCapacity: %v", err)
 	}
-	if got.RPM != want.RPM || got.TPM != want.TPM || got.Concurrency != want.Concurrency ||
+	if got.RPM != want.RPM || got.RPS != want.RPS || got.TPM != want.TPM || got.Concurrency != want.Concurrency ||
 		got.DailyRequests != want.DailyRequests || got.DailyTokens != want.DailyTokens ||
 		got.QueueTimeoutMs != want.QueueTimeoutMs ||
 		got.TokenQuota != want.TokenQuota || got.ContractExpiresAt != want.ContractExpiresAt {
@@ -57,6 +58,7 @@ func TestSetProviderCapacity_RejectsNegativeCounts(t *testing.T) {
 		cap  ProviderCapacity
 	}{
 		{"rpm", ProviderCapacity{RPM: -1}},
+		{"rps", ProviderCapacity{RPS: -1}},
 		{"tpm", ProviderCapacity{TPM: -1}},
 		{"concurrency", ProviderCapacity{Concurrency: -1}},
 		{"daily requests", ProviderCapacity{DailyRequests: -1}},

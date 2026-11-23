@@ -19,12 +19,14 @@ const draft = (overrides: Partial<NodeLimitsDraft> = {}): NodeLimitsDraft => ({ 
 
 describe('nodeLimitsPatchOf', () => {
   it('sends numbers, not the strings the form holds', () => {
-    const patch = nodeLimitsPatchOf(draft({ rpm: '60', tpm: '90000', concurrency: '4', tokenQuota: '5000000', queueTimeoutMs: '15000' }))
+    const patch = nodeLimitsPatchOf(draft({ rpm: '60', rps: '5', tpm: '90000', concurrency: '4', tokenQuota: '5000000', queueTimeoutMs: '15000' }))
     assert.deepStrictEqual(patch, {
       rpm: 60,
+      rps: 5,
       tpm: 90000,
       concurrency: 4,
       dailyRequests: 0,
+      dailyTokens: 0,
       tokenQuota: 5000000,
       queueTimeoutMs: 15000,
       contractExpiresAt: '',
@@ -41,12 +43,14 @@ describe('nodeLimitsPatchOf', () => {
   // to call `.trim()` on it: every save with an untouched number field died with
   // "Cannot read properties of null (reading 'trim')" and the request never left.
   it('treats a null count (an empty number input) as unlimited instead of crashing', () => {
-    const patch = nodeLimitsPatchOf(draft({ rpm: null, tpm: null, concurrency: null, dailyRequests: null, tokenQuota: null, queueTimeoutMs: null }))
+    const patch = nodeLimitsPatchOf(draft({ rpm: null, rps: null, tpm: null, concurrency: null, dailyRequests: null, tokenQuota: null, queueTimeoutMs: null }))
     assert.deepStrictEqual(patch, {
       rpm: 0,
+      rps: 0,
       tpm: 0,
       concurrency: 0,
       dailyRequests: 0,
+      dailyTokens: 0,
       tokenQuota: 0,
       queueTimeoutMs: 0,
       contractExpiresAt: '',
@@ -85,9 +89,11 @@ describe('a draft holding numbers from number inputs', () => {
   it('converts without throwing', () => {
     assert.deepStrictEqual(nodeLimitsPatchOf(typed()), {
       rpm: 60,
+      rps: 0,
       tpm: 90000,
       concurrency: 4,
       dailyRequests: 0,
+      dailyTokens: 0,
       tokenQuota: 5000000,
       queueTimeoutMs: 15000,
       contractExpiresAt: '',
@@ -98,11 +104,23 @@ describe('a draft holding numbers from number inputs', () => {
     assert.ok(hasAnyNodeLimit(typed()))
     assert.strictEqual(nodeLimitsSummary(typed()), '60 rpm · 90k tpm · 4 conc · 15000 ms queue · 5M tok')
   })
+  // A per-second rate is its own axis: it must gate, summarise and survive the
+  // draft/patch round trip without being folded into the per-minute figure.
+  it('gates and summarises a per-second rate on its own', () => {
+    const rpsOnly = draft({ rps: '5' })
+    assert.ok(hasAnyNodeLimit(rpsOnly), 'an rps-only policy is not unlimited')
+    assert.strictEqual(nodeLimitsSummary(rpsOnly), '5 rps')
+    assert.strictEqual(nodeLimitsSummary(draft({ rpm: '60', rps: '5' })), '60 rpm · 5 rps')
+    assert.strictEqual(nodeLimitsPatchOf(rpsOnly).rps, 5)
+    assert.strictEqual(nodeLimitsPatchOf(rpsOnly).rpm, 0)
+  })
 
   it('treats 0, negatives and fractions as unlimited', () => {
     assert.strictEqual(nodeLimitsPatchOf({ ...EMPTY_NODE_LIMITS, rpm: 0 }).rpm, 0)
     assert.strictEqual(nodeLimitsPatchOf({ ...EMPTY_NODE_LIMITS, rpm: -3 }).rpm, 0)
     assert.strictEqual(nodeLimitsPatchOf({ ...EMPTY_NODE_LIMITS, rpm: 1.5 }).rpm, 0)
+    assert.strictEqual(nodeLimitsPatchOf({ ...EMPTY_NODE_LIMITS, rps: -1 }).rps, 0)
+    assert.strictEqual(nodeLimitsPatchOf({ ...EMPTY_NODE_LIMITS, rps: 2.5 }).rps, 0)
   })
 })
 

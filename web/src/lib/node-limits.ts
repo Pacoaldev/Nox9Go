@@ -18,6 +18,7 @@ import type { ProviderNodeLimits, ProviderNodeLimitsPatch } from '../api/client'
  */
 export interface NodeLimitsDraft {
   rpm: string | number | null
+  rps: string | number | null
   tpm: string | number | null
   concurrency: string | number | null
   dailyRequests: string | number | null
@@ -30,6 +31,7 @@ export interface NodeLimitsDraft {
 /** Every field empty: a node that has never been limited. */
 export const EMPTY_NODE_LIMITS: NodeLimitsDraft = {
   rpm: '',
+  rps: '',
   tpm: '',
   concurrency: '',
   dailyRequests: '',
@@ -50,6 +52,7 @@ export function nodeLimitsDraftOf(limits?: ProviderNodeLimits | null): NodeLimit
   const count = (value: number) => (value > 0 ? String(value) : '')
   return {
     rpm: count(limits.rpm),
+    rps: count(limits.rps ?? 0),
     tpm: count(limits.tpm),
     concurrency: count(limits.concurrency),
     dailyRequests: count(limits.dailyRequests),
@@ -74,6 +77,7 @@ export function nodeLimitsDraftOf(limits?: ProviderNodeLimits | null): NodeLimit
 export function nodeLimitsPatchOf(draft: NodeLimitsDraft): ProviderNodeLimitsPatch {
   return {
     rpm: countOf(draft.rpm),
+    rps: countOf(draft.rps),
     tpm: countOf(draft.tpm),
     concurrency: countOf(draft.concurrency),
     dailyRequests: countOf(draft.dailyRequests),
@@ -92,6 +96,7 @@ export function nodeLimitsPatchOf(draft: NodeLimitsDraft): ProviderNodeLimitsPat
 export function hasAnyNodeLimit(draft: NodeLimitsDraft): boolean {
   return (
     countOf(draft.rpm) > 0 ||
+    countOf(draft.rps) > 0 ||
     countOf(draft.tpm) > 0 ||
     countOf(draft.concurrency) > 0 ||
     countOf(draft.dailyRequests) > 0 ||
@@ -110,6 +115,7 @@ export function hasAnyNodeLimit(draft: NodeLimitsDraft): boolean {
 export function hasAnyNodeLimitPatch(patch: ProviderNodeLimitsPatch): boolean {
   return (
     (patch.rpm ?? 0) > 0 ||
+    (patch.rps ?? 0) > 0 ||
     (patch.tpm ?? 0) > 0 ||
     (patch.concurrency ?? 0) > 0 ||
     (patch.dailyRequests ?? 0) > 0 ||
@@ -120,11 +126,12 @@ export function hasAnyNodeLimitPatch(patch: ProviderNodeLimitsPatch): boolean {
   )
 }
 
-/** `60 rpm · 4 conc · 5M tok · ends 31 Jan 2027`, or `Unlimited`. */
+/** `60 rpm · 5 rps · 4 conc · 5M tok · ends 31 Jan 2027`, or `Unlimited`. */
 export function nodeLimitsSummary(draft: NodeLimitsDraft): string {
   if (!hasAnyNodeLimit(draft)) return 'Unlimited'
   const parts: string[] = []
   const rpm = countOf(draft.rpm)
+  const rps = countOf(draft.rps)
   const tpm = countOf(draft.tpm)
   const concurrency = countOf(draft.concurrency)
   const dailyRequests = countOf(draft.dailyRequests)
@@ -132,6 +139,7 @@ export function nodeLimitsSummary(draft: NodeLimitsDraft): string {
   const queueTimeoutMs = countOf(draft.queueTimeoutMs)
   const tokenQuota = countOf(draft.tokenQuota)
   if (rpm > 0) parts.push(`${rpm} rpm`)
+  if (rps > 0) parts.push(`${rps} rps`)
   if (tpm > 0) parts.push(`${compactCount(tpm)} tpm`)
   if (concurrency > 0) parts.push(`${concurrency} conc`)
   if (dailyRequests > 0) parts.push(`${dailyRequests} rpd`)

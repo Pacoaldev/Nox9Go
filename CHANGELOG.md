@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.7] - Unreleased
+
+### Features
+- **Capacity limits gain a "Requests / second" field.** Some providers publish a per-second request rate rather than a per-minute one (Mistral, for one), so the integrated-provider capacity editor can now declare it alongside `Requests / minute`. The value is stored in a new `providerCapacity.rps` column (added at boot by the existing additive column migration), travels through `GET`/`PUT /api/providers/{id}/capacity` with the same triangular-merge semantics as every other limit, and prefills from an upstream observation classified as `rps` — a per-second limit header or a "N requests per second" body. `0` means unlimited. It is declared policy only: the limiter still enforces rpm, so no existing throttling behaviour changes.
+
+### Fixes
+- **Telegram `getUpdates` transport noise no longer fills `Last error`.** The bot library's errors handler forwarded every failed long poll to `setError`, so intermittent local TCP aborts (Windows `WSAECONNABORTED` / `wsarecv` while the socket waited ~50s for updates) showed up on the dashboard even though the poll loop stayed `running` and the SDK retried. Transient poll transport failures are filtered, the long-poll window is 45s instead of ~59s, and the HTTP client timeout is sized for that window so idle sockets recycle before firewalls or AV often cut them (`poll_transport.go`, `poll.go`).
+
 ## [1.1.6] - 2026-11-23
 
 ### Fixes

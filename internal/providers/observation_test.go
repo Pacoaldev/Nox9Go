@@ -92,9 +92,50 @@ func TestParseObservedLimit_Units(t *testing.T) {
 	}{
 		{"limit is 5000 tokens per minute", 5000, "tpm"},
 		{"300 requests per minute", 300, "rpm"},
+		// A per-second rate is its own unit, and the word "requests" is shared with
+		// the per-minute rule: only the unit phrase after it tells them apart.
+		{"300 requests per second", 300, "rps"},
+		{"20 requests/sec", 20, "rps"},
+		{"max 5 rps allowed", 5, "rps"},
+		// "sec" is a prefix of "section": without a word boundary the per-second rule
+		// claims a count that never described a rate.
+		{"300 requests per section of docs", 300, "requests"},
 		{"max 4 concurrent requests allowed", 4, "concurrent"},
 		{"you may send 60 requests per day", 60, "rpd"},
 		{"up to 200000 tokens per request", 200000, "tokens"},
+		{"no numbers here", 0, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.text, func(t *testing.T) {
+			v, u := parseObservedLimit(tt.text, nil)
+			if v != tt.wantVal || u != tt.wantUnit {
+				t.Fatalf("parseObservedLimit(%q) = %d %q, want %d %q", tt.text, v, u, tt.wantVal, tt.wantUnit)
+			}
+		})
+	}
+}
+
+// The per-second rate must also be readable from the header a provider sends, and
+// the classification must keep it out of the per-minute axis.
+func TestClassifyHeaderObservations_PerSecond(t *testing.T) {
+	h := http.Header{}
+	h.Set("X-RateLimit-Limit-Rps", "5")
+	obs := ClassifyHeaderObservations(http.StatusOK, h)
+	if len(obs) != 1 {
+		t.Fatalf("observations = %+v, want exactly the rps one", obs)
+	}
+	if obs[0].LimitUnit != "rps" || obs[0].LimitValue != 5 {
+		t.Errorf("observation = %+v, want unit rps value 5", obs[0])
+	}
+}
+
+func TestParseObservedLimit_UnitsLegacy(t *testing.T) {
+	tests := []struct {
+		text     string
+		wantVal  int
+		wantUnit string
+	}{
+		{"limit is 5000 tokens per minute", 5000, "tpm"},
 		{"no numbers here", 0, ""},
 	}
 	for _, tt := range tests {

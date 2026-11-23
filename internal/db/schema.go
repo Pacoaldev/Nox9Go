@@ -509,6 +509,10 @@ var providerCapacityTables = []tableDef{
 		columns: [][2]string{
 			{"provider", "TEXT PRIMARY KEY"},
 			{"rpm", "INTEGER DEFAULT 0"},
+			// A per-second request rate, the axis a provider that publishes "N req/s"
+			// names (Mistral, for one). Separate from rpm because the two are not
+			// convertible: a bursty 5 rps provider is not a 300 rpm one.
+			{"rps", "INTEGER DEFAULT 0"},
 			{"tpm", "INTEGER DEFAULT 0"},
 			{"concurrency", "INTEGER DEFAULT 0"},
 			{"dailyRequests", "INTEGER DEFAULT 0"},

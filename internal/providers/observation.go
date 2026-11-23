@@ -23,7 +23,7 @@ type Observation struct {
 	StatusCode int
 	// LimitValue is the parsed limit, or 0 when the fact carried no number.
 	LimitValue int
-	// LimitUnit is "rpm", "tpm", "requests", "tokens", "concurrent" or "".
+	// LimitUnit is "rpm", "rps", "tpm", "requests", "tokens", "concurrent" or "".
 	LimitUnit string
 	// Evidence is a short snippet explaining the fact. Never contains a credential.
 	Evidence string
@@ -104,10 +104,13 @@ var observationTextRules = []struct {
 	{"too many invalid requests", SignalRateLimit},
 	{"tokens per minute", SignalRateLimit},
 	{"requests per minute", SignalRateLimit},
+	{"requests per second", SignalRateLimit},
+	{"request(s) per second", SignalRateLimit},
 	{"request(s) per minute", SignalRateLimit},
 	{"(tpm)", SignalRateLimit},
 	{"(itpm)", SignalRateLimit},
 	{"(rpm)", SignalRateLimit},
+	{"(rps)", SignalRateLimit},
 	{"resource_limit", SignalRateLimit},
 	{"速率限制", SignalRateLimit},
 	{"请求过于频繁", SignalRateLimit},
@@ -247,6 +250,9 @@ var explicitRateLimitHeaders = []struct {
 	{"x-ratelimit-limit-requests-minute", "rpm"},
 	{"x-ratelimit-limit-requests-per-minute", "rpm"},
 	{"x-ratelimit-limit-rpm", "rpm"},
+	{"x-ratelimit-limit-requests-second", "rps"},
+	{"x-ratelimit-limit-requests-per-second", "rps"},
+	{"x-ratelimit-limit-rps", "rps"},
 	{"anthropic-ratelimit-requests-limit", "rpm"},
 	{"x-ratelimit-limit-tokens-minute", "tpm"},
 	{"x-ratelimit-limit-tokens-per-minute", "tpm"},
@@ -290,6 +296,9 @@ func ClassifyHeaderObservations(statusCode int, headers http.Header) []Observati
 // "per minute" phrase yields an rpm/tpm unit rather than a bare count.
 var (
 	obsTPMRe         = regexp.MustCompile(`(?i)(?:(\d+)\s*(?:input\s+)?tokens?\s*(?:per|/)\s*(?:min|minute)|(?:tokens?\s*(?:per|/)\s*(?:min|minute)|\b(?:i?tpm)\b)[^0-9]{0,24}?limit[:\s(]+(\d+)|\btpm\s+limit\s*\(?(\d+)\)?|(\d+)\s*(?:i?tpm)\b)`)
+	// obsRPSRe is tried before obsRPMRe: both accept the word "requests", and only
+	// the unit phrase after it tells a per-second rate from a per-minute one.
+	obsRPSRe         = regexp.MustCompile(`(?i)(?:(\d+)\s*(?:requests?(?:\(s\))?|calls?)\s*(?:per|/)\s*(?:sec|secs|second)s?\b|\brps\b[^0-9]{0,24}?limit[:\s(]+(\d+)|\brps\s+limit\s*\(?(\d+)\)?|(\d+)\s*rps\b)`)
 	obsRPMRe         = regexp.MustCompile(`(?i)(?:(\d+)\s*(?:requests?(?:\(s\))?|calls?)\s*(?:per|/)\s*(?:min|minute)|(?:requests?\s*(?:per|/)\s*(?:min|minute)|\brpm\b)[^0-9]{0,24}?limit[:\s(]+(\d+)|\brpm\s+limit\s*\(?(\d+)\)?|(\d+)\s*rpm\b)`)
 	obsRPDRe         = regexp.MustCompile(`(?i)(?:(\d+)\s*(?:requests?(?:\(s\))?|calls?)\s*(?:per|/)\s*(?:day|24\s*hours?)|(\d+)\s*rpd\b)`)
 	obsConcurRe      = regexp.MustCompile(`(?i)(\d+)\s+(?:concurrent|simultaneous)\s+(?:requests?|connections?)`)
@@ -328,6 +337,7 @@ func parseObservedLimit(lowerText string, headers http.Header) (int, string) {
 		unit string
 	}{
 		{obsTPMRe, "tpm"},
+		{obsRPSRe, "rps"},
 		{obsRPMRe, "rpm"},
 		{obsRPDRe, "rpd"},
 		{obsConcurRe, "concurrent"},

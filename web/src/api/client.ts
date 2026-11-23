@@ -631,6 +631,11 @@ export interface ProviderNode {
  */
 export interface ProviderNodeLimits {
   rpm: number
+  /**
+   * Per-second request rate. Present only for integrated providers, whose capacity
+   * policy carries it; a custom node's stored limits do not, hence optional.
+   */
+  rps?: number
   tpm: number
   concurrency: number
   /** Fixed UTC-day request budget. 0 = unlimited. */
@@ -656,6 +661,8 @@ export interface ProviderNodeLimits {
  */
 export interface ProviderNodeLimitsPatch {
   rpm?: number
+  /** Per-second request rate. Declared policy only; the limiter enforces rpm. */
+  rps?: number
   tpm?: number
   concurrency?: number
   /** Fixed UTC-day request budget. 0 clears it. */
@@ -685,6 +692,12 @@ export interface ProviderCapacity {
 
 export interface ProviderCapacityLimits {
   rpm: number
+  /**
+   * Per-second request rate, the axis a provider that publishes "N req/s" names
+   * (Mistral, for one). Declared policy only: the limiter enforces rpm, not rps.
+   * 0 = unlimited.
+   */
+  rps: number
   tpm: number
   concurrency: number
   /** Fixed UTC-day request budget. 0 = unlimited. */
@@ -699,6 +712,7 @@ export interface ProviderCapacityLimits {
 
 export interface ProviderCapacitySuggestions {
   rpm: number
+  rps: number
   tpm: number
   concurrency: number
   dailyRequests: number

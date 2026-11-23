@@ -1117,6 +1117,7 @@
   "Requested Model": "Modelo solicitado",
   "Requests": "Solicitudes",
   "Requests / minute": "Solicitudes / minuto",
+  "Requests / second": "Solicitudes / segundo",
   "Requests and cached tokens over time.": "Solicitudes y tokens almacenados en caché a lo largo del tiempo.",
   "Requests per day": "Solicitudes por día",
   "Require API key is disabled — your endpoint is publicly accessible without authentication.": "Requerir clave API está deshabilitado: su punto final es accesible públicamente sin autenticación.",

@@ -43,7 +43,10 @@ type ProviderCapacityResponse struct {
 
 // ProviderCapacityLimits is the editable policy shape.
 type ProviderCapacityLimits struct {
-	RPM           int `json:"rpm"`
+	RPM int `json:"rpm"`
+	// RPS is the per-second request rate the provider publishes (Mistral, for
+	// one). Declared policy only: the limiter enforces rpm, not rps. 0 = unlimited.
+	RPS           int `json:"rps"`
 	TPM           int `json:"tpm"`
 	Concurrency   int `json:"concurrency"`
 	DailyRequests int `json:"dailyRequests"`
@@ -59,6 +62,7 @@ type ProviderCapacityLimits struct {
 // ProviderCapacitySuggestions carries the observed-value prefill.
 type ProviderCapacitySuggestions struct {
 	RPM           int `json:"rpm"`
+	RPS           int `json:"rps"`
 	TPM           int `json:"tpm"`
 	Concurrency   int `json:"concurrency"`
 	DailyRequests int `json:"dailyRequests"`
@@ -70,6 +74,7 @@ type ProviderCapacitySuggestions struct {
 func capacityLimitsFrom(c db.ProviderCapacity) ProviderCapacityLimits {
 	return ProviderCapacityLimits{
 		RPM:               c.RPM,
+		RPS:               c.RPS,
 		TPM:               c.TPM,
 		Concurrency:       c.Concurrency,
 		DailyRequests:     c.DailyRequests,
@@ -97,6 +102,8 @@ func suggestCapacity(observations []db.ProviderObservation) ProviderCapacitySugg
 		switch o.LimitUnit {
 		case "rpm":
 			s.RPM = max(s.RPM, o.LimitValue)
+		case "rps":
+			s.RPS = max(s.RPS, o.LimitValue)
 		case "tpm":
 			s.TPM = max(s.TPM, o.LimitValue)
 		case "concurrent":
@@ -192,6 +199,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 
 	var patch struct {
 		RPM               *int    `json:"rpm"`
+		RPS               *int    `json:"rps"`
 		TPM               *int    `json:"tpm"`
 		Concurrency       *int    `json:"concurrency"`
 		DailyRequests     *int    `json:"dailyRequests"`
@@ -219,6 +227,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 		target *int
 	}{
 		{"rpm", patch.RPM, &merged.RPM},
+		{"rps", patch.RPS, &merged.RPS},
 		{"tpm", patch.TPM, &merged.TPM},
 		{"concurrency", patch.Concurrency, &merged.Concurrency},
 		{"dailyRequests", patch.DailyRequests, &merged.DailyRequests},

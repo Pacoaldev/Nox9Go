@@ -43,6 +43,7 @@
     const count = (value: number) => (value > 0 ? String(value) : '')
     return {
       rpm: count(limits.rpm),
+      rps: count(limits.rps ?? 0),
       tpm: count(limits.tpm),
       concurrency: count(limits.concurrency),
       dailyRequests: count(limits.dailyRequests),
@@ -104,6 +105,7 @@
     const s = capacity?.suggestions
     if (!s) return
     if (s.rpm > 0) draft.rpm = String(s.rpm)
+    if (s.rps > 0) draft.rps = String(s.rps)
     if (s.tpm > 0) draft.tpm = String(s.tpm)
     if (s.concurrency > 0) draft.concurrency = String(s.concurrency)
     if (s.dailyRequests > 0) draft.dailyRequests = String(s.dailyRequests)
@@ -117,6 +119,9 @@
     switch (obs.limitUnit) {
       case 'rpm':
         draft.rpm = String(v)
+        break
+      case 'rps':
+        draft.rps = String(v)
         break
       case 'tpm':
         draft.tpm = String(v)
@@ -148,6 +153,7 @@
 
   const unitLabels: Record<string, string> = {
     rpm: 'req/min',
+    rps: 'req/sec',
     tpm: 'tok/min',
     rpd: 'req/day',
     concurrent: 'in flight',
@@ -199,6 +205,7 @@
   )
   let suggestionsReady = $derived(
     (capacity?.suggestions.rpm ?? 0) > 0 ||
+    (capacity?.suggestions.rps ?? 0) > 0 ||
       (capacity?.suggestions.tpm ?? 0) > 0 ||
       (capacity?.suggestions.concurrency ?? 0) > 0 ||
       (capacity?.suggestions.dailyRequests ?? 0) > 0 ||
@@ -235,6 +242,15 @@
       <div id="provider-capacity-fields" class="mt-4 flex flex-col gap-4">
         <div class="grid gap-4 sm:grid-cols-2">
           <Input id="provider-capacity-rpm" label="Requests / minute" type="number" min="0" bind:value={draft.rpm} placeholder="0" />
+          <Input
+            id="provider-capacity-rps"
+            label="Requests / second"
+            type="number"
+            min="0"
+            bind:value={draft.rps}
+            placeholder="0"
+            hint="For providers that publish a per-second rate (Mistral, for one). Separate from Requests / minute: the two are not convertible."
+          />
           <Input id="provider-capacity-tpm" label="Prompt tokens / minute" type="number" min="0" bind:value={draft.tpm} placeholder="0" />
           <Input id="provider-capacity-concurrency" label="Concurrent requests" type="number" min="0" bind:value={draft.concurrency} placeholder="0" />
           <Input
@@ -346,7 +362,7 @@
                     {#if obs.limitValue && obs.limitUnit}
                       <span class="text-xs font-mono text-text-main">{obs.limitValue} {unitLabel(obs.limitUnit)}</span>
                     {/if}
-                    {#if obs.limitUnit === 'rpm' || obs.limitUnit === 'tpm' || obs.limitUnit === 'concurrent' || obs.limitUnit === 'rpd'}
+                    {#if obs.limitUnit === 'rpm' || obs.limitUnit === 'rps' || obs.limitUnit === 'tpm' || obs.limitUnit === 'concurrent' || obs.limitUnit === 'rpd'}
                       <Button variant="ghost" size="sm" onclick={() => applyObservation(obs)}>Use</Button>
                     {/if}
                   </div>
