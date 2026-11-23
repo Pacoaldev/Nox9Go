@@ -220,6 +220,25 @@ func DevOrderRunner() string { return devValue("DEV_ORDER_RUNNER") }
 // focused/@focused/* to resolve the pane Herdr marks focused:true on each order.
 func HerdrAgentTarget() string { return devValue("HERDR_AGENT_TARGET") }
 
+// HerdrPassiveWatch reports whether the Telegram channel polls the focused Herdr
+// agent for Pi blocker dialogs even when no Telegram order is running.
+// NOX9GO_HERDR_WATCH=0 disables; explicit 1 enables; empty defaults on when a
+// Herdr order runner or HERDR_AGENT_TARGET is configured.
+func HerdrPassiveWatch() bool {
+	v := strings.ToLower(strings.TrimSpace(devValue("NOX9GO_HERDR_WATCH")))
+	switch v {
+	case "0", "false", "off", "no":
+		return false
+	case "1", "true", "on", "yes":
+		return true
+	}
+	runner := strings.ToLower(strings.TrimSpace(DevOrderRunner()))
+	if strings.Contains(runner, "herdr") {
+		return true
+	}
+	return strings.TrimSpace(HerdrAgentTarget()) != ""
+}
+
 // envFileCandidates lists the .env locations the server itself reads: the one
 // in the working directory, then the one beside the executable so a daemon
 // started from another directory still finds the same config its CLI reports on.

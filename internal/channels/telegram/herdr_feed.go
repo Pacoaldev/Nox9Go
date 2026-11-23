@@ -8,7 +8,6 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"nox9go/proxy/internal/config"
 	"nox9go/proxy/internal/notify"
 )
 
@@ -57,8 +56,7 @@ func herdrChoiceMarkup(choices []HerdrChoice) models.ReplyMarkup {
 }
 
 func (s *Supervisor) sendHerdrBlockerFeed(ctx context.Context, bot *tgbot.Bot, chatID int64, event notify.Event, plain string) {
-	runner := strings.ToLower(strings.TrimSpace(config.DevOrderRunner()))
-	if strings.TrimSpace(config.HerdrAgentTarget()) == "" && !strings.Contains(runner, "herdr") {
+	if !herdrTelegramRelay() {
 		s.send(ctx, bot, chatID, plain)
 		return
 	}

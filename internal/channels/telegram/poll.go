@@ -62,6 +62,7 @@ func (s *Supervisor) poll(ctx context.Context, repo Repo) {
 	// drain owns its own goroutine and stops with the same context.
 	go s.drainNotifications(ctx, bot, repo)
 	go s.drainInboxOrders(ctx, repo)
+	go s.watchHerdrPassive(ctx, bot, repo)
 
 	// Start blocks until ctx is cancelled. It logs every update payload at debug
 	// level through the library's own logger, which is why the errors handler is

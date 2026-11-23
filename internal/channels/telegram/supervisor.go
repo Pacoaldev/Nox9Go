@@ -161,6 +161,8 @@ type Supervisor struct {
 	lastDev map[int64]string
 	// herdrChoices holds the last blocker button mapping per chat (Telegram → send-keys).
 	herdrChoices map[int64][]HerdrChoice
+	// herdrWatchSig dedupes passive watcher blocker notifications per dialog.
+	herdrWatchSig string
 
 	// orderWake nudges the order drain when an instruction lands, so the first
 	// poll does not wait for the next tick (D4). It is buffered with one slot: a
