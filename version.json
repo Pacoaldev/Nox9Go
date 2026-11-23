@@ -1,19 +1,19 @@
 {
-  "latestVersion": "1.1.5",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.5/nox9go-windows-amd64.exe",
+  "latestVersion": "1.1.6",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.5/nox9go-windows-amd64.exe",
-    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.5/nox9go-linux-amd64",
-    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.5/nox9go-linux-arm64",
-    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.5/nox9go-darwin-amd64",
-    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.5/nox9go-darwin-arm64"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-windows-amd64.exe",
+    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-linux-amd64",
+    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-linux-arm64",
+    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-darwin-amd64",
+    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-darwin-arm64"
   },
   "sha256": {
-    "windows_amd64": "ff72aebcc07f8719941de912961b3178396103c5564001f47d78bc2d80fbbfe8",
-    "linux_amd64": "b7159f0de5abd752ed870d40ca34f22590de5fb0ba9132c757330d69b41152be",
-    "linux_arm64": "cd109effb878e7fc658d92531c8f830ea2ce9e4ddabb5cb0b5dff8467d2ff36f",
-    "darwin_amd64": "1d556ede51fd694818f223c096820ab54a354ebbb091cc61da36bee3f6be9799",
-    "darwin_arm64": "bcea5486e57cfcff34465e342270e2153235912bd10401178d66efe6ceed6438"
+    "windows_amd64": "89057f71ffc592b836e8d9df18fdaef624cc770e26ae1c54d565738dee5417e0",
+    "linux_amd64": "2543b6252b288d1422147339ee544c60c3d109ef7316be99721a99c517148ce9",
+    "linux_arm64": "90431194bd0567f0360ef842941e5be715ddf748683e1976ebb6c9b893ad269d",
+    "darwin_amd64": "887e56f06a7814a78885300859da1dace8b4e22b5485ffb026d744dcb62054fc",
+    "darwin_arm64": "397ba43d5b5f0a8e61a724d34f21cad46a91b011a651e3b47cc250c55afc0eb7"
   },
-  "releaseNotes": "NOX9GO v1.1.5 — canal de Telegram con modos chat/agente, dock de botones por modo, aprobación conectada al ejecutor y paneles inline; más presupuesto diario de tokens en capacidad, nombres de modelo en Kiro y el alimentador de contexto."
+  "releaseNotes": "NOX9GO v1.1.6 — Telegram: ordenes Herdr, feed legible, respuesta del agente en order_done, badge del bot en el dashboard; panel Development con progreso ODD ampliado; poolside oculto; mejoras de tooling (diff-coverage, tests SQLite in-memory)."
 }

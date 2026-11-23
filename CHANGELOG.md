@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.6] - Unreleased
+## [1.1.6] - 2026-11-23
 
 ### Fixes
 - **Telegram `order_done` carries the agent answer, not the instruction echo.** The inbox runner wrote the original prompt into the feed `detail`, so `orden lista` repeated what you typed while the panel still closed. Completion events now use the order script stdout; Herdr runner prints the pane tail when Herdr reports `done`. Task correlation stays on `task_id`.
