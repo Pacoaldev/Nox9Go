@@ -69,6 +69,10 @@ func stripHTML(text string) string {
 // header and a separate pre block so the operator reads the answer, not a dump
 // glued to the title line.
 func (s *Supervisor) sendFeedEvent(ctx context.Context, bot *tgbot.Bot, chatID int64, event notify.Event, plain string) {
+	if event.Kind == notify.KindBlocker {
+		s.sendHerdrBlockerFeed(ctx, bot, chatID, event, plain)
+		return
+	}
 	if !feedUsesRichLayout(event.Kind) {
 		s.send(ctx, bot, chatID, plain)
 		return
@@ -187,6 +191,27 @@ func (s *Supervisor) handleAgentInstruction(ctx context.Context, bot *tgbot.Bot,
 	}
 	instruction := strings.TrimSpace(text)
 	if instruction == "" && attachment == nil {
+		return
+	}
+
+	if task, err := s.repo.GetTelegramAgentTask(chatID); err != nil {
+		s.setError(err)
+	} else if current, _ := parseTaskStatus(task.Status); current == TaskAwaitingHerdr {
+		if attachment != nil {
+			s.send(ctx, bot, chatID, "Herdr espera texto plano; la imagen no se puede reenviar al panel.")
+			return
+		}
+		if err := s.submitOrder(chatID, instruction, task.CorrelationID); err != nil {
+			s.recordFailedTask(ctx, bot, chatID, task.Instruction, task.CorrelationID, err)
+			return
+		}
+		if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, string(TaskRunning), task.CorrelationID); err != nil {
+			s.setError(err)
+			s.send(ctx, bot, chatID, "No pude actualizar la tarea.")
+			return
+		}
+		s.send(ctx, bot, chatID, "Respuesta enviada a Herdr.")
+		s.updatePanel(ctx, bot, chatID)
 		return
 	}
 

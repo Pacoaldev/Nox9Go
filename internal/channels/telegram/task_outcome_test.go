@@ -56,6 +56,42 @@ func TestForwardPendingEvents_CompletesRunningTask(t *testing.T) {
 	}
 }
 
+func TestReconcileTaskFromDevEvent_BlockerSetsAwaitingHerdr(t *testing.T) {
+	fake := newFakeTelegram(t)
+	repo := &fakeRepo{
+		allowed: []int64{42},
+		task: db.TelegramAgentTask{
+			ChatID:        42,
+			Instruction:   "preguntá algo",
+			Status:        string(TaskRunning),
+			CorrelationID: "abcd1234",
+		},
+	}
+	sup := NewSupervisor(repo, func(int64) bool { return true })
+
+	sup.reconcileTaskFromDevEvent(context.Background(), fake.bot(t), 42, notify.Event{
+		Kind:   notify.KindBlocker,
+		Title:  "Agente bloqueado",
+		Detail: "¿Dónde querés el saludo?",
+		TaskID: "abcd1234",
+	})
+
+	if repo.task.Status != string(TaskAwaitingHerdr) {
+		t.Fatalf("task status = %q, want awaiting_herdr", repo.task.Status)
+	}
+	msgs := fake.messages()
+	var found bool
+	for _, msg := range msgs {
+		if strings.Contains(msg, "reenvío al panel") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("messages = %v, want Herdr relay hint", msgs)
+	}
+}
+
 func TestReconcileTaskFromDevEvent_RequiresMatchingDetail(t *testing.T) {
 	fake := newFakeTelegram(t)
 	repo := &fakeRepo{

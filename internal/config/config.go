@@ -216,8 +216,8 @@ func DevInboxPath() string {
 // drained inbox order. Empty means orders are only queued, not executed here.
 func DevOrderRunner() string { return devValue("DEV_ORDER_RUNNER") }
 
-// HerdrAgentTarget is the live Herdr agent name (herdr agent list) for the
-// Herdr order runner script.
+// HerdrAgentTarget is the Herdr agent name for the order runner script, or
+// focused/@focused/* to resolve the pane Herdr marks focused:true on each order.
 func HerdrAgentTarget() string { return devValue("HERDR_AGENT_TARGET") }
 
 // envFileCandidates lists the .env locations the server itself reads: the one

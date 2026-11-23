@@ -24,6 +24,9 @@ const (
 	// development session. It exists so a refused submit has a state to land in
 	// that cannot be mistaken for progress.
 	TaskFailed TaskStatus = "failed"
+	// TaskAwaitingHerdr means Pi/Herdr is blocked until the operator answers in
+	// the panel; the next Telegram message is relayed there, not a new order.
+	TaskAwaitingHerdr TaskStatus = "awaiting_herdr"
 )
 
 // failedStatusPrefix marks a stored status that carries the reason it failed.
@@ -205,7 +208,7 @@ func renderAgentPanel(s PanelState) (string, models.ReplyMarkup) {
 			{Text: "Aprobar", Data: cbApprove},
 			{Text: "Rechazar", Data: cbReject},
 		})
-	case TaskRunning:
+	case TaskRunning, TaskAwaitingHerdr:
 		rows = append(rows, []inlineButton{
 			{Text: "Cancelar tarea", Data: cbCancelTask},
 			{Text: "Refrescar", Data: cbRefresh},
@@ -283,6 +286,8 @@ func taskStatusLabel(s TaskStatus) string {
 	switch s {
 	case TaskRunning:
 		return "Ejecutando"
+	case TaskAwaitingHerdr:
+		return "Herdr espera tu respuesta"
 	case TaskPendingApproval:
 		return "Esperando aprobación"
 	case TaskCancelled:

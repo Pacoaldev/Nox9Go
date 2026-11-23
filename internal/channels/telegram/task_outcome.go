@@ -28,6 +28,19 @@ func (s *Supervisor) reconcileTaskFromDevEvent(ctx context.Context, bot *tgbot.B
 		return
 	}
 
+	if event.Kind == notify.KindBlocker {
+		if !taskTransitionAllowed(current, TaskAwaitingHerdr) {
+			return
+		}
+		if err := s.repo.SetTelegramAgentTask(chatID, task.Instruction, string(TaskAwaitingHerdr), ""); err != nil {
+			s.setError(err)
+			return
+		}
+		s.send(ctx, bot, chatID, "Herdr está esperando tu respuesta. Mandá el texto acá y lo reenvío al panel.")
+		s.updatePanel(ctx, bot, chatID)
+		return
+	}
+
 	if devEventFailsOrder(event) {
 		if !taskTransitionAllowed(current, TaskFailed) {
 			return

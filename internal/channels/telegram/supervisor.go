@@ -159,6 +159,9 @@ type Supervisor struct {
 	dockReadyChats map[int64]bool
 	// lastDev is the newest development feed line shown per chat (panel copy).
 	lastDev map[int64]string
+	// herdrChoices holds the last blocker button mapping per chat (Telegram → send-keys).
+	herdrChoices map[int64][]HerdrChoice
+
 	// orderWake nudges the order drain when an instruction lands, so the first
 	// poll does not wait for the next tick (D4). It is buffered with one slot: a
 	// second order arriving before the drain wakes is already in the inbox the

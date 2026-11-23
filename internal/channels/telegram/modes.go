@@ -34,7 +34,7 @@ func (s *Supervisor) panelState(chatID int64) PanelState {
 		switch status {
 		case TaskPendingApproval:
 			state.PendingApproval = task.Instruction
-		case TaskRunning, TaskDone:
+		case TaskRunning, TaskDone, TaskAwaitingHerdr:
 			// A task under supervision keeps its instruction on the panel while it
 			// runs or after it completes, which is what the operator is watching for.
 			state.CurrentInstruction = task.Instruction
@@ -201,6 +201,9 @@ func (s *Supervisor) dispatchCallback(ctx context.Context, bot *tgbot.Bot, chatI
 	// the exact values below; an exact value can never be mistaken for a prefix
 	// of itself because the argument is what the prefix does not cover.
 	switch {
+	case strings.HasPrefix(q.Data, cbHerdrChoicePrefix):
+		s.handleHerdrChoiceCallback(ctx, bot, chatID, q.Data, answer)
+		return
 	case strings.HasPrefix(q.Data, cbModelPick):
 		s.pickModel(ctx, bot, chatID, strings.TrimPrefix(q.Data, cbModelPick), answer)
 		return
@@ -387,22 +390,24 @@ const cancelRunningNote = "Tarea cancelada. La orden puede estar ya en la cola d
 func taskTransitionAllowed(from, to TaskStatus) bool {
 	switch to {
 	case TaskRunning:
-		return from == TaskPendingApproval
+		return from == TaskPendingApproval || from == TaskAwaitingHerdr
+	case TaskAwaitingHerdr:
+		return from == TaskRunning
 	case TaskRejected:
 		// Only a waiting task can be rejected. A task already running is
 		// cancelled, not rejected: the operator approved it, they do not
 		// un-approve it.
 		return from == TaskPendingApproval
 	case TaskCancelled:
-		return from == TaskPendingApproval || from == TaskRunning
+		return from == TaskPendingApproval || from == TaskRunning || from == TaskAwaitingHerdr
 	case TaskDone:
-		return from == TaskRunning
+		return from == TaskRunning || from == TaskAwaitingHerdr
 	case TaskFailed:
 		// S3: failure is the recorded outcome of a submit the spool refused, or
 		// of a session reporting back. Both are reachable from the states a task
 		// can be submitted from, and neither is offered as a button: an operator
 		// does not fail a task, it fails on its own.
-		return from == TaskPendingApproval || from == TaskRunning
+		return from == TaskPendingApproval || from == TaskRunning || from == TaskAwaitingHerdr
 	default:
 		return false
 	}
