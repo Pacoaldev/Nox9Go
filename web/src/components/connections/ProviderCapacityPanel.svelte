@@ -156,6 +156,7 @@
     rps: 'req/sec',
     tpm: 'tok/min',
     rpd: 'req/day',
+    tpd: 'tok/day',
     concurrent: 'in flight',
     requests: 'requests',
     tokens: 'tokens',
@@ -196,7 +197,7 @@
 
   let usableObservations = $derived(
     (capacity?.observations ?? []).filter((obs) =>
-      (obs.limitUnit === 'rpm' || obs.limitUnit === 'tpm' || obs.limitUnit === 'concurrent' || obs.limitUnit === 'rpd') &&
+      (obs.limitUnit === 'rpm' || obs.limitUnit === 'rps' || obs.limitUnit === 'tpm' || obs.limitUnit === 'concurrent' || obs.limitUnit === 'rpd' || obs.limitUnit === 'tpd') &&
       (obs.limitValue ?? 0) > 0,
     ),
   )

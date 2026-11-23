@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Observation is one capacity fact an upstream reported, reduced to a shape the
@@ -261,12 +262,16 @@ var explicitRateLimitHeaders = []struct {
 	{"x-ratelimit-limit-requests-day", "rpd"},
 	{"x-ratelimit-limit-requests-per-day", "rpd"},
 	{"x-ratelimit-limit-rpd", "rpd"},
+	{"x-ratelimit-limit-tokens-day", "tpd"},
+	{"x-ratelimit-limit-tokens-per-day", "tpd"},
+	{"x-ratelimit-limit-tpd", "tpd"},
 	{"x-ratelimit-limit-concurrent", "concurrent"},
 	{"x-ratelimit-limit-concurrency", "concurrent"},
 }
 
 // ClassifyHeaderObservations extracts rate-limit observations from HTTP response
-// headers (on both 200 OK and error responses) when explicit limit headers are present.
+// headers (on both 200 OK and error responses) when explicit or generic limit
+// headers are present.
 func ClassifyHeaderObservations(statusCode int, headers http.Header) []Observation {
 	if headers == nil {
 		return nil
@@ -288,7 +293,67 @@ func ClassifyHeaderObservations(statusCode int, headers http.Header) []Observati
 			})
 		}
 	}
+	if !seenUnits["rpm"] && !seenUnits["rps"] && !seenUnits["rpd"] {
+		if v, ok := firstHeaderInt(headers, "x-ratelimit-limit-requests"); ok {
+			unit := inferGenericRateLimitUnit(headers, []string{"x-ratelimit-reset-requests", "x-ratelimit-reset"}, v, "rps", "rpm", "rpd")
+			seenUnits[unit] = true
+			out = append(out, Observation{
+				Signal:     SignalRateLimit,
+				StatusCode: statusCode,
+				LimitValue: v,
+				LimitUnit:  unit,
+				Evidence:   "x-ratelimit-limit-requests: " + strconv.Itoa(v),
+			})
+		}
+	}
+	if !seenUnits["tpm"] && !seenUnits["tpd"] {
+		if v, ok := firstHeaderInt(headers, "x-ratelimit-limit-tokens"); ok {
+			unit := inferGenericRateLimitUnit(headers, []string{"x-ratelimit-reset-tokens", "x-ratelimit-reset"}, v, "", "tpm", "tpd")
+			seenUnits[unit] = true
+			out = append(out, Observation{
+				Signal:     SignalRateLimit,
+				StatusCode: statusCode,
+				LimitValue: v,
+				LimitUnit:  unit,
+				Evidence:   "x-ratelimit-limit-tokens: " + strconv.Itoa(v),
+			})
+		}
+	}
 	return out
+}
+
+func inferGenericRateLimitUnit(headers http.Header, resetKeys []string, val int, perSec, perMin, perDay string) string {
+	var d time.Duration
+	for _, k := range resetKeys {
+		if parsed := parseResetDuration(headers.Get(k)); parsed > 0 {
+			d = parsed
+			break
+		}
+	}
+	if d > 2*time.Minute && perDay != "" {
+		return perDay
+	}
+	if perSec != "" && d > 0 && d <= time.Second && val < 60 {
+		return perSec
+	}
+	return perMin
+}
+
+func parseResetDuration(raw string) time.Duration {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0
+	}
+	if d, err := time.ParseDuration(s); err == nil && d > 0 {
+		return d
+	}
+	if sec, err := strconv.ParseFloat(s, 64); err == nil && sec > 0 {
+		if sec > 1_000_000_000 {
+			return time.Until(time.Unix(int64(sec), 0))
+		}
+		return time.Duration(sec * float64(time.Second))
+	}
+	return 0
 }
 
 // Structured and natural-language patterns that carry a numeric limit. Ordered so

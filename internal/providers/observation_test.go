@@ -272,3 +272,73 @@ func TestClassifyHeaderObservations(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyHeaderObservations_GenericHeaders(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers map[string]string
+		want    map[string]int
+	}{
+		{
+			name: "groq style generic rpm and tpm",
+			headers: map[string]string{
+				"x-ratelimit-limit-requests": "30",
+				"x-ratelimit-reset-requests": "2s",
+				"x-ratelimit-limit-tokens":   "150000",
+				"x-ratelimit-reset-tokens":   "12s",
+			},
+			want: map[string]int{"rpm": 30, "tpm": 150000},
+		},
+		{
+			name: "per second generic request limit",
+			headers: map[string]string{
+				"x-ratelimit-limit-requests": "5",
+				"x-ratelimit-reset-requests": "200ms",
+			},
+			want: map[string]int{"rps": 5},
+		},
+		{
+			name: "daily generic request and token limits",
+			headers: map[string]string{
+				"x-ratelimit-limit-requests": "1000",
+				"x-ratelimit-reset-requests": "24h",
+				"x-ratelimit-limit-tokens":   "500000",
+				"x-ratelimit-reset-tokens":   "12h",
+			},
+			want: map[string]int{"rpd": 1000, "tpd": 500000},
+		},
+		{
+			name: "explicit tpd header",
+			headers: map[string]string{
+				"x-ratelimit-limit-tokens-day": "1000000",
+			},
+			want: map[string]int{"tpd": 1000000},
+		},
+		{
+			name: "explicit header wins over generic",
+			headers: map[string]string{
+				"x-ratelimit-limit-requests-minute": "60",
+				"x-ratelimit-limit-requests":        "30",
+			},
+			want: map[string]int{"rpm": 60},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := http.Header{}
+			for k, v := range tt.headers {
+				h.Set(k, v)
+			}
+			got := ClassifyHeaderObservations(http.StatusOK, h)
+			if len(got) != len(tt.want) {
+				t.Fatalf("len = %d, want %d (%+v)", len(got), len(tt.want), got)
+			}
+			for _, obs := range got {
+				if tt.want[obs.LimitUnit] != obs.LimitValue {
+					t.Errorf("got %s=%d, want %d", obs.LimitUnit, obs.LimitValue, tt.want[obs.LimitUnit])
+				}
+			}
+		})
+	}
+}
