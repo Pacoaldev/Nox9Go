@@ -49,6 +49,16 @@ function Read-AgentTail {
     (& herdr agent read $Name --lines $Lines --source recent-unwrapped 2>&1) | Out-String
 }
 
+function Test-AgentBlocked {
+    param([string]$Text)
+    # Herdr reports "idle" while Pi waits on a tool-permission prompt, so the
+    # state machine alone cannot tell a finished turn from a question. The
+    # prompt itself is the only reliable signal: matching it is what stops a
+    # blocked agent from being reported as a completed order.
+    if (-not $Text) { return $false }
+    return ($Text -match 'Allow once|Allow for this session|allow guarded|↑↓ navigate')
+}
+
 # Herdr often keeps Pi on "idle" even after a finished turn, so --until done can
 # time out while the panel already answered. Snapshot terminal text before submit.
 & herdr agent focus $target 2>&1 | Out-Null
@@ -61,6 +71,13 @@ if ($LASTEXITCODE -ne 0) {
         exit 2
     }
     Write-Error $promptRaw.Trim()
+}
+# An approval dialog left over from an earlier turn swallows the prompt: the
+# order never reached Pi. Reporting that as a blocker is the honest answer.
+$afterPrompt = (Read-AgentTail $target).Trim()
+if (Test-AgentBlocked $afterPrompt) {
+    Write-Output $afterPrompt
+    exit 2
 }
 
 # Bounded poll instead of one blocking `herdr agent wait`: the state machine
@@ -93,8 +110,13 @@ while ([datetime]::UtcNow -lt $deadline) {
             $lastSnap = $snap
         }
         # Two stable polls (~4s) of the same new output means the turn settled:
-        # waiting for "done" is what cost the operator minutes.
+        # waiting for "done" is what cost the operator minutes. Settling on a
+        # permission prompt is not a finished turn, so that case is a blocker.
         if ($stableTicks -ge 1) {
+            if (Test-AgentBlocked $snap) {
+                Write-Output $snap
+                exit 2
+            }
             Write-Output $snap
             exit 0
         }
@@ -124,8 +146,13 @@ while ([datetime]::UtcNow -lt $deadline) {
             $stableTicks = 0
             $lastSnap = $snap
         }
-        # Three stable polls (~6s) after new output => treat turn as finished.
+        # Three stable polls (~6s) after new output => treat turn as finished,
+        # unless what settled is a permission prompt waiting on the operator.
         if ($stableTicks -ge 2 -and $status -eq 'idle') {
+            if (Test-AgentBlocked $snap) {
+                Write-Output $snap
+                exit 2
+            }
             Write-Output $snap
             exit 0
         }
@@ -134,6 +161,10 @@ while ([datetime]::UtcNow -lt $deadline) {
 }
 
 $tail = (Read-AgentTail $target).Trim()
+if (Test-AgentBlocked $tail) {
+    Write-Output $tail
+    exit 2
+}
 if ($tail -ne $before) {
     Write-Output $tail
     Write-Warning 'Herdr wait timed out but terminal output changed; treating as completed.'
