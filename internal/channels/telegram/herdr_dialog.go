@@ -33,6 +33,9 @@ func ParseHerdrDialog(screen string) (title string, choices []HerdrChoice) {
 	if ch := parseHerdrPermissionDialog(lines); len(ch) > 0 {
 		return herdrDialogTitle(lines, ch), ch
 	}
+	if title, ch := parseAskUserChoiceTranscript(lines); len(ch) > 0 {
+		return title, ch
+	}
 	return "", nil
 }
 
@@ -335,6 +338,80 @@ func herdrDialogTitle(lines []string, choices []HerdrChoice) string {
 		return t
 	}
 	return ""
+}
+
+var (
+	askUserChoiceLine     = regexp.MustCompile(`(?i)ask_user_choice\s+(.+?)\s*\((.+)\)\s*$`)
+	askUserChoiceAnswered = regexp.MustCompile(`(?m)^\s*✓\s*\d+\.`)
+)
+
+// parseAskUserChoiceTranscript recovers Pi confirm menus from the scrollback when
+// Herdr read omits the live TUI overlay (ask_user_choice / agent_status idle).
+func parseAskUserChoiceTranscript(lines []string) (title string, choices []HerdrChoice) {
+	idx := -1
+	var m []string
+	for i := len(lines) - 1; i >= 0 && i >= len(lines)-80; i-- {
+		if !strings.Contains(lines[i], "ask_user_choice") {
+			continue
+		}
+		m = askUserChoiceLine.FindStringSubmatch(strings.TrimSpace(lines[i]))
+		if len(m) == 3 {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return "", nil
+	}
+	// A ✓ N. line after the tool call means the operator already answered.
+	for i := idx + 1; i < len(lines); i++ {
+		if askUserChoiceAnswered.MatchString(lines[i]) {
+			return "", nil
+		}
+	}
+	title = strings.TrimSpace(m[1])
+	opts := splitPiParenChoiceOptions(strings.TrimSpace(m[2]))
+	if len(opts) == 0 {
+		return "", nil
+	}
+	choices = make([]HerdrChoice, 0, len(opts))
+	for i, label := range opts {
+		choices = append(choices, HerdrChoice{
+			Label: truncateHerdrLabel(label, 48),
+			Keys:  herdrCursorKeys(0, i),
+		})
+	}
+	return title, dedupeHerdrChoices(choices)
+}
+
+func splitPiParenChoiceOptions(inner string) []string {
+	inner = strings.TrimSpace(inner)
+	if inner == "" {
+		return nil
+	}
+	const noSep = ", No,"
+	if i := strings.Index(inner, noSep); i >= 0 {
+		first := strings.TrimSpace(inner[:i])
+		second := strings.TrimSpace("No," + inner[i+len(noSep):])
+		return []string{first, second}
+	}
+	const yesSep = ", Yes,"
+	if i := strings.Index(inner, yesSep); i >= 0 {
+		first := strings.TrimSpace(inner[:i])
+		second := strings.TrimSpace("Yes," + inner[i+len(yesSep):])
+		return []string{first, second}
+	}
+	parts := strings.Split(inner, ",")
+	if len(parts) <= 2 {
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if t := strings.TrimSpace(p); t != "" {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	return []string{strings.TrimSpace(inner)}
 }
 
 func truncateHerdrLabel(s string, maxRunes int) string {

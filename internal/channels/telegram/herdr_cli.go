@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,18 +27,50 @@ func readHerdrAgentScreen(ctx context.Context) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "herdr", "agent", "read", target, "--lines", "40", "--source", "visible")
+
+	sources := []string{"detection", "recent-unwrapped", "visible"}
+	var best string
+	var lastErr error
+	for _, src := range sources {
+		text, err := readHerdrAgentScreenSource(ctx, target, src, 80)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if text == "" {
+			continue
+		}
+		best = text
+		if _, ch := ParseHerdrDialog(text); len(ch) > 0 {
+			return text, nil
+		}
+	}
+	if best != "" {
+		return best, nil
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("herdr agent read: empty output for %s", target)
+}
+
+func readHerdrAgentScreenSource(ctx context.Context, target, source string, lines int) (string, error) {
+	cmd := exec.CommandContext(ctx, "herdr", "agent", "read", target, "--lines", strconv.Itoa(lines), "--source", source)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		text := strings.TrimSpace(out.String())
-		if text != "" {
-			return text, nil
-		}
-		return "", fmt.Errorf("herdr agent read: %w", err)
+	err := cmd.Run()
+	text := strings.TrimSpace(out.String())
+	if strings.Contains(text, `"code"`) && strings.Contains(text, `"error"`) {
+		return "", fmt.Errorf("herdr agent read %s: %s", source, text)
 	}
-	return strings.TrimSpace(out.String()), nil
+	if text != "" {
+		return text, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("herdr agent read %s: %w", source, err)
+	}
+	return "", nil
 }
 
 func sendHerdrAgentKeys(ctx context.Context, keys ...string) error {

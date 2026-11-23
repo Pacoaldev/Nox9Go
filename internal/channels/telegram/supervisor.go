@@ -163,6 +163,8 @@ type Supervisor struct {
 	herdrChoices map[int64][]HerdrChoice
 	// herdrWatchSig dedupes passive watcher blocker notifications per dialog.
 	herdrWatchSig string
+	// herdrWatchErr suppresses repeating the same watcher fault on Last error.
+	herdrWatchErr string
 
 	// orderWake nudges the order drain when an instruction lands, so the first
 	// poll does not wait for the next tick (D4). It is buffered with one slot: a

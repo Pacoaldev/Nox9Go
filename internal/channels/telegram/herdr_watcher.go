@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -45,6 +46,21 @@ func (s *Supervisor) watchHerdrPassive(ctx context.Context, bot *tgbot.Bot, repo
 	}
 }
 
+func (s *Supervisor) noteHerdrWatchProblem(err error) {
+	if err == nil {
+		return
+	}
+	msg := err.Error()
+	s.mu.Lock()
+	if s.herdrWatchErr == msg {
+		s.mu.Unlock()
+		return
+	}
+	s.herdrWatchErr = msg
+	s.mu.Unlock()
+	s.setError(fmt.Errorf("telegram herdr watch: %w", err))
+}
+
 func (s *Supervisor) tickHerdrPassiveWatch(ctx context.Context, bot *tgbot.Bot, repo Repo) {
 	cfg, err := repo.GetTelegramChannelConfig()
 	if err != nil {
@@ -57,11 +73,13 @@ func (s *Supervisor) tickHerdrPassiveWatch(ctx context.Context, bot *tgbot.Bot, 
 
 	agent, err := ResolveHerdrAgentName(ctx, config.HerdrAgentTarget())
 	if err != nil {
+		s.noteHerdrWatchProblem(err)
 		return
 	}
 
 	screen, err := readHerdrAgentScreen(ctx)
 	if err != nil {
+		s.noteHerdrWatchProblem(err)
 		return
 	}
 	title, choices := ParseHerdrDialog(screen)

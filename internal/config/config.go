@@ -220,6 +220,14 @@ func DevOrderRunner() string { return devValue("DEV_ORDER_RUNNER") }
 // focused/@focused/* to resolve the pane Herdr marks focused:true on each order.
 func HerdrAgentTarget() string { return devValue("HERDR_AGENT_TARGET") }
 
+// HerdrAgentWorkCwd pins focused/workdir resolution to the agent whose pane cwd
+// matches this path (e.g. the Ouroboros checkout while DEV_REPO_ROOT stays NOX9GO).
+func HerdrAgentWorkCwd() string { return devValue("HERDR_AGENT_WORK_CWD") }
+
+// HerdrAgentExcludeCwd drops focused agents on this cwd when disambiguating
+// (often the gateway checkout so Telegram does not attach to a NOX9GO Pi pane).
+func HerdrAgentExcludeCwd() string { return devValue("HERDR_AGENT_EXCLUDE_CWD") }
+
 // HerdrPassiveWatch reports whether the Telegram channel polls the focused Herdr
 // agent for Pi blocker dialogs even when no Telegram order is running.
 // NOX9GO_HERDR_WATCH=0 disables; explicit 1 enables; empty defaults on when a

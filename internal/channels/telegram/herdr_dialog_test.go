@@ -71,6 +71,34 @@ func TestParseHerdrDialog_piConfirmSubtitles(t *testing.T) {
 	}
 }
 
+func TestParseHerdrDialog_askUserChoiceTranscript(t *testing.T) {
+	screen := `
+ Thinking...
+
+ask_user_choice ¿Mañana trabajaremos? (Sí, mañana trabajamos, No, mañana no)
+`
+	title, ch := ParseHerdrDialog(screen)
+	if title != "¿Mañana trabajaremos?" {
+		t.Errorf("title = %q", title)
+	}
+	if len(ch) != 2 {
+		t.Fatalf("choices = %d, want 2: %+v", len(ch), ch)
+	}
+	if ch[1].Label != "No, mañana no" {
+		t.Errorf("second = %q", ch[1].Label)
+	}
+}
+
+func TestParseAskUserChoiceTranscript_alreadyAnswered(t *testing.T) {
+	screen := `
+ask_user_choice ¿Seguimos? (Sí, seguimos, No, paramos)
+✓ 2. No, paramos
+`
+	if _, ch := ParseHerdrDialog(screen); len(ch) != 0 {
+		t.Fatalf("want no choices after answer, got %+v", ch)
+	}
+}
+
 func TestParseHerdrDialog_numbered(t *testing.T) {
 	screen := `
 Pick one:

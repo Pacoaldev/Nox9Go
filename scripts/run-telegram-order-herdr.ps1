@@ -38,11 +38,19 @@ function Resolve-HerdrAgentTarget {
     if ($focused.Count -eq 0) {
         Write-Error 'herdr: no focused agent (open gentle-shell and focus that Pi pane)'
     }
-    if ($focused.Count -gt 1) {
-        $names = ($focused | ForEach-Object { $_.name }) -join ', '
-        Write-Error "herdr: multiple focused agents ($names); focus one Pi pane"
+    if ($focused.Count -eq 1) {
+        return [string]$focused[0].name
     }
-    return [string]$focused[0].name
+    $shell = @($focused | Where-Object { $_.name -ieq 'shell' })
+    if ($shell.Count -eq 1) {
+        return [string]$shell[0].name
+    }
+    $nonNox = @($focused | Where-Object { $_.name -ine 'nox' })
+    if ($nonNox.Count -eq 1) {
+        return [string]$nonNox[0].name
+    }
+    $names = ($focused | ForEach-Object { $_.name }) -join ', '
+    Write-Error "herdr: multiple focused agents ($names); focus one Pi pane"
 }
 $timeoutMs = 3600000
 if ($env:HERDR_PROMPT_TIMEOUT_MS) {

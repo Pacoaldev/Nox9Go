@@ -40,6 +40,28 @@ func TestPickFocusedHerdrAgentFromJSON_many(t *testing.T) {
 	}
 }
 
+func TestPickFocusedHerdrAgentFromJSON_prefersShellOverNox(t *testing.T) {
+	raw := `{"result":{"agents":[
+		{"name":"nox","focused":true,"cwd":"C:\\NOX9GO"},
+		{"name":"shell","focused":true,"cwd":"C:\\Ouroboros"}
+	]}}`
+	got, err := pickFocusedHerdrAgentFromJSON(raw)
+	if err != nil || got != "shell" {
+		t.Fatalf("got %q err=%v", got, err)
+	}
+}
+
+func TestPickHerdrAgentFromJSON_workdir(t *testing.T) {
+	raw := `{"result":{"agents":[
+		{"name":"shell","focused":false,"cwd":"C:\\Ouroboros"},
+		{"name":"nox","focused":true,"cwd":"C:\\NOX9GO"}
+	]}}`
+	got, err := pickHerdrAgentFromJSON(raw, true, `C:\Ouroboros`, "")
+	if err != nil || got != "shell" {
+		t.Fatalf("got %q err=%v", got, err)
+	}
+}
+
 func TestResolveHerdrAgentName_literal(t *testing.T) {
 	got, err := ResolveHerdrAgentName(context.Background(), "nox")
 	if err != nil || got != "nox" {
