@@ -25,10 +25,16 @@ func (s *Supervisor) poll(ctx context.Context, repo Repo) {
 
 	bot, err := tgbot.New(token,
 		tgbot.WithDefaultHandler(s.handleUpdate),
+		tgbot.WithHTTPClient(telegramPollTimeout, telegramPollHTTPClient(telegramPollTimeout)),
 		// The library logs every update payload by default, which would put
 		// conversation content in the gateway log. Route its noise to a
 		// discard so failures are reported through the supervisor instead.
-		tgbot.WithErrorsHandler(func(err error) { s.setError(err) }),
+		tgbot.WithErrorsHandler(func(err error) {
+			if isTransientTelegramPollError(err) {
+				return
+			}
+			s.setError(err)
+		}),
 	)
 	if err != nil {
 		s.setError(fmt.Errorf("telegram: create bot: %w", err))

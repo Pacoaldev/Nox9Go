@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,6 +33,8 @@ type fakeTelegram struct {
 	markups []string
 	modes   []string
 	edits   []string
+	deletes []string
+	nextID  int
 	srv     *httptest.Server
 }
 
@@ -50,9 +53,13 @@ func newFakeTelegram(t *testing.T) *fakeTelegram {
 			f.sent = append(f.sent, r.FormValue("text"))
 			f.markups = append(f.markups, r.FormValue("reply_markup"))
 			f.modes = append(f.modes, r.FormValue("parse_mode"))
+			// Telegram hands out a fresh id per message. A fixed id would make a
+			// newly opened panel indistinguishable from the one it replaced.
+			f.nextID++
+			id := f.nextID
 			f.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
+			fmt.Fprintf(w, `{"ok":true,"result":{"message_id":%d,"date":0,"chat":{"id":1,"type":"private"}}}`, id)
 		case strings.HasSuffix(r.URL.Path, "/editMessageText"):
 			// The panel is edited in place, so the edit is the observable proof
 			// that a redraw reached the message the operator is reading.
@@ -65,6 +72,19 @@ func newFakeTelegram(t *testing.T) *fakeTelegram {
 			f.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
+		case strings.HasSuffix(r.URL.Path, "/deleteMessage"):
+			// Re-opening the hub panel removes the previous one, so the deleted
+			// message id is the observable proof that the thread did not grow a
+			// second copy.
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			f.mu.Lock()
+			f.deletes = append(f.deletes, r.FormValue("message_id"))
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"result":true}`))
 		case strings.HasSuffix(r.URL.Path, "/getFile"):
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"file_id":"photo-large","file_unique_id":"u","file_path":"photos/file_1.jpg"}}`))
@@ -121,6 +141,15 @@ func (f *fakeTelegram) editedMessages() []string {
 	defer f.mu.Unlock()
 	out := make([]string, len(f.edits))
 	copy(out, f.edits)
+	return out
+}
+
+// deletedMessages returns the message ids the bot asked Telegram to delete.
+func (f *fakeTelegram) deletedMessages() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.deletes))
+	copy(out, f.deletes)
 	return out
 }
 

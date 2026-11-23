@@ -79,14 +79,31 @@ func (s *Supervisor) cmdPanel(ctx context.Context, bot *tgbot.Bot, chatID int64)
 	s.pinPanelMessage(ctx, bot, chatID, sent.ID)
 }
 
-// openPanel focuses the single inline panel: refresh when it exists, open once
-// when it does not. Hub "Menú" must not stack a second panel in the thread.
+// openPanel re-opens the panel as a new message at the bottom of the thread and
+// removes the previous one, so the hub's "Menú" button always produces a change
+// the operator can see. Redrawing an unchanged panel in place is silent:
+// Telegram answers "message is not modified", which reads as a dead button.
 func (s *Supervisor) openPanel(ctx context.Context, bot *tgbot.Bot, chatID int64) {
-	if s.panelMessage(chatID) == 0 {
-		s.cmdPanel(ctx, bot, chatID)
+	previous := s.panelMessage(chatID)
+	s.cmdPanel(ctx, bot, chatID)
+	// cmdPanel records the new id; deleting the previous one only after it
+	// exists means a failed send leaves the old panel on screen instead of
+	// erasing the only copy.
+	if previous == 0 || s.panelMessage(chatID) == previous {
 		return
 	}
-	s.updatePanel(ctx, bot, chatID)
+	if _, err := bot.DeleteMessage(ctx, &tgbot.DeleteMessageParams{
+		ChatID:    chatID,
+		MessageID: previous,
+	}); err != nil {
+		// A panel the operator already deleted, or one too old for the bot to
+		// remove, is not a fault worth a chat message: the new panel is on
+		// screen either way.
+		if !strings.Contains(err.Error(), "message to delete not found") &&
+			!strings.Contains(err.Error(), "message can't be deleted") {
+			s.setError(fmt.Errorf("telegram: delete previous panel: %w", err))
+		}
+	}
 }
 
 func (s *Supervisor) pinPanelMessage(ctx context.Context, bot *tgbot.Bot, chatID int64, messageID int) {

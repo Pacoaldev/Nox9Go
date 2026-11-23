@@ -395,8 +395,9 @@ func (s *Supervisor) cancelTurn(chatID int64) (chan struct{}, bool) {
 // setError records a failure the operator needs to see without condemning the
 // channel.
 //
-// A running loop keeps running: an expired long-poll or the cosmetic
-// SetMyCommands rejection is a fault to report, not a dead channel, and
+// A running loop keeps running: transient getUpdates transport faults are
+// filtered in the poll errors handler; cosmetic SetMyCommands failures are
+// still reported here. Neither is a dead channel, and
 // reconcile() only starts a loop when none exists, so overwriting the state
 // with StateError left the dashboard red until a restart nobody asked for.
 // Only a loop that is not running can report StateError, which is the
