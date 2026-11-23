@@ -901,6 +901,7 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
   },
   {
     "id": "poolside",
+    "hidden": true,
     "name": "Poolside",
     "category": "apikey",
     "alias": "ps",

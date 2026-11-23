@@ -1339,6 +1339,7 @@ var KnownProviders = map[string]ProviderConfig{
 		BaseURL:    "https://inference.poolside.ai/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
+		Hidden:     true,
 	},
 	"sambanova": {
 		BaseURL:    "https://api.sambanova.ai/v1/chat/completions",
