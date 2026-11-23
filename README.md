@@ -32,11 +32,11 @@ Incluye compresión de contexto, failover automático, panel embebido, seguimien
 
 ---
 
-## Sobre este fork
+## Sobre NOX9GO
 
-NOX9GO es un fork de [9Router](https://github.com/decolua/9router), reescrito en Go como binario autónomo.
+NOX9GO es un gateway propio, publicado en [Pacoaldev/Nox9Go](https://github.com/Pacoaldev/Nox9Go): binario Go autónomo con panel Svelte 5 embebido. **Nació a partir de** [9Router](https://github.com/decolua/9router); el crédito de ese origen está en la licencia MIT (`LICENSE`), pero el desarrollo, las releases y las funciones actuales (Telegram, actualizador propio, etc.) son de este proyecto.
 
-Mantiene compatibilidad con el formato de API y la base de datos SQLite del proyecto original, pero elimina la dependencia de Node.js en ejecución y añade un panel Svelte 5 embebido, observabilidad ampliada, más estrategias de enrutado y empaquetado multiplataforma.
+Mantiene compatibilidad con el formato de API y la base de datos SQLite del diseño original cuando conviene, sin depender de Node.js en ejecución: observabilidad ampliada, más estrategias de enrutado y empaquetado multiplataforma.
 
 > Repositorio público. Las releases se publican como tags en GitHub.
 
@@ -522,7 +522,7 @@ NOX9GO es un proyecto de software experimental desarrollado para fines de **inve
 ## Enlaces
 
 - Proyecto original: [9Router](https://github.com/decolua/9router)
-- Autor del fork: [Pacoaldev](https://github.com/Pacoaldev)
+- Mantenedor: [Pacoaldev](https://github.com/Pacoaldev)
 - Panel local: <http://localhost:20130>
 
 <div align="center">

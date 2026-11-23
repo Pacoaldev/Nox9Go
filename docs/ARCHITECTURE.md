@@ -5,6 +5,7 @@ This document describes the current Go implementation. Source code is authoritat
 ## Version and compatibility status
 
 - Current release: see the [`VERSION`](../VERSION) file — the single source of truth. `make build` stamps it into the binary (`internal/updater.CurrentVersion`) via `-ldflags`, and `scripts/gen-version-manifest.mjs` writes the matching `version.json`. This document deliberately does not repeat the number, because a hard-coded copy is what drifted before.
+- **Lineage:** NOX9GO is an independent gateway that originated from [decolua/9router](https://github.com/decolua/9router); `LICENSE` retains upstream copyright notices. §1 in `AGENTS.md` describes when to consult 9router for parity; many features exist only in NOX9GO.
 - Declared upstream baseline: [`decolua/9router` v0.5.85](https://github.com/decolua/9router). The local checked-out upstream has `package.json` version `0.5.85` and a v0.5.85 changelog; published upstream npm/Docker `latest` is v0.5.86.
 - Recent releases record selected upstream v0.5.86 parity work and explicitly deferred items in `CHANGELOG.md`. Those entries do not change the v0.5.85 manifest baseline or imply complete v0.5.86 parity.
 - Upstream remains the compatibility reference. Its Next.js app and shared SSE core are historical sources for API, database, auth, and routing behavior. They are **not** the current Go runtime or dashboard.
@@ -39,7 +40,8 @@ The Go binary owns proxy routing, dashboard APIs, auth, persistence, OAuth, medi
 
 | Path | Responsibility |
 | --- | --- |
-| `cmd/NOX9GO/` | CLI parser, commands, daemon lifecycle sub-commands, signal handling, Fx start/stop |
+| `cmd/nox9go/` | CLI parser, commands, daemon lifecycle sub-commands, signal handling, Fx start/stop |
+| `cmd/nox9go-tray/` | Windows system tray companion (not the gateway binary) |
 | `internal/app/` | Fx modules, dependency graph, server and DB lifecycle |
 | `internal/config/` | Viper/env configuration, data and database path resolution, JWT secret |
 | `internal/handlers/` | Chi route composition, chat, media, OAuth, dashboard, SSO, usage |
@@ -53,10 +55,15 @@ The Go binary owns proxy routing, dashboard APIs, auth, persistence, OAuth, medi
 | `web/embed.go` | Embeds `web/dist` and serves the SPA with index fallback |
 | `internal/daemon/` | Background mode: detached spawn, `DATA_DIR/run/gateway.pid`, health wait, stop/restart/status |
 | `internal/proc/` | Portable process primitives (liveness, terminate, detach) shared by the daemon and headroom |
+| `internal/channels/telegram/` | Telegram bot supervisor, Chat/Agent modes, feed rendering, dev-order inbox |
+| `internal/devstatus/` | Development dashboard tab: ODD task progress from configured repo root |
+| `internal/handlers/dashboard/telegram_channel.go` | Dashboard REST for Telegram channel enablement and token storage |
+| `internal/tunnel/` | Cloudflare quick tunnel enable/disable/status |
+| `internal/notify/` | Side-channel notifications for dev runners (e.g. Telegram order scripts) |
 
 ## Fx lifecycle
 
-`cmd/NOX9GO/main.go` builds an `urfave/cli` application. The default server action loads CLI parameters and starts `app.AppModule` with `fx.Replace(cliParams)`. Set `FX_LOGGING=true` to enable the console Fx logger; otherwise Fx logging is disabled.
+`cmd/nox9go/main.go` builds an `urfave/cli` application. The default server action loads CLI parameters and starts `app.AppModule` with `fx.Replace(cliParams)`. Set `FX_LOGGING=true` to enable the console Fx logger; otherwise Fx logging is disabled.
 
 `--background` (alias `-d`, also the `start` sub-command) makes the CLI spawn
 this same binary detached — new session on POSIX, `CREATE_NO_WINDOW` on
