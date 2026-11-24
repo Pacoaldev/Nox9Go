@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -522,7 +523,8 @@ func (h *ChatHandler) buildModelsListForMode(
 	}
 
 	if catalogWhenEmpty || mode == ModeListCatalog {
-		for alias, models := range providers.ProviderModels {
+		for _, alias := range sortedProviderAliases() {
+			models := providers.ProviderModels[alias]
 			if canon := providers.ResolveAlias(alias); canon != alias && providers.GetProviderAlias(canon) != alias {
 				continue
 			}
@@ -677,8 +679,9 @@ func (h *ChatHandler) appendConnectionModels(
 			add(cm.ID, true)
 		}
 	}
-	// Legacy alias targets pointing at this provider.
-	for _, target := range aliases {
+	// Legacy alias targets pointing at this provider. Sorted so the emitted
+	// order does not follow the alias map's random walk.
+	for _, target := range sortedAliasTargets(aliases) {
 		if strings.HasPrefix(target, outputAlias+"/") ||
 			strings.HasPrefix(target, staticAlias+"/") ||
 			strings.HasPrefix(target, providerID+"/") {
@@ -791,7 +794,8 @@ func appendNoAuthCatalogModels(
 		}
 	}
 
-	for alias, modelIDs := range providers.ProviderModels {
+	for _, alias := range sortedProviderAliases() {
+		modelIDs := providers.ProviderModels[alias]
 		if covered[alias] {
 			continue
 		}
@@ -822,6 +826,44 @@ func appendNoAuthCatalogModels(
 		}
 	}
 	return data
+}
+
+// sortedProviderAliases returns the static catalog's provider keys in a stable
+// order.
+//
+// Iterating providers.ProviderModels directly is a map walk, so the published
+// catalogue came out in a different order on every call. That is invisible in
+// one HTTP response, but SyncPiCatalog writes the catalogue to disk: a random
+// order meant every model or combo write rewrote a 1.7 MB models.json with the
+// same models shuffled, and the sync could never report "unchanged".
+func sortedProviderAliases() []string {
+	aliases := make([]string, 0, len(providers.ProviderModels))
+	for alias := range providers.ProviderModels {
+		aliases = append(aliases, alias)
+	}
+	sort.Strings(aliases)
+	return aliases
+}
+
+// sortedAliasTargets returns the alias target models in a stable order.
+func sortedAliasTargets(aliases map[string]string) []string {
+	targets := make([]string, 0, len(aliases))
+	for _, target := range aliases {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	return targets
+}
+
+// sortedCustomModelProviders returns the custom-model provider keys in a
+// stable order.
+func sortedCustomModelProviders(customs map[string][]*db.CustomModel) []string {
+	keys := make([]string, 0, len(customs))
+	for key := range customs {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // appendStaticModel emits one static-registry entry (fresh-install path).
@@ -862,7 +904,8 @@ func (h *ChatHandler) appendLooseCustomModels(
 ) []ModelInfoObject {
 	prefixMap := h.providerNodePrefixMap()
 	customs := h.customModelsByProvider()
-	for providerID, list := range customs {
+	for _, providerID := range sortedCustomModelProviders(customs) {
+		list := customs[providerID]
 		if filterConnected && !isUsableProvider(providerID, usable) {
 			continue
 		}
