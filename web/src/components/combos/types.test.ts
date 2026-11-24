@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { COMBO_STRATEGIES, resolveComboStrategy } from './types'
+import { COMBO_STRATEGIES, parseCapacityAdapterSettings, resolveComboStrategy } from './types'
 
 const OPTION_VALUES = COMBO_STRATEGIES.map((s) => s.value)
 
@@ -51,5 +51,37 @@ describe('resolveComboStrategy', () => {
       expect(strategy.value.length).toBeGreaterThan(0)
       expect(strategy.label.length).toBeGreaterThan(0)
     }
+  })
+})
+
+// The card's toggle has to state what the gateway will actually do. The backend
+// reads `capacityAdapter` from the settings row and treats a MISSING entry as
+// disabled (`normalizeCapEntry` returns the zero value -> Enabled false), so a
+// card that defaulted an absent pool to ON read ON while nothing was injected:
+// the operator saw a working Vision Adapter and still got "this model cannot
+// read images". An entry that IS stored keeps the backend's own default, where a
+// map without an explicit `enabled` is enabled and the legacy array form is
+// enabled too.
+describe('parseCapacityAdapterSettings', () => {
+  it('reports an absent pool as disabled, matching the gateway', () => {
+    expect(parseCapacityAdapterSettings(undefined).vision.enabled).toBe(false)
+    expect(parseCapacityAdapterSettings({}).vision.enabled).toBe(false)
+    expect(parseCapacityAdapterSettings({ vision: undefined }).audioInput.enabled).toBe(false)
+  })
+
+  it('keeps an explicit flag and the backend defaults for a stored entry', () => {
+    expect(parseCapacityAdapterSettings({ vision: { enabled: true } }).vision.enabled).toBe(true)
+    expect(parseCapacityAdapterSettings({ vision: { enabled: false } }).vision.enabled).toBe(false)
+    // Stored map without the flag, and the legacy array form: enabled upstream.
+    expect(parseCapacityAdapterSettings({ vision: { models: ['ag/x'] } }).vision.enabled).toBe(true)
+    expect(parseCapacityAdapterSettings({ vision: ['ag/x'] }).vision.enabled).toBe(true)
+  })
+
+  it('carries the models list through and defaults it to empty', () => {
+    expect(parseCapacityAdapterSettings({ vision: { models: ['a/b', 'c/d'] } }).vision.models).toEqual([
+      'a/b',
+      'c/d',
+    ])
+    expect(parseCapacityAdapterSettings({ vision: { enabled: true } }).vision.models).toEqual([])
   })
 })

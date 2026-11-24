@@ -8,7 +8,7 @@ import {
 } from './pickerData'
 
 describe('pickerData', () => {
-  it('includes connected providers and no-auth providers regardless of isActive', () => {
+  it('includes connected providers and no-auth providers; inactive connections are hidden', () => {
     const connections: ProviderConnection[] = [
       {
         id: 'conn-1',
@@ -44,7 +44,9 @@ describe('pickerData', () => {
     assert.strictEqual(agGroup.models[0].value.startsWith('ag/'), true)
 
     const ccGroup = groups.find((g) => g.id === 'claude')
-    assert.ok(ccGroup)
+    // Deliberate NOX9GO divergence from upstream (ModelSelectModal.js):
+    // an inactive connection is not selectable in this picker.
+    assert.strictEqual(ccGroup, undefined)
 
     const ocGroup = groups.find((g) => g.id === 'opencode')
     assert.ok(ocGroup)
@@ -169,12 +171,12 @@ describe('pickerData', () => {
     assert.strictEqual(filtered[0].name, 'combo-wombo')
   })
 
-  // Upstream parity (ModelSelectModal.js 6a1573eb): a local / self-hosted
-  // endpoint does not always need a stored API key, so gating the picker on
-  // connections hid models the user had already added. A compatible node with
-  // registered custom models must be selectable without one; a node with
-  // nothing to show must stay hidden.
-  it('shows an unconnected compatible node that has custom models', () => {
+  // Deliberate NOX9GO divergence from upstream (ModelSelectModal.js 6a1573eb),
+  // requested by the operator: the picker only lists providers with an ACTIVE
+  // connection. A compatible node without one stays hidden even when it has
+  // registered custom models — the picker is a routing surface, not a data
+  // browser.
+  it('hides an unconnected compatible node even when it has custom models', () => {
     const nodes = [
       {
         id: 'openai-compatible-local',
@@ -189,12 +191,7 @@ describe('pickerData', () => {
       ] as never,
     })
     const group = groups.find((g) => g.id === 'openai-compatible-local')
-    assert.ok(group, 'an unconnected compatible node with a custom model must be selectable')
-    assert.strictEqual(group.name, 'Local Relay')
-    assert.deepStrictEqual(
-      group.models.map((m) => m.value),
-      ['Or/qwen3-coder'],
-    )
+    assert.strictEqual(group, undefined)
   })
 
   it('still hides an unconnected node with no models of its own', () => {

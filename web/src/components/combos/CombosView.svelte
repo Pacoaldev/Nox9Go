@@ -180,10 +180,15 @@
   }
 
   async function saveCapacityAdapter(next: CapacityAdapterState) {
+    const previous = capacityAdapter
+    // Optimistic paint, but the state must not survive a failed PATCH: the
+    // gateway reads the pool from the settings row, so a toggle that stayed ON
+    // after the write failed showed an adapter that never injects anything.
     capacityAdapter = next
     try {
       await api.patchSettings({ capacityAdapter: next })
     } catch (e) {
+      capacityAdapter = previous
       console.error('Failed to update capacity adapter:', e)
     }
   }

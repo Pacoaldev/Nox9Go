@@ -189,14 +189,19 @@ export function clearJudgeModel(
 export function parseCapacityAdapterSettings(ca: Record<string, unknown> | undefined): CapacityAdapterState {
   const v = ca?.vision as Record<string, unknown> | undefined
   const a = ca?.audioInput as Record<string, unknown> | undefined
+  // An ABSENT pool is disabled, because that is what the gateway does with it:
+  // `normalizeCapEntry` returns the zero value for a missing entry, so nothing is
+  // injected. Defaulting to ON here made the card claim a Vision Adapter that
+  // never fired. A pool that IS stored keeps the backend's own default, where a
+  // map without `enabled` — and the legacy array form — counts as enabled.
   return {
     vision: {
-      enabled: v?.enabled !== false,
+      enabled: v == null ? false : v.enabled !== false,
       roundRobin: !!v?.roundRobin,
       models: Array.isArray(v?.models) ? (v.models as string[]) : [],
     },
     audioInput: {
-      enabled: a?.enabled !== false,
+      enabled: a == null ? false : a.enabled !== false,
       roundRobin: !!a?.roundRobin,
       models: Array.isArray(a?.models) ? (a.models as string[]) : [],
     },

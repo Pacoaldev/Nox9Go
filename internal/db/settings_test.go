@@ -1,6 +1,7 @@
 package db
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -300,5 +301,53 @@ func TestGetSettings_ObservabilityAndRetention(t *testing.T) {
 	}
 	if s.MaxRequestRecords != 2500 {
 		t.Errorf("MaxRequestRecords = %d, want 2500", s.MaxRequestRecords)
+	}
+}
+
+func TestGetSettings_UpgradesLegacyCapacityAdapterModel(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// A pool stored before the fallback model changed still names the retired
+	// id. Every adapter pool rewrites it, so a stored pool never keeps pointing
+	// at a model the opencode catalog no longer serves.
+	settingsJSON := `{"capacityAdapter":{
+		"vision":{"enabled":true,"models":["oc/mimo-v2.5-free","oc/muse-spark-1.2-contributor-free"]},
+		"pdf":{"enabled":true,"models":["oc/mimo-v2.5-free"]}}}`
+	if _, err := database.Exec(`INSERT INTO settings (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data`, settingsJSON); err != nil {
+		t.Fatalf("failed to seed settings: %v", err)
+	}
+
+	s, err := NewRepo(database).GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings failed: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		pool string
+		want []string
+	}{
+		{
+			name: "vision pool rewrites the retired id and keeps the others",
+			pool: "vision",
+			want: []string{"oc/muse-spark-1.3-contributor-free", "oc/muse-spark-1.2-contributor-free"},
+		},
+		{
+			name: "a pool other than vision rewrites it too",
+			pool: "pdf",
+			want: []string{"oc/muse-spark-1.3-contributor-free"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entry, ok := s.CapacityAdapter[tt.pool]
+			if !ok {
+				t.Fatalf("capacityAdapter[%q] missing from settings", tt.pool)
+			}
+			if !slices.Equal(entry.Models, tt.want) {
+				t.Errorf("capacityAdapter[%q].Models = %v, want %v", tt.pool, entry.Models, tt.want)
+			}
+		})
 	}
 }

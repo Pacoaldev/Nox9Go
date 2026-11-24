@@ -396,7 +396,9 @@ func (r *Repo) GetSettings() (*SettingsData, error) {
 					for _, rm := range rawModels {
 						if ms, ok := rm.(string); ok && ms != "" {
 							if ms == "oc/mimo-v2.5-free" {
-								ms = "oc/mimo-v2.6-flash-free"
+								// Must match chat.defaultAdapterFallbackModel: the two packages
+								// cannot import each other, so the pair is kept in sync by hand.
+								ms = "oc/muse-spark-1.3-contributor-free"
 							}
 							models = append(models, ms)
 						}

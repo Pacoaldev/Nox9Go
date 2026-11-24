@@ -691,7 +691,7 @@ func TestAugmentModelsWithCapacityAdapter_Pool(t *testing.T) {
 			settings:   `{"capacityAdapter":{"vision":{"enabled":true,"models":[]}}}`,
 			models:     []string{"deepseek/deepseek-chat"},
 			required:   map[string]bool{"vision": true},
-			wantModels: []string{"oc/mimo-v2.6-flash-free", "deepseek/deepseek-chat"},
+			wantModels: []string{defaultAdapterFallbackModel, "deepseek/deepseek-chat"},
 			wantStrat:  "fallback",
 		},
 		{
@@ -739,7 +739,7 @@ func TestAugmentModelsWithCapacityAdapter_Pool(t *testing.T) {
 			settings:   `{"capacityAdapter":{"vision":{"enabled":true,"models":["oc/mimo-v2.5-free"]}}}`,
 			models:     []string{"deepseek/deepseek-chat"},
 			required:   map[string]bool{"vision": true},
-			wantModels: []string{"oc/mimo-v2.6-flash-free", "deepseek/deepseek-chat"},
+			wantModels: []string{defaultAdapterFallbackModel, "deepseek/deepseek-chat"},
 			wantStrat:  "fallback",
 		},
 	}

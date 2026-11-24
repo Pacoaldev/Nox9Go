@@ -49,13 +49,13 @@ export function resolveModelPickerGroups(
   providerNodes: ProviderNode[] = [],
   extras: PickerExtras = {}
 ): PickerGroup[] {
-  // Upstream parity (page.js fetchData + ModelSelectModal.js groupedModels):
-  // `activeProviders` holds ALL connections (no isActive filter) — every
-  // connected provider shows, plus no-auth providers. Inactive connections
-  // are still selectable upstream, so the picker mirrors that.
+  // Upstream parity divergence (ModelSelectModal.js groupedModels): upstream
+  // holds ALL connections (no isActive filter) so inactive providers stay
+  // selectable. NOX9GO asked for the opposite: a provider the operator
+  // deactivated or removed must not keep offering its models in the picker.
   const connectedProviderIds = new Set<string>()
   for (const c of connections) {
-    if (c.provider) {
+    if (c.provider && c.isActive !== 0) {
       connectedProviderIds.add(c.provider)
     }
   }
@@ -180,8 +180,14 @@ export function resolveModelPickerGroups(
   // placeholder when connected but empty.
   for (const node of providerNodes) {
     if (!node.id || seenGroupIds.has(node.id)) continue
-    const conn = connections.find((c) => c.provider === node.id)
-    const psd = (conn?.providerSpecificData || {}) as Record<string, unknown>
+    // Divergence from upstream parity (ModelSelectModal.js 6a1573eb): upstream
+    // kept a compatible node selectable without any connection when it had
+    // custom models. NOX9GO behavior (operator request): only nodes with an
+    // ACTIVE connection row are listed, so removed/deactivated nodes disappear
+    // from the picker along with their orphaned custom models.
+    const conn = connections.find((c) => c.provider === node.id && c.isActive !== 0)
+    if (!conn) continue
+    const psd = (conn.providerSpecificData || {}) as Record<string, unknown>
     const nodePrefix = (psd.prefix as string) || node.prefix || node.id
     const displayName = node.name || conn?.name || node.id
     const isCompatibleNode = node.type === 'openai-compatible' || node.type === 'anthropic-compatible'

@@ -26,8 +26,13 @@ var adapterCapabilityKeys = []string{"vision", "pdf", "audioInput", "videoInput"
 
 // defaultAdapterFallbackModel is the model an enabled-but-empty pool resolves to,
 // so a toggle with no explicit models is never a no-op (upstream
-// DEFAULT_FALLBACK_MODEL).
-const defaultAdapterFallbackModel = "oc/mimo-v2.6-flash-free"
+// DEFAULT_FALLBACK_MODEL). It must stay dispatchable: the provider must carry it
+// in its catalog and it must serve the capability the pool was declared for.
+// `oc/mimo-v2.6-flash-free` did neither — that id belongs to `ocg`/`opencode-go`,
+// so the vision pool injected a model `oc` cannot serve, the call failed, and the
+// request fell back to a text-only combo member that answered "cannot read
+// images". `TestDefaultAdapterFallbackModelIsDispatchableAndVisionCapable` pins it.
+const defaultAdapterFallbackModel = "oc/muse-spark-1.3-contributor-free"
 
 // upgradeLegacyAdapterModel normalizes the retired pool model id.
 func upgradeLegacyAdapterModel(m string) string {
