@@ -111,3 +111,17 @@ Pick one:
 		t.Fatalf("choices = %+v", ch)
 	}
 }
+
+func TestParseHerdrDialog_spanishArrowPrefix(t *testing.T) {
+	screen := "¿El lunes es un día de fiesta?\n\n  Sí, el lunes es feriado\n-> No, el lunes es día hábil\nConfirmo: el lunes es día hábil normal.\nType your answer\nAnswer in your own words\n↑↓ navigate • Enter select • Esc cancel\n"
+	title, ch := ParseHerdrDialog(screen)
+	if title != "¿El lunes es un día de fiesta?" {
+		t.Errorf("title = %q", title)
+	}
+	if len(ch) != 2 {
+		t.Fatalf("choices = %d want 2: %+v", len(ch), ch)
+	}
+	if ch[1].Label != "No, el lunes es día hábil" {
+		t.Errorf("second = %q", ch[1].Label)
+	}
+}

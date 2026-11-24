@@ -101,6 +101,8 @@ stitch-screenshots/
 /docs/auditoriaUnificada.md
 /docs/report.md
 /docs/tabla_saldos.md
+# Telegram+Gentle-shell module notes — local export spec (mirrored in Engram).
+/docs/TELEGRAM_GENTLE_SHELL.md
 /scripts/audit-ci.ps1
 /scripts/sync-providers.mjs
 # Personal workspace launchers - not part of the distributed project.

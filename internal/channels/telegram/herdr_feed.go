@@ -55,21 +55,39 @@ func herdrChoiceMarkup(choices []HerdrChoice) models.ReplyMarkup {
 	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
-func (s *Supervisor) sendHerdrBlockerFeed(ctx context.Context, bot *tgbot.Bot, chatID int64, event notify.Event, plain string) {
+// herdrBlockerDialog is optional preset content from the passive watcher (e.g.
+// Gentle Shell desktop feed). When choices are set, the pane is not re-parsed.
+type herdrBlockerDialog struct {
+	Title   string
+	Choices []HerdrChoice
+	Desktop *GentleDesktopAnswerTarget
+}
+
+func (s *Supervisor) sendHerdrBlockerFeed(ctx context.Context, bot *tgbot.Bot, chatID int64, event notify.Event, plain string, preset ...herdrBlockerDialog) {
 	if !herdrTelegramRelay() {
 		s.send(ctx, bot, chatID, plain)
 		return
 	}
-	screen, err := readHerdrAgentScreen(ctx)
-	if err != nil {
-		screen = event.Detail
+	var dialogTitle string
+	var choices []HerdrChoice
+	if len(preset) > 0 && len(preset[0].Choices) > 0 {
+		dialogTitle = strings.TrimSpace(preset[0].Title)
+		choices = preset[0].Choices
+	} else {
+		screen, err := readHerdrAgentScreen(ctx)
+		if err != nil {
+			screen = event.Detail
+		}
+		dialogTitle, choices = ParseHerdrDialog(screen)
 	}
-	dialogTitle, choices := ParseHerdrDialog(screen)
 	if len(choices) == 0 {
 		s.send(ctx, bot, chatID, plain)
 		return
 	}
 	s.rememberHerdrChoices(chatID, choices)
+	if len(preset) > 0 && preset[0].Desktop != nil {
+		s.rememberGentleDesktopAnswer(chatID, *preset[0].Desktop)
+	}
 	prompt := strings.TrimSpace(dialogTitle)
 	if prompt == "" {
 		prompt = strings.TrimSpace(event.Title)
@@ -97,6 +115,17 @@ func (s *Supervisor) handleHerdrChoiceCallback(ctx context.Context, bot *tgbot.B
 	if !ok {
 		answer("Esa opción ya no aplica.")
 		return
+	}
+	if target, ok := s.gentleDesktopAnswerTarget(chatID); ok {
+		if err := submitGentleDesktopAnswerOption(target, idx); err == nil {
+			s.clearGentleDesktopAnswer(chatID)
+			s.mu.Lock()
+			s.herdrWatchSig = ""
+			s.mu.Unlock()
+			answer("Respuesta enviada a Gentle Shell.")
+			s.wakeOrderDrain()
+			return
+		}
 	}
 	if err := sendHerdrAgentKeys(ctx, choice.Keys...); err != nil {
 		s.setError(err)

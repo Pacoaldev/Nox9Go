@@ -18,57 +18,17 @@ function Test-HerdrFocusedTarget {
     return $s -in @('focused', '@focused', '*')
 }
 
-function Resolve-HerdrAgentTarget {
-    param([string]$Configured)
-    $spec = $Configured.Trim()
-    if (-not $spec) { $spec = 'focused' }
-    if (-not (Test-HerdrFocusedTarget $spec)) {
-        return $spec
-    }
-    $r = Invoke-HerdrArgv @('agent', 'list')
-    if ($r.ExitCode -ne 0 -and -not $r.Text) {
-        Write-Error "herdr agent list failed"
-    }
-    try {
-        $payload = $r.Text | ConvertFrom-Json
-    } catch {
-        Write-Error "herdr agent list: invalid JSON: $($r.Text)"
-    }
-    $focused = @($payload.result.agents | Where-Object { $_.focused -eq $true -and $_.name })
-    if ($focused.Count -eq 0) {
-        Write-Error 'herdr: no focused agent (open gentle-shell and focus that Pi pane)'
-    }
-    if ($focused.Count -eq 1) {
-        return [string]$focused[0].name
-    }
-    $shell = @($focused | Where-Object { $_.name -ieq 'shell' })
-    if ($shell.Count -eq 1) {
-        return [string]$shell[0].name
-    }
-    $nonNox = @($focused | Where-Object { $_.name -ine 'nox' })
-    if ($nonNox.Count -eq 1) {
-        return [string]$nonNox[0].name
-    }
-    $names = ($focused | ForEach-Object { $_.name }) -join ', '
-    Write-Error "herdr: multiple focused agents ($names); focus one Pi pane"
-}
-$timeoutMs = 3600000
-if ($env:HERDR_PROMPT_TIMEOUT_MS) {
-    $timeoutMs = [int]$env:HERDR_PROMPT_TIMEOUT_MS
-}
-$waitMs = 120000
-if ($env:HERDR_AGENT_WAIT_MS) {
-    $waitMs = [int]$env:HERDR_AGENT_WAIT_MS
+function Test-HerdrPaneTarget {
+    param([string]$Target)
+    return $Target -like 'pane:*'
 }
 
-$repo = $env:DEV_REPO_ROOT
-if ($repo) {
-    $repo = $repo.Trim()
-    if (Test-Path -LiteralPath $repo -PathType Container) {
-        Set-Location -LiteralPath $repo
-    } else {
-        Write-Warning "DEV_REPO_ROOT ignored (not a directory): $repo"
+function Get-HerdrPaneIdFromTarget {
+    param([string]$Target)
+    if (Test-HerdrPaneTarget $Target) {
+        return $Target.Substring(5)
     }
+    return $null
 }
 
 function Invoke-HerdrArgv {
@@ -89,6 +49,106 @@ function Invoke-HerdrArgv {
     }
 }
 
+function Resolve-FocusedHerdrPaneTarget {
+    $r = Invoke-HerdrArgv @('pane', 'list')
+    if ($r.ExitCode -ne 0 -and -not $r.Text) {
+        return $null
+    }
+    try {
+        $payload = $r.Text | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+    $focused = @($payload.result.panes | Where-Object { $_.focused -eq $true -and $_.pane_id })
+    if ($focused.Count -eq 0) { return $null }
+    $exclude = if ($env:HERDR_AGENT_EXCLUDE_CWD) { $env:HERDR_AGENT_EXCLUDE_CWD.Trim() } else { '' }
+    if ($exclude -and $focused.Count -gt 1) {
+        $filtered = @($focused | Where-Object {
+                $cwd = [string]$_.cwd
+                ($cwd -ne $exclude) -and (-not $cwd.StartsWith($exclude, [System.StringComparison]::OrdinalIgnoreCase))
+            })
+        if ($filtered.Count -ge 1) { $focused = $filtered }
+    }
+    if ($focused.Count -ne 1) { return $null }
+    return 'pane:' + [string]$focused[0].pane_id
+}
+
+function Resolve-HerdrAgentTarget {
+    param([string]$Configured)
+    $spec = $Configured.Trim()
+    if (-not $spec) { $spec = 'focused' }
+    if (-not (Test-HerdrFocusedTarget $spec)) {
+        return $spec
+    }
+    $r = Invoke-HerdrArgv @('agent', 'list')
+    if ($r.ExitCode -ne 0 -and -not $r.Text) {
+        Write-Error "herdr agent list failed"
+    }
+    try {
+        $payload = $r.Text | ConvertFrom-Json
+    } catch {
+        Write-Error "herdr agent list: invalid JSON: $($r.Text)"
+        return
+    }
+    $focused = @($payload.result.agents | Where-Object { $_.focused -eq $true -and $_.name })
+    if ($focused.Count -eq 0) {
+        $paneTarget = Resolve-FocusedHerdrPaneTarget
+        if ($paneTarget) { return $paneTarget }
+        Write-Error 'herdr: no focused agent (open gentle-shell and focus that Pi pane)'
+    }
+    if ($focused.Count -eq 1) {
+        return [string]$focused[0].name
+    }
+    $shell = @($focused | Where-Object { $_.name -ieq 'shell' })
+    if ($shell.Count -eq 1) {
+        return [string]$shell[0].name
+    }
+    $nonNox = @($focused | Where-Object { $_.name -ine 'nox' })
+    if ($nonNox.Count -eq 1) {
+        return [string]$nonNox[0].name
+    }
+    $names = ($focused | ForEach-Object { $_.name }) -join ', '
+    Write-Error "herdr: multiple focused agents ($names); focus one Pi pane"
+}
+
+function Get-HerdrAgentNameOnPane {
+    param([string]$PaneId)
+    $r = Invoke-HerdrArgv @('agent', 'list')
+    if ($r.ExitCode -ne 0 -and -not $r.Text) { return $null }
+    try {
+        $payload = $r.Text | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+    $hit = @($payload.result.agents | Where-Object { $_.pane_id -eq $PaneId -and $_.name })
+    if ($hit.Count -ge 1) { return [string]$hit[0].name }
+    return $null
+}
+
+function Register-HerdrAgentOnPane {
+    param([string]$Target)
+    if (-not (Test-HerdrPaneTarget $Target)) { return $Target }
+    $paneId = Get-HerdrPaneIdFromTarget $Target
+    if (-not $paneId) { return $Target }
+    $existing = Get-HerdrAgentNameOnPane $paneId
+    if ($existing) { return $existing }
+    if ($env:HERDR_BOOTSTRAP_AGENT -eq '0') { return $Target }
+
+    $name = if ($env:HERDR_BOOTSTRAP_AGENT_NAME) { $env:HERDR_BOOTSTRAP_AGENT_NAME.Trim() } else { 'shell' }
+    $kind = if ($env:HERDR_AGENT_KIND) { $env:HERDR_AGENT_KIND.Trim() } else { 'pi' }
+    $timeoutMs = 30000
+    if ($env:HERDR_BOOTSTRAP_TIMEOUT_MS) { $timeoutMs = [int]$env:HERDR_BOOTSTRAP_TIMEOUT_MS }
+
+    $r = Invoke-HerdrArgv @('agent', 'start', $name, '--kind', $kind, '--pane', $paneId, '--timeout', "$timeoutMs")
+    if ($r.ExitCode -eq 0 -or $r.Text -match 'agent_started|agent_name_taken') {
+        $again = Get-HerdrAgentNameOnPane $paneId
+        if ($again) { return $again }
+        return $name
+    }
+    Write-Warning "herdr agent start failed; pane-only I/O may be blind: $($r.Text)"
+    return $Target
+}
+
 function Get-HerdrAgentStatus {
     param([string]$Name)
     try {
@@ -103,13 +163,31 @@ function Get-HerdrAgentStatus {
     return 'unknown'
 }
 
+function Invoke-HerdrTargetSendKeys {
+    param(
+        [string]$Name,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Keys
+    )
+    $pane = Get-HerdrPaneIdFromTarget $Name
+    if ($pane) {
+        return Invoke-HerdrArgv (@('pane', 'send-keys', $pane) + $Keys)
+    }
+    return Invoke-HerdrArgv (@('agent', 'send-keys', $Name) + $Keys)
+}
+
 function Invoke-HerdrAgentRead {
     param(
         [string]$Name,
         [int]$Lines,
         [string]$Source
     )
-    $r = Invoke-HerdrArgv @('agent', 'read', $Name, '--lines', "$Lines", '--source', $Source)
+    $pane = Get-HerdrPaneIdFromTarget $Name
+    $readArgv = if ($pane) {
+        @('pane', 'read', $pane, '--lines', "$Lines", '--source', $Source)
+    } else {
+        @('agent', 'read', $Name, '--lines', "$Lines", '--source', $Source)
+    }
+    $r = Invoke-HerdrArgv $readArgv
     $text = $r.Text
     if ($text -match '"code"\s*:\s*"agent_not_idle"') { return $null }
     if ($text -match '^\s*\{\s*"error"') { return $null }
@@ -119,6 +197,13 @@ function Invoke-HerdrAgentRead {
 
 function Read-AgentTail {
     param([string]$Name, [int]$Lines = 40)
+    if (Test-HerdrPaneTarget $Name) {
+        foreach ($src in @('detection', 'recent-unwrapped', 'visible')) {
+            $text = Invoke-HerdrAgentRead $Name $Lines $src
+            if ($text) { return $text }
+        }
+        return ''
+    }
     # recent-unwrapped needs an idle pane; while Pi is working, Herdr only allows visible.
     $status = Get-HerdrAgentStatus $Name
     $canUnwrap = $status -in @('idle', 'done', 'blocked')
@@ -133,6 +218,8 @@ function Read-AgentTail {
 
 function Get-HerdrAgentPaneId {
     param([string]$Name)
+    $pane = Get-HerdrPaneIdFromTarget $Name
+    if ($pane) { return $pane }
     try {
         $parsed = (Invoke-HerdrArgv @('agent', 'get', $Name)).Text | ConvertFrom-Json
         return [string]$parsed.result.agent.pane_id
@@ -167,7 +254,7 @@ function Clear-HerdrStaleMenu {
     param([string]$Name)
     $tail = (Read-AgentTail $Name 25).Trim()
     if (-not (Test-HerdrStaleMenu $tail)) { return $false }
-    Invoke-HerdrArgv @('agent', 'send-keys', $Name, 'esc') | Out-Null
+    Invoke-HerdrTargetSendKeys $Name 'esc' | Out-Null
     Start-Sleep -Milliseconds 400
     return $true
 }
@@ -181,7 +268,7 @@ function Submit-HerdrRelayAnswer {
     $pane = Get-HerdrAgentPaneId $Name
     if (-not $pane) { return $false }
     Invoke-HerdrArgv @('pane', 'send-text', $pane, $Answer) | Out-Null
-    Invoke-HerdrArgv @('agent', 'send-keys', $Name, 'Enter') | Out-Null
+    Invoke-HerdrTargetSendKeys $Name 'Enter' | Out-Null
     return $true
 }
 
@@ -203,7 +290,7 @@ function Submit-HerdrAgentPrompt {
     if ($text.ExitCode -ne 0) {
         return $text
     }
-    return Invoke-HerdrArgv @('agent', 'send-keys', $Name, 'Enter')
+    return Invoke-HerdrTargetSendKeys $Name 'Enter'
 }
 
 function Test-HerdrNoiseLine {
@@ -360,10 +447,32 @@ function Write-HerdrTelegramReply {
     }
 }
 
+$timeoutMs = 3600000
+if ($env:HERDR_PROMPT_TIMEOUT_MS) {
+    $timeoutMs = [int]$env:HERDR_PROMPT_TIMEOUT_MS
+}
+$waitMs = 120000
+if ($env:HERDR_AGENT_WAIT_MS) {
+    $waitMs = [int]$env:HERDR_AGENT_WAIT_MS
+}
+
+$repo = $env:DEV_REPO_ROOT
+if ($repo) {
+    $repo = $repo.Trim()
+    if (Test-Path -LiteralPath $repo -PathType Container) {
+        Set-Location -LiteralPath $repo
+    } else {
+        Write-Warning "DEV_REPO_ROOT ignored (not a directory): $repo"
+    }
+}
+
 # Herdr often keeps Pi on "idle" even after a finished turn, so --until done can
 # time out while the panel already answered. Snapshot terminal text before submit.
 $target = Resolve-HerdrAgentTarget $target
-Invoke-HerdrArgv @('agent', 'focus', $target) | Out-Null
+$target = Register-HerdrAgentOnPane $target
+if (-not (Test-HerdrPaneTarget $target)) {
+    Invoke-HerdrArgv @('agent', 'focus', $target) | Out-Null
+}
 Clear-HerdrStaleMenu $target | Out-Null
 $before = (Read-AgentTail $target).Trim()
 

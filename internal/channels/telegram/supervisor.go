@@ -161,6 +161,8 @@ type Supervisor struct {
 	lastDev map[int64]string
 	// herdrChoices holds the last blocker button mapping per chat (Telegram → send-keys).
 	herdrChoices map[int64][]HerdrChoice
+	// gentleDesktopAnswers maps Telegram answers to Gentle Shell desktop inbox targets.
+	gentleDesktopAnswers map[int64]GentleDesktopAnswerTarget
 	// herdrWatchSig dedupes passive watcher blocker notifications per dialog.
 	herdrWatchSig string
 	// herdrWatchErr suppresses repeating the same watcher fault on Last error.

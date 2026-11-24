@@ -11,6 +11,7 @@
     no_token: 'Bot token is missing',
     no_allowlist: 'No authorized users yet',
     disabled: 'Channel is disabled',
+    error: 'Channel error',
   }
 
   let status = $state<TelegramChannelStatus | null>(null)
@@ -39,7 +40,12 @@
     try {
       status = await api.getTelegramChannel()
     } catch (e) {
-      error = e instanceof ApiError ? e.message : 'Could not read the channel settings.'
+      error =
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error && e.message.trim()
+            ? e.message
+            : 'Could not read the channel settings.'
     } finally {
       loading = false
     }

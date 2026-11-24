@@ -125,6 +125,9 @@ func collectHerdrMenuLines(lines []string, footer int) []string {
 		if strings.HasSuffix(t, "?") && !strings.Contains(lines[i], "→") {
 			break
 		}
+		if isHerdrOptionNoise(strings.TrimSpace(lines[i])) {
+			continue
+		}
 		block = append([]string{lines[i]}, block...)
 	}
 	return block
@@ -174,7 +177,7 @@ func stripCursorGlyph(line string) (label string, selected bool, ok bool) {
 	if trim == "" || isHerdrOptionNoise(trim) || strings.HasSuffix(trim, "?") {
 		return "", false, false
 	}
-	for _, g := range []string{"→", "›", "❯", ">"} {
+	for _, g := range []string{"→", "->", "›", "❯", ">"} {
 		if strings.HasPrefix(trim, g) {
 			label = strings.TrimSpace(strings.TrimPrefix(trim, g))
 			if label == "" {
@@ -216,10 +219,28 @@ func isHerdrOptionNoise(s string) bool {
 	if strings.Contains(low, "agente bloqueado") {
 		return true
 	}
-	if strings.Contains(low, "type your answer") || strings.Contains(low, "waiting for input") {
+	if strings.Contains(low, "type your answer") || strings.Contains(low, "answer in your own words") {
+		return true
+	}
+	if strings.Contains(low, "escribí tu respuesta") || strings.Contains(low, "escribe tu respuesta") {
+		return true
+	}
+	if strings.HasPrefix(low, "confirmo:") || strings.HasPrefix(low, "confirm:") {
+		return true
+	}
+	if strings.Contains(low, "waiting for input") {
 		return true
 	}
 	return false
+}
+
+// HerdrAwaitingFreeTextAnswer reports Pi free-text prompts (not only cursor menus).
+func HerdrAwaitingFreeTextAnswer(screen string) bool {
+	low := strings.ToLower(screen)
+	return strings.Contains(low, "type your answer") ||
+		strings.Contains(low, "answer in your own words") ||
+		strings.Contains(low, "escribí tu respuesta") ||
+		strings.Contains(low, "escribe tu respuesta")
 }
 
 func dedupeHerdrChoices(choices []HerdrChoice) []HerdrChoice {
@@ -412,6 +433,20 @@ func splitPiParenChoiceOptions(inner string) []string {
 		return out
 	}
 	return []string{strings.TrimSpace(inner)}
+}
+
+func herdrFreeTextPromptTitle(screen string) string {
+	lines := splitLines(screen)
+	for i := len(lines) - 1; i >= 0 && i >= len(lines)-40; i-- {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || isHerdrOptionNoise(t) {
+			continue
+		}
+		if strings.HasSuffix(t, "?") {
+			return t
+		}
+	}
+	return ""
 }
 
 func truncateHerdrLabel(s string, maxRunes int) string {

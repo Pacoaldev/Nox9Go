@@ -71,26 +71,65 @@ func (s *Supervisor) tickHerdrPassiveWatch(ctx context.Context, bot *tgbot.Bot, 
 		return
 	}
 
-	agent, err := ResolveHerdrAgentName(ctx, config.HerdrAgentTarget())
+	if feed, feedOK := readGentleDesktopBlockedQuestion(); feedOK {
+		ioTarget, err := resolveHerdrIOTarget(ctx)
+		if err != nil {
+			s.noteHerdrWatchProblem(err)
+			ioTarget = herdrIOTarget{agent: "shell", pane: "gentle-desktop-feed"}
+		}
+		s.pushHerdrPassiveBlocker(ctx, bot, repo, cfg, ioTarget, feed.Title, feed.Choices, feed.Title, feed.ToolCallID, herdrBlockerDialog{
+			Title:   feed.Title,
+			Choices: feed.Choices,
+			Desktop: &GentleDesktopAnswerTarget{
+				AgentDir:   feed.AgentDir,
+				SessionID:  feed.SessionID,
+				ToolCallID: feed.ToolCallID,
+			},
+		})
+		return
+	}
+
+	ioTarget, err := resolveHerdrIOTarget(ctx)
 	if err != nil {
 		s.noteHerdrWatchProblem(err)
 		return
 	}
 
-	screen, err := readHerdrAgentScreen(ctx)
+	screen, err := readHerdrAgentScreenForWatch(ctx)
 	if err != nil {
 		s.noteHerdrWatchProblem(err)
 		return
 	}
+	s.mu.Lock()
+	s.herdrWatchErr = ""
+	s.mu.Unlock()
+
+	herdrStatus := herdrAgentStatusForTarget(ctx, ioTarget)
 	title, choices := ParseHerdrDialog(screen)
-	if len(choices) == 0 {
+	awaitingText := HerdrAwaitingFreeTextAnswer(screen)
+	blocked := herdrStatus == "blocked"
+	if len(choices) == 0 && !awaitingText && !blocked {
 		s.mu.Lock()
 		s.herdrWatchSig = ""
 		s.mu.Unlock()
 		return
 	}
+	if title == "" && (awaitingText || blocked) {
+		title = herdrFreeTextPromptTitle(screen)
+	}
+	if title == "" && blocked {
+		title = "Herdr está bloqueado"
+	}
 
-	sig := herdrBlockerSignature(agent, title, choices)
+	detail := firstNonEmpty(strings.TrimSpace(title), strings.TrimSpace(screen))
+	s.pushHerdrPassiveBlocker(ctx, bot, repo, cfg, ioTarget, title, choices, detail, "", herdrBlockerDialog{})
+}
+
+func (s *Supervisor) pushHerdrPassiveBlocker(ctx context.Context, bot *tgbot.Bot, repo Repo, cfg *Config, ioTarget herdrIOTarget, title string, choices []HerdrChoice, detail, stableQuestionID string, preset herdrBlockerDialog) {
+	sig := herdrBlockerSignature(ioTarget.agent+ioTarget.pane, title, choices)
+	if stableQuestionID != "" {
+		sig = "gentle-feed:" + stableQuestionID
+	}
 	s.mu.Lock()
 	if sig == s.herdrWatchSig {
 		s.mu.Unlock()
@@ -100,10 +139,10 @@ func (s *Supervisor) tickHerdrPassiveWatch(ctx context.Context, bot *tgbot.Bot, 
 	s.mu.Unlock()
 
 	event := notify.Event{
-		At:    time.Now().UTC(),
-		Kind:  notify.KindBlocker,
-		Title: "Agente bloqueado",
-		Detail: firstNonEmpty(strings.TrimSpace(title), strings.TrimSpace(screen)),
+		At:     time.Now().UTC(),
+		Kind:   notify.KindBlocker,
+		Title:  "Agente bloqueado",
+		Detail: strings.TrimSpace(detail),
 	}
 	plain := event.Render()
 	for _, chatID := range cfg.AllowedUserIDs {
@@ -115,6 +154,10 @@ func (s *Supervisor) tickHerdrPassiveWatch(ctx context.Context, bot *tgbot.Bot, 
 		if !feedEventForwards(feedScope(scopeVal), event) {
 			continue
 		}
-		s.sendHerdrBlockerFeed(ctx, bot, chatID, event, plain)
+		if len(preset.Choices) > 0 {
+			s.sendHerdrBlockerFeed(ctx, bot, chatID, event, plain, preset)
+		} else {
+			s.sendHerdrBlockerFeed(ctx, bot, chatID, event, plain)
+		}
 	}
 }

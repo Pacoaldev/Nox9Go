@@ -51,7 +51,11 @@ func SharedTelegramRuntime() *TelegramRuntime {
 type sharedTelegramStatus struct{}
 
 func (sharedTelegramStatus) Status() (state, botUsername, lastError string) {
-	return SharedTelegramRuntime().Status()
+	rt := SharedTelegramRuntime()
+	if rt == nil {
+		return string(telegram.StateDisabled), "", ""
+	}
+	return rt.Status()
 }
 
 // startTelegramChannel wires and starts the channel for a booted gateway.
