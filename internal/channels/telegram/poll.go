@@ -24,6 +24,7 @@ func (s *Supervisor) poll(ctx context.Context, repo Repo) {
 	}
 
 	bot, err := tgbot.New(token,
+		tgbot.WithSkipGetMe(),
 		tgbot.WithDefaultHandler(s.handleUpdate),
 		tgbot.WithHTTPClient(telegramPollTimeout, telegramPollHTTPClient(telegramPollTimeout)),
 		// The library logs every update payload by default, which would put
