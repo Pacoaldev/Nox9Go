@@ -29,6 +29,10 @@ var telegramChannelTables = []tableDef{
 			// conversation, 'agent' means a task instruction. It defaults to
 			// empty so an existing row reads as chat without a migration.
 			{"mode", "TEXT NOT NULL DEFAULT ''"},
+			// paused is the operator's explicit stop switch, independent of
+			// token and allowlist. It defaults to 0 so an existing row reads
+			// unpaused without a migration, the same way mode does.
+			{"paused", "INTEGER NOT NULL DEFAULT 0"},
 			{"apiKeyWrappedDEK", "TEXT NOT NULL DEFAULT ''"},
 			{"apiKeyCiphertext", "TEXT NOT NULL DEFAULT ''"},
 			{"updatedAt", "TEXT NOT NULL DEFAULT ''"},
@@ -100,6 +104,10 @@ type TelegramChannelConfig struct {
 	// present AND at least one user is allowed. Either missing means the bot
 	// answers nobody, which is the fail-closed contract.
 	Enabled bool `json:"enabled"`
+	// Paused reports the operator's explicit stop decision. It overrides
+	// Enabled: a paused channel stays stopped even with a token and an
+	// allowlist, because the operator asked for it by name.
+	Paused bool `json:"paused"`
 	// TokenPresent reports whether a token is stored, independent of Enabled.
 	TokenPresent bool `json:"tokenPresent"`
 	// TokenMasked is a preview such as "7712…cdef" for the operator to recognize
@@ -115,10 +123,10 @@ type TelegramChannelConfig struct {
 func (r *Repo) GetTelegramChannelConfig() (*TelegramChannelConfig, error) {
 	cfg := &TelegramChannelConfig{AllowedUserIDs: []int64{}}
 
-	var ciphertext string
+	var ciphertext, paused string
 	err := r.db.QueryRow(
-		`SELECT tokenCiphertext FROM telegramChannel WHERE id = 1`,
-	).Scan(&ciphertext)
+		`SELECT tokenCiphertext, paused FROM telegramChannel WHERE id = 1`,
+	).Scan(&ciphertext, &paused)
 	switch {
 	case err == sql.ErrNoRows:
 		// No token row: fall through to read the allowlist, which is a separate
@@ -148,6 +156,7 @@ func (r *Repo) GetTelegramChannelConfig() (*TelegramChannelConfig, error) {
 	}
 
 	cfg.TokenMasked = r.maskedTelegramToken()
+	cfg.Paused = paused == "1"
 	cfg.Enabled = cfg.TokenPresent && len(cfg.AllowedUserIDs) > 0
 	return cfg, nil
 }
@@ -343,4 +352,27 @@ func (r *Repo) maskedTelegramToken() string {
 		return strings.Repeat("•", len(runes))
 	}
 	return string(runes[:4]) + "…" + string(runes[len(runes)-4:])
+}
+
+// SetTelegramPaused stores the operator's explicit stop switch. The row is
+// created on demand so the channel can be paused before a token exists. It
+// never touches the token, the allowlist or the model: unpausing restores the
+// channel exactly as it was.
+func (r *Repo) SetTelegramPaused(paused bool) error {
+	value := 0
+	if paused {
+		value = 1
+	}
+	_, err := r.db.Exec(
+		`INSERT INTO telegramChannel (id, paused, updatedAt)
+		 VALUES (1, ?, datetime('now'))
+		 ON CONFLICT(id) DO UPDATE SET
+		   paused = excluded.paused,
+		   updatedAt = excluded.updatedAt`,
+		value,
+	)
+	if err != nil {
+		return fmt.Errorf("set telegram paused: %w", err)
+	}
+	return nil
 }

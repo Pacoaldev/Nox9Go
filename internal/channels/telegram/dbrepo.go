@@ -29,6 +29,7 @@ func (r *DBRepo) GetTelegramChannelConfig() (*Config, error) {
 	}
 	return &Config{
 		Enabled:        stored.Enabled,
+		Paused:         stored.Paused,
 		TokenPresent:   stored.TokenPresent,
 		TokenMasked:    stored.TokenMasked,
 		AllowedUserIDs: stored.AllowedUserIDs,

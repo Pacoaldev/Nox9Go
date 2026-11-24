@@ -30,6 +30,7 @@ func decodeTelegramBody(r *http.Request, dst any) error {
 // just stored.
 type telegramStatus struct {
 	Enabled        bool    `json:"enabled"`
+	Paused         bool    `json:"paused"`
 	TokenPresent   bool    `json:"tokenPresent"`
 	TokenMasked    string  `json:"tokenMasked"`
 	AllowedUserIDs []int64 `json:"allowedUserIds"`
@@ -73,6 +74,7 @@ func (h *DashboardHandler) HandleGetTelegramChannel(w http.ResponseWriter, r *ht
 
 	status := telegramStatus{
 		Enabled:        cfg.Enabled,
+		Paused:         cfg.Paused,
 		TokenPresent:   cfg.TokenPresent,
 		TokenMasked:    cfg.TokenMasked,
 		AllowedUserIDs: cfg.AllowedUserIDs,
@@ -86,6 +88,10 @@ func (h *DashboardHandler) HandleGetTelegramChannel(w http.ResponseWriter, r *ht
 		// The fail-closed gate reports its own reason: an operator looking at a
 		// stopped bot needs to know which of the two conditions is missing.
 		status.State = "no_allowlist"
+	} else if cfg.Paused {
+		// The named reason for a stopped channel: the operator paused it, not
+		// a missing token or allowlist.
+		status.State = "paused"
 	} else if cfg.Enabled {
 		status.State = "running"
 	}
@@ -104,6 +110,27 @@ func (h *DashboardHandler) HandleGetTelegramChannel(w http.ResponseWriter, r *ht
 	}
 
 	handlerutil.WriteJSON(w, http.StatusOK, status)
+}
+
+// HandleSetTelegramPaused stores the operator's stop switch and reconciles the
+// channel. It is the dashboard's ON/OFF for the poll loop: OFF stops the loop
+// while the token and the allowlist stay stored, so flipping it back ON
+// restores the channel exactly as it was.
+func (h *DashboardHandler) HandleSetTelegramPaused(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Paused bool `json:"paused"`
+	}
+	if err := decodeTelegramBody(r, &req); err != nil {
+		handlerutil.WriteJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.Repo.SetTelegramPaused(req.Paused); err != nil {
+		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.reconcileTelegramChannel()
+	h.HandleGetTelegramChannel(w, r)
 }
 
 // HandleSetTelegramToken stores the bot token and reconciles the channel.

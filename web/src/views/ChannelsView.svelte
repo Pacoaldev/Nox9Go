@@ -8,6 +8,7 @@
   // from es.json, and a hardcoded Spanish string would never be keyed.
   const STATE_LABEL: Record<string, string> = {
     running: 'Channel is active',
+    paused: 'Channel is paused',
     no_token: 'Bot token is missing',
     no_allowlist: 'No authorized users yet',
     disabled: 'Channel is disabled',
@@ -86,6 +87,21 @@
     await saveAllowlist(allowedIds.filter((existing) => existing !== id))
   }
 
+  async function togglePaused() {
+    if (!status || saving) return
+    saving = true
+    error = ''
+    notice = ''
+    try {
+      status = await api.setTelegramPaused(!status.paused)
+      notice = status.paused ? 'Channel paused.' : 'Channel resumed.'
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Could not change the channel switch.'
+    } finally {
+      saving = false
+    }
+  }
+
   async function saveAllowlist(ids: number[]) {
     saving = true
     error = ''
@@ -135,10 +151,35 @@
         <p class="mt-1 opacity-80">
           The bot answers nobody until you add your user id below.
         </p>
+      {:else if status.state === 'paused'}
+        <p class="mt-1 opacity-80">You paused it. Flip the switch below to resume.</p>
       {:else if status.state === 'running' && status.botUsername}
         <p class="mt-1 opacity-80">@{status.botUsername}</p>
       {/if}
     </div>
+
+    <section class="space-y-3 rounded-[14px] border border-border bg-surface p-5">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h2 class="text-sm font-semibold text-text-main">Channel switch</h2>
+          <p class="text-xs text-text-muted">
+            Turn the Telegram bot off without losing the stored token and users. One bot
+            token may serve only one polling client at a time.
+          </p>
+        </div>
+        <button
+          type="button"
+          onclick={togglePaused}
+          disabled={saving}
+          aria-pressed={status.paused}
+          class="shrink-0 rounded-[10px] border px-4 py-2 text-sm font-medium transition-colors {status.paused
+            ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+            : 'border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'}"
+        >
+          {status.paused ? 'Turn ON' : 'Turn OFF'}
+        </button>
+      </div>
+    </section>
 
     <section class="space-y-3 rounded-[14px] border border-border bg-surface p-5">
       <div>

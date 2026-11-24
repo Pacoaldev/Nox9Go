@@ -255,6 +255,7 @@ func SetupDashboardRoutesWithTelegram(r chi.Router, repo *db.Repo, chatH *chat.C
 	r.Get("/api/channels/telegram/models", dashH.HandleTelegramModels)
 	r.Get("/api/dev/status", dashH.HandleDevStatus)
 	r.Put("/api/channels/telegram/token", dashH.HandleSetTelegramToken)
+	r.Put("/api/channels/telegram/paused", dashH.HandleSetTelegramPaused)
 	r.Put("/api/channels/telegram/allowlist", dashH.HandleSetTelegramAllowlist)
 
 	// Top-bar and semaphore status snapshot

@@ -35,6 +35,10 @@ const (
 	StateNoAllowlist State = "no_allowlist"
 	// StateRunning means the poll loop is active.
 	StateRunning State = "running"
+	// StatePaused means the operator stopped the channel on purpose: token and
+	// allowlist are in place, but the explicit pause switch is on. Keeping it
+	// distinct from disabled keeps the dashboard honest about who stopped it.
+	StatePaused State = "paused"
 	// StateError means the loop could not start, typically a rejected token.
 	// A fault inside a running loop is reported as LastError and leaves the
 	// state as StateRunning: the channel still works, and nothing but a restart
@@ -46,6 +50,7 @@ const (
 // mirrors the storage read model without leaking the token.
 type Config struct {
 	Enabled        bool    `json:"enabled"`
+	Paused         bool    `json:"paused"`
 	TokenPresent   bool    `json:"tokenPresent"`
 	TokenMasked    string  `json:"tokenMasked,omitempty"`
 	AllowedUserIDs []int64 `json:"allowedUserIds"`
@@ -262,6 +267,14 @@ func (s *Supervisor) Reconcile(ctx context.Context) {
 	switch {
 	case token == "":
 		s.Stop(ctx)
+	case cfg.Paused:
+		// The operator's explicit stop wins over token and allowlist: the
+		// channel stays down even though it could run, and unpausing comes
+		// back through this same reconcile.
+		s.stopLoop()
+		s.mu.Lock()
+		s.status = Status{State: StatePaused}
+		s.mu.Unlock()
 	case len(cfg.AllowedUserIDs) == 0:
 		// Stop first: a token that was just stored without an allowlist must
 		// not leave a previously running loop polling for nobody.

@@ -548,11 +548,13 @@ export interface DevStatusResponse {
 
 export interface TelegramChannelStatus {
   enabled: boolean
+  /** The operator's explicit stop switch, independent of token and allowlist. */
+  paused: boolean
   tokenPresent: boolean
   tokenMasked: string
   allowedUserIds: number[]
   model: string
-  /** Why the channel is stopped: disabled | no_token | no_allowlist | running. */
+  /** Why the channel is stopped: disabled | no_token | no_allowlist | paused | running. */
   state: string
   botUsername: string
   lastError: string
@@ -2355,6 +2357,11 @@ export const api = {
     request<TelegramChannelStatus>('/api/channels/telegram/allowlist', {
       method: 'PUT',
       body: JSON.stringify({ userIds }),
+    }),
+  setTelegramPaused: (paused: boolean) =>
+    request<TelegramChannelStatus>('/api/channels/telegram/paused', {
+      method: 'PUT',
+      body: JSON.stringify({ paused }),
     }),
   // Development report. Reads a checkout configured with DEV_REPO_ROOT; the
   // gateway answers `configured: false` when none is set, which the panel shows

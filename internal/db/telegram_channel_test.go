@@ -232,3 +232,51 @@ func contains(haystack, needle string) bool {
 	}
 	return false
 }
+
+// S11: the pause switch persists as its own column. A fresh database reads
+// unpaused, SetTelegramPaused round-trips both directions, and pausing leaves
+// the token decision untouched so unpausing restores the channel as it was.
+func TestTelegramChannelConfig_PausedRoundTrip(t *testing.T) {
+	repo := NewRepo(openTelegramTestDB(t))
+
+	cfg, err := repo.GetTelegramChannelConfig()
+	if err != nil {
+		t.Fatalf("GetTelegramChannelConfig() error = %v", err)
+	}
+	if cfg.Paused {
+		t.Errorf("Paused = true, want false on a fresh database")
+	}
+
+	if err := repo.SetTelegramPaused(true); err != nil {
+		t.Fatalf("SetTelegramPaused(true) error = %v", err)
+	}
+	cfg, err = repo.GetTelegramChannelConfig()
+	if err != nil {
+		t.Fatalf("GetTelegramChannelConfig() error = %v", err)
+	}
+	if !cfg.Paused {
+		t.Errorf("Paused = false after SetTelegramPaused(true), want true")
+	}
+
+	// Pausing must not disturb the other settings on the row.
+	if err := repo.SetTelegramMode(ModeAgent); err != nil {
+		t.Fatalf("SetTelegramMode() error = %v", err)
+	}
+	if err := repo.SetTelegramPaused(false); err != nil {
+		t.Fatalf("SetTelegramPaused(false) error = %v", err)
+	}
+	cfg, err = repo.GetTelegramChannelConfig()
+	if err != nil {
+		t.Fatalf("GetTelegramChannelConfig() error = %v", err)
+	}
+	if cfg.Paused {
+		t.Errorf("Paused = true after SetTelegramPaused(false), want false")
+	}
+	mode, err := repo.TelegramMode()
+	if err != nil {
+		t.Fatalf("TelegramMode() error = %v", err)
+	}
+	if mode != ModeAgent {
+		t.Errorf("TelegramMode() = %q, want %q: pausing must not touch the row's other columns", mode, ModeAgent)
+	}
+}

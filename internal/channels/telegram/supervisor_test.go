@@ -16,6 +16,7 @@ type fakeRepo struct {
 	token   string
 	allowed []int64
 	model   string
+	paused  bool
 
 	// repoTarget is the checkout the development report reads, and feature is
 	// the ODD document it follows by default.
@@ -175,9 +176,34 @@ func (f *fakeRepo) DevSpool() (*notify.Spool, error) { return notify.NewSpool(f.
 func (f *fakeRepo) GetTelegramChannelConfig() (*Config, error) {
 	return &Config{
 		Enabled:        f.token != "" && len(f.allowed) > 0,
+		Paused:         f.paused,
 		TokenPresent:   f.token != "",
 		AllowedUserIDs: f.allowed,
 	}, nil
+}
+
+// S11: the operator's pause switch wins over token and allowlist. A paused
+// channel with working credentials stays down, and it reports paused rather
+// than disabled so the dashboard can show who stopped it.
+func TestSupervisor_PausedStopsChannelWithCredentials(t *testing.T) {
+	repo := &fakeRepo{token: "111:secret", allowed: []int64{601559545}, paused: true}
+	s := NewSupervisor(repo, nil)
+
+	s.Reconcile(context.Background())
+
+	if got := s.Status(); got.Running {
+		t.Errorf("Running = true while paused, want false")
+	}
+	if got := s.Status().State; got != StatePaused {
+		t.Errorf("State = %q, want %q", got, StatePaused)
+	}
+
+	// Unpausing through the same reconcile is what resumes the channel.
+	repo.paused = false
+	s.Reconcile(context.Background())
+	if got := s.Status(); !got.Running {
+		t.Errorf("Running = false after unpause, want true")
+	}
 }
 
 // S1: with no token stored the channel does not start. The supervisor reports
