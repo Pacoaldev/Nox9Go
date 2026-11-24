@@ -8,6 +8,7 @@ import (
 	json "encoding/json/v2"
 
 	"nox9go/proxy/internal/clientconfig"
+	"nox9go/proxy/internal/handlers/chat"
 	"nox9go/proxy/internal/handlerutil"
 )
 
@@ -30,10 +31,18 @@ type cliToolSettingsRequest struct {
 }
 
 // CLIToolHandler serves the per-client settings routes.
-type CLIToolHandler struct{}
+type CLIToolHandler struct {
+	ChatHandler *chat.ChatHandler
+}
 
 // NewCLIToolHandler returns a CLIToolHandler.
-func NewCLIToolHandler() *CLIToolHandler { return &CLIToolHandler{} }
+func NewCLIToolHandler(chatH ...*chat.ChatHandler) *CLIToolHandler {
+	var ch *chat.ChatHandler
+	if len(chatH) > 0 {
+		ch = chatH[0]
+	}
+	return &CLIToolHandler{ChatHandler: ch}
+}
 
 // toolFromPath pulls the client id out of `/api/cli-tools/<tool>-settings`.
 func toolFromPath(path string) string {
@@ -121,6 +130,11 @@ func (h *CLIToolHandler) HandleApply(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if adapter.ID() == "pi" && h.ChatHandler != nil {
+		if synced, syncErr := h.ChatHandler.SyncPiCatalog(r.Context()); syncErr == nil && synced {
+			result.Changed = true
+		}
 	}
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,

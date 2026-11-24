@@ -386,6 +386,7 @@ func (h *DashboardHandler) HandleSetModelAlias(w http.ResponseWriter, r *http.Re
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "model alias set")
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"success": true, "model": req.Model, "alias": req.Alias})
 }
 
@@ -400,5 +401,6 @@ func (h *DashboardHandler) HandleDeleteModelAlias(w http.ResponseWriter, r *http
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "model alias deleted")
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }

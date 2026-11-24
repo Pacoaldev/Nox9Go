@@ -181,6 +181,7 @@ func (h *DashboardHandler) HandleCreateProviderNode(w http.ResponseWriter, r *ht
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "provider node created")
 
 	handlerutil.WriteJSON(w, http.StatusCreated, map[string]any{
 		"node": ProviderNodeResponse{
@@ -307,6 +308,7 @@ func (h *DashboardHandler) HandleUpdateProviderNode(w http.ResponseWriter, r *ht
 		return
 	}
 	syncNodeConnections(h, renamedID, prefix, apiType, nodeType, baseURL, name)
+	h.syncPiCatalogBestEffort(r.Context(), "provider node updated")
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"node": ProviderNodeResponse{
 			ID:                 updated.ID,

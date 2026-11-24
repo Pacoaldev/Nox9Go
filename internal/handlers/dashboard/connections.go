@@ -482,6 +482,7 @@ func (h *DashboardHandler) HandleCreateConnection(w http.ResponseWriter, r *http
 				handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			h.syncPiCatalogBestEffort(r.Context(), "connection replaced")
 			handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 				"status":   "ok",
 				"id":       existing.ID,
@@ -495,6 +496,7 @@ func (h *DashboardHandler) HandleCreateConnection(w http.ResponseWriter, r *http
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "connection created")
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status": "ok",
@@ -611,6 +613,7 @@ func (h *DashboardHandler) HandleUpdateConnection(w http.ResponseWriter, r *http
 			handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		h.syncPiCatalogBestEffort(r.Context(), "connection status updated")
 		handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok", "id": id, "isActive": a})
 		return
 	}
@@ -718,6 +721,7 @@ func (h *DashboardHandler) HandleUpdateConnection(w http.ResponseWriter, r *http
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "connection updated")
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok", "id": id})
 }
@@ -807,6 +811,7 @@ func (h *DashboardHandler) HandleDeleteConnection(w http.ResponseWriter, r *http
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "connection deleted")
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok", "id": id})
 }

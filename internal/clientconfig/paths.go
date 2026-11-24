@@ -98,18 +98,50 @@ func opencodePaths(home string) Paths {
 	}
 }
 
-// fileExists reports whether p is an existing regular file. Any error is a
-// "no": an unreadable path is not a file this should prefer.
-// piPaths resolves ~/.pi/agent/models.json against home.
+// piPaths resolves ~/.pi/agent/models.json and, when ~/.gentle-shell/agent or
+// its models.json already exists on disk, ~/.gentle-shell/agent/models.json
+// against home.
 func piPaths(home string) Paths {
 	dir := filepath.Join(home, ".pi", "agent")
 	path := filepath.Join(dir, "models.json")
+	files := []TargetFile{{Path: path, Dir: dir, Format: FormatJSONC, Purpose: "models"}}
+
+	gsDir := filepath.Join(home, ".gentle-shell", "agent")
+	gsPath := filepath.Join(gsDir, "models.json")
+	if fileExists(gsPath) || dirExists(gsDir) {
+		files = append(files, TargetFile{Path: gsPath, Dir: gsDir, Format: FormatJSONC, Purpose: "gentle-shell models"})
+	}
 	return Paths{
 		Dir:   dir,
-		Files: []TargetFile{{Path: path, Dir: dir, Format: FormatJSONC, Purpose: "models"}},
+		Files: files,
 	}
 }
 
+// PiCandidateFiles returns the candidate Pi and Gentle Shell models.json target
+// files under home (or os.UserHomeDir when home is empty).
+func PiCandidateFiles(home string) ([]TargetFile, error) {
+	if home == "" {
+		h, err := homeDir()
+		if err != nil {
+			return nil, err
+		}
+		home = h
+	}
+	piDir := filepath.Join(home, ".pi", "agent")
+	gsDir := filepath.Join(home, ".gentle-shell", "agent")
+	return []TargetFile{
+		{Path: filepath.Join(piDir, "models.json"), Dir: piDir, Format: FormatJSONC, Purpose: "pi models"},
+		{Path: filepath.Join(gsDir, "models.json"), Dir: gsDir, Format: FormatJSONC, Purpose: "gentle-shell models"},
+	}, nil
+}
+
+func dirExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
+}
+
+// fileExists reports whether p is an existing regular file. Any error is a
+// "no": an unreadable path is not a file this should prefer.
 func fileExists(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && fi.Mode().IsRegular()

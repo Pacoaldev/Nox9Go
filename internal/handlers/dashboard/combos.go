@@ -320,6 +320,7 @@ func (h *DashboardHandler) HandleAutoFreeCombo(w http.ResponseWriter, r *http.Re
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "auto free combo updated")
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status": "ok",
@@ -478,6 +479,7 @@ func (h *DashboardHandler) HandleDeleteCombo(w http.ResponseWriter, r *http.Requ
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "combo deleted")
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok", "id": id})
 }

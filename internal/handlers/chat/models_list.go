@@ -8,6 +8,7 @@ import (
 
 	json "encoding/json/v2"
 
+	"nox9go/proxy/internal/clientconfig"
 	"nox9go/proxy/internal/db"
 	"nox9go/proxy/internal/handlers/shared"
 	"nox9go/proxy/internal/models"
@@ -363,6 +364,92 @@ func (h *ChatHandler) BuildModelsListResult(ctx context.Context, mode ModelsList
 
 	data := h.buildModelsListForMode(ctx, mode, allConns, activeConns, usable)
 	return ModelsListResult{Models: data, Mode: modelsListModeString(mode), Connections: activeCount}
+}
+
+// SyncPiCatalog builds the current ModeListAll model catalogue and synchronizes
+// it into ~/.pi/agent/models.json and ~/.gentle-shell/agent/models.json when
+// those files exist and carry a NOX9GO provider block.
+func (h *ChatHandler) SyncPiCatalog(ctx context.Context) (bool, error) {
+	if h == nil || h.Repo == nil {
+		return false, nil
+	}
+	res := h.BuildModelsListResult(ctx, ModeListAll)
+	entries := make([]clientconfig.PiCatalogModel, 0, len(res.Models))
+	for _, m := range res.Models {
+		if m.ID == "" {
+			continue
+		}
+		entry := clientconfig.PiCatalogModel{
+			ID:           m.ID,
+			Name:         m.ID,
+			Object:       m.Object,
+			OwnedBy:      m.OwnedBy,
+			Capabilities: m.Capabilities,
+		}
+		if m.ContextLength != nil && *m.ContextLength > 0 {
+			entry.ContextLength = *m.ContextLength
+			entry.ContextWindow = *m.ContextLength
+		}
+		if m.MaxCompletionTokens != nil && *m.MaxCompletionTokens > 0 {
+			entry.MaxCompletionTokens = *m.MaxCompletionTokens
+			entry.MaxTokens = *m.MaxCompletionTokens
+		}
+		vision, reasoning, cw, maxOut := extractModelCapsForPi(m.Capabilities)
+		if reasoning {
+			entry.Reasoning = true
+		}
+		if vision {
+			entry.Input = []string{"text", "image"}
+		} else {
+			entry.Input = []string{"text"}
+		}
+		if entry.ContextWindow == 0 && cw > 0 {
+			entry.ContextWindow = cw
+			entry.ContextLength = cw
+		}
+		if entry.MaxTokens == 0 && maxOut > 0 {
+			entry.MaxTokens = maxOut
+			entry.MaxCompletionTokens = maxOut
+		}
+		entries = append(entries, entry)
+	}
+	return clientconfig.SyncPiCatalog("", entries)
+}
+
+func extractModelCapsForPi(raw any) (vision, reasoning bool, cw, maxOut int) {
+	switch c := raw.(type) {
+	case *providers.CapabilitiesDetail:
+		if c != nil {
+			return c.Vision, c.Reasoning, c.ContextWindow, c.MaxOutput
+		}
+	case providers.CapabilitiesDetail:
+		return c.Vision, c.Reasoning, c.ContextWindow, c.MaxOutput
+	case *providers.ComboCapabilities:
+		if c != nil {
+			return c.Vision, c.Reasoning, c.ContextWindow, c.MaxOutput
+		}
+	case providers.ComboCapabilities:
+		return c.Vision, c.Reasoning, c.ContextWindow, c.MaxOutput
+	default:
+		if raw == nil {
+			return false, false, 0, 0
+		}
+		b, err := json.Marshal(raw)
+		if err != nil {
+			return false, false, 0, 0
+		}
+		var parsed struct {
+			Vision        bool `json:"vision"`
+			Reasoning     bool `json:"reasoning"`
+			Thinking      bool `json:"thinking"`
+			ContextWindow int  `json:"contextWindow"`
+			MaxOutput     int  `json:"maxOutput"`
+		}
+		if json.Unmarshal(b, &parsed) == nil {
+			return parsed.Vision, parsed.Reasoning || parsed.Thinking, parsed.ContextWindow, parsed.MaxOutput
+		}
+	}
+	return false, false, 0, 0
 }
 
 // activeConnections filters the connection rows down to the ones the operator

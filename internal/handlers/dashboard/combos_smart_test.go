@@ -469,4 +469,40 @@ func TestNoRulesMeansNoWork(t *testing.T) {
 	}
 }
 
+func TestSmartComboCandidatesExcludesDisconnectedProviderCustomModels(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	router := setupTestRouter(repo)
+	seedSmartNode(t, repo.RawDB(), "node-kenari", "kenari", "deepseek-v4")
+
+	// Seed a custom model for a disconnected catalog provider (modelscope has no connection row)
+	if _, err := repo.RawDB().Exec(
+		`INSERT INTO kv (scope, key, value) VALUES ('customModels', 'modelscope|deepseek-r1|llm', ?)`,
+		`{"providerAlias":"modelscope","id":"deepseek-r1","type":"llm"}`,
+	); err != nil {
+		t.Fatalf("seed disconnected custom model: %v", err)
+	}
+
+	rec := postJSON(t, router, "/api/combos", map[string]any{
+		"id":         "ds-all",
+		"name":       "ds-all",
+		"models":     []string{},
+		"matchRules": []any{map[string]any{"pattern": "*deepseek*", "mode": "glob"}},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create combo = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	h := NewDashboardHandler(repo)
+	cands, err := h.smartComboCandidates(context.Background())
+	if err != nil {
+		t.Fatalf("smartComboCandidates: %v", err)
+	}
+	for _, c := range cands {
+		if c.ID == "modelscope/deepseek-r1" {
+			t.Fatalf("disconnected provider custom model leaked into candidates: %+v", c)
+		}
+	}
+}
+
 var _ = fmt.Sprintf

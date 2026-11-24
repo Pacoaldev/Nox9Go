@@ -68,24 +68,41 @@ func opencodeConfigTargetsGateway(raw []byte) bool {
 	return configTargetsGatewayByKey(raw, "baseURL")
 }
 
-// piHasNox9Go reports whether any provider in ~/.pi/agent/models.json points
-// at this gateway.
+// piHasNox9Go reports whether any provider in ~/.pi/agent/models.json or
+// ~/.gentle-shell/agent/models.json points at this gateway, or holds a
+// provider key matching ProviderKey (case-insensitively).
 func piHasNox9Go() bool {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return false
-	}
-	raw, err := os.ReadFile(filepath.Join(home, ".pi", "agent", "models.json"))
+	files, err := clientconfig.PiCandidateFiles("")
 	if err != nil {
 		return false
 	}
-	return piConfigTargetsGateway(raw)
+	for _, f := range files {
+		raw, err := os.ReadFile(f.Path)
+		if err != nil {
+			continue
+		}
+		if piConfigTargetsGateway(raw) {
+			return true
+		}
+	}
+	return false
 }
 
 // piConfigTargetsGateway scans a Pi models.json payload for a baseUrl or
-// baseURL that resolves to this gateway.
+// baseURL that resolves to this gateway, or an explicit nox9go provider entry
+// (e.g. when routed through a tunnel URL).
 func piConfigTargetsGateway(raw []byte) bool {
-	return configTargetsGatewayByKey(raw, "baseUrl") || configTargetsGatewayByKey(raw, "baseURL")
+	if configTargetsGatewayByKey(raw, "baseUrl") || configTargetsGatewayByKey(raw, "baseURL") {
+		return true
+	}
+	lower := strings.ToLower(string(raw))
+	key := `"` + strings.ToLower(ProviderKey) + `"`
+	idx := strings.Index(lower, key)
+	if idx < 0 {
+		return false
+	}
+	rest := strings.TrimSpace(lower[idx+len(key):])
+	return strings.HasPrefix(rest, ":") && strings.Contains(rest, `"baseurl"`)
 }
 
 func configTargetsGatewayByKey(raw []byte, key string) bool {

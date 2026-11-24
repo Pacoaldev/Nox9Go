@@ -426,7 +426,7 @@
                    AnalyticsView renders all four sections under one header. -->
               <AnalyticsView {connections} {providerNodes} tab={activeTab} onNavigate={(next) => navigate(next)} />
             {:else if activeTab === 'quota'}
-              <QuotaTrackerView {connections} />
+              <QuotaTrackerView {connections} onRefresh={loadData} />
             {:else if activeTab === 'token-saver'}
               <TokenSaverView {settings} onRefresh={loadData} />
             {:else if activeTab === 'cli-tools'}

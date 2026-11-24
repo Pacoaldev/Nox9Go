@@ -97,9 +97,10 @@
 
   interface Props {
     connections?: ProviderConnection[]
+    onRefresh?: () => void
   }
 
-  let { connections: initialConns = [] }: Props = $props()
+  let { connections: initialConns = [], onRefresh }: Props = $props()
 
   // ─── State ─────────────────────────────────────────────────────────────────
   let connections = $state<ProviderConnection[]>([])
@@ -561,6 +562,7 @@
     await api.updateConnection(editingConnection.id, payload)
     editingConnection = null
     await fetchConnections(page)
+    onRefresh?.()
   }
 
   function copyArn(text?: string, id?: string) {
@@ -711,6 +713,7 @@
       }
       // Reconcile page after delete (stay on page or move back if empty)
       await fetchConnections(page)
+      onRefresh?.()
     } catch (error) {
       console.error('Error deleting connection:', error)
     } finally {
@@ -725,6 +728,7 @@
       connections = connections.map((c) =>
         c.id === id ? { ...c, isActive: nextActive ? 1 : 0 } : c,
       )
+      onRefresh?.()
     } catch (error) {
       console.error('Error updating connection status:', error)
     } finally {
@@ -745,6 +749,7 @@
           }),
         ),
       )
+      onRefresh?.()
     } catch (error) {
       console.error('Error bulk toggling connections:', error)
     } finally {

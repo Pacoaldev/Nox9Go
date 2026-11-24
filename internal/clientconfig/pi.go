@@ -37,8 +37,11 @@ func (a piAdapter) Plan(opts Options) ([]FilePlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	file := paths.Files[0]
-	return []FilePlan{{File: file, Edits: a.applyEdits(file, opts)}}, nil
+	plans := make([]FilePlan, 0, len(paths.Files))
+	for _, file := range paths.Files {
+		plans = append(plans, FilePlan{File: file, Edits: a.applyEdits(file, opts)})
+	}
+	return plans, nil
 }
 
 func (a piAdapter) Apply(opts Options) (Result, error) {
@@ -54,10 +57,16 @@ func (a piAdapter) Reset(opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	edits := []Edit{
-		{KeyPath: []string{"providers", a.key}, Delete: true},
+	plans := make([]FilePlan, 0, len(paths.Files))
+	for _, file := range paths.Files {
+		plans = append(plans, FilePlan{
+			File: file,
+			Edits: []Edit{
+				{KeyPath: []string{"providers", a.key}, Delete: true},
+			},
+		})
 	}
-	return applyPlans([]FilePlan{{File: paths.Files[0], Edits: edits}}, nil)
+	return applyPlans(plans, nil)
 }
 
 func (a piAdapter) applyEdits(file TargetFile, opts Options) []Edit {

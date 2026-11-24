@@ -681,7 +681,7 @@ func SetupServerRouter(r chi.Router, repo *db.Repo, ts *TokenSaverConfig) *chat.
 		// One route per CLI client the adapters support. These write into the
 		// operator's home directory, so like Hermes they live in the dashboard
 		// group rather than behind an engine API key.
-		cliSettingsH := media.NewCLIToolHandler()
+		cliSettingsH := media.NewCLIToolHandler(engineChatH)
 		r.Get("/api/cli-tools/{tool}-settings", cliSettingsH.HandleGet)
 		r.Post("/api/cli-tools/{tool}-settings", cliSettingsH.HandleApply)
 		r.Delete("/api/cli-tools/{tool}-settings", cliSettingsH.HandleReset)

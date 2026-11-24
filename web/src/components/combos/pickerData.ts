@@ -54,54 +54,92 @@ export function resolveModelPickerGroups(
   // selectable. NOX9GO asked for the opposite: a provider the operator
   // deactivated or removed must not keep offering its models in the picker.
   const connectedProviderIds = new Set<string>()
+  const activeConnectionsByProvider = new Map<string, ProviderConnection>()
+  const providersWithConnections = new Set<string>()
   for (const c of connections) {
-    if (c.provider && c.isActive !== 0) {
+    if (!c.provider) continue
+    providersWithConnections.add(c.provider)
+    const alias = PROVIDER_ID_TO_ALIAS[c.provider]
+    if (alias) providersWithConnections.add(alias)
+    if (c.isActive !== 0) {
       connectedProviderIds.add(c.provider)
+      if (alias) connectedProviderIds.add(alias)
+      if (!activeConnectionsByProvider.has(c.provider)) {
+        activeConnectionsByProvider.set(c.provider, c)
+      }
+      if (alias && !activeConnectionsByProvider.has(alias)) {
+        activeConnectionsByProvider.set(alias, c)
+      }
     }
   }
+  const hasAnyActiveConnection = connectedProviderIds.size > 0
 
   const groups: PickerGroup[] = []
   const seenGroupIds = new Set<string>()
 
-  // 1. Catalog providers (active connections or noAuth)
+  // 1. Catalog providers (active connections only when configured; noAuth fallback only when 0 active connections exist and provider was not explicitly disabled)
   for (const catItem of PROVIDER_CATALOG) {
-    if (!isChatProvider(catItem)) {
+    if (!isChatProvider(catItem) || catItem.hidden) {
       continue
     }
     const isConnected =
-      connectedProviderIds.has(catItem.id) || (catItem.alias && connectedProviderIds.has(catItem.alias))
+      connectedProviderIds.has(catItem.id) || Boolean(catItem.alias && connectedProviderIds.has(catItem.alias))
+    const hasRows =
+      providersWithConnections.has(catItem.id) || Boolean(catItem.alias && providersWithConnections.has(catItem.alias))
+    const isExplicitlyDisabled = hasRows && !isConnected
+    if (isExplicitlyDisabled) {
+      continue
+    }
     // Only the explicit noAuth flag (upstream registry semantics): category
     // "free" providers like kiro/gemini-cli still require a connection.
+    // When at least one active connection exists, only connected providers
+    // appear in the picker (matching /v1/models ModeListAll behavior).
     const isNoAuth = catItem.noAuth === true
-    if (!isConnected && !isNoAuth) {
+    if (!isConnected && (hasAnyActiveConnection || !isNoAuth)) {
       continue
     }
     const alias = catItem.alias || PROVIDER_ID_TO_ALIAS[catItem.id] || catItem.id
+    const activeConn = activeConnectionsByProvider.get(catItem.id) || activeConnectionsByProvider.get(alias)
+    const psd = (activeConn?.providerSpecificData || {}) as { enabledModels?: unknown }
+    const enabledModelsList = Array.isArray(psd.enabledModels)
+      ? psd.enabledModels
+          .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+          .map((x) => {
+            const s = x.trim()
+            if (s.startsWith(`${alias}/`)) return s.slice(alias.length + 1)
+            if (s.startsWith(`${catItem.id}/`)) return s.slice(catItem.id.length + 1)
+            return s
+          })
+      : null
+    const enabledModelsSet = enabledModelsList && enabledModelsList.length > 0 ? new Set(enabledModelsList) : null
+
     const rawModels = getModelsByProviderId(catItem.id)
     const hardcodedIds = new Set((rawModels || []).map((m) => m.id))
     const hasHardcoded = (rawModels || []).length > 0
 
-    // Upstream parity (ModelSelectModal.js): custom models registered via
-    // /api/models/custom for this provider (only aliasName === modelId shown
-    // when hardcoded models exist — the "Add Model" button pattern).
+    // Custom models registered via /api/models/custom for this provider
+    // (matched by either storage alias or canonical provider id).
     const customs = (extras.customModels || []).filter(
-      (m) => m.providerAlias === alias && m.id && !hardcodedIds.has(m.id)
+      (m) =>
+        (m.providerAlias === alias || m.providerAlias === catItem.id) &&
+        m.id &&
+        !hardcodedIds.has(m.id)
     )
     const validCustoms = customs.filter((m) => {
-      if (!m.type || m.type === 'llm') return true
+      if (!m.type || m.type === 'llm' || m.type === 'chat') return true
       return !MEDIA_KINDS[m.type]
     })
-    const visibleCustoms = hasHardcoded
-      ? validCustoms.filter((m) => (m.name || m.id) === m.id)
-      : validCustoms
+    const visibleCustoms = validCustoms
 
     // Upstream parity: aliases stored as {aliasName: "alias/modelId"}.
     const aliasEntries = Object.entries(extras.modelAliases || {}).filter(
       ([aliasName, fullModel]) =>
         typeof fullModel === 'string' &&
-        fullModel.startsWith(`${alias}/`) &&
-        (hasHardcoded ? aliasName === fullModel.replace(`${alias}/`, '') : true) &&
-        !hardcodedIds.has(fullModel.replace(`${alias}/`, ''))
+        (fullModel.startsWith(`${alias}/`) || fullModel.startsWith(`${catItem.id}/`)) &&
+        (hasHardcoded
+          ? aliasName === fullModel.replace(`${alias}/`, '').replace(`${catItem.id}/`, '')
+          : true) &&
+        !hardcodedIds.has(fullModel.replace(`${alias}/`, '').replace(`${catItem.id}/`, ''))
     )
 
     if ((!rawModels || rawModels.length === 0) && customs.length === 0 && aliasEntries.length === 0) {
@@ -120,6 +158,7 @@ export function resolveModelPickerGroups(
 
     for (const m of rawModels || []) {
       if (!m.id || seenModelIds.has(m.id) || !isChatModel(m)) continue
+      if (enabledModelsSet && !enabledModelsSet.has(m.id)) continue
       seenModelIds.add(m.id)
       models.push({
         id: m.id,
@@ -137,31 +176,40 @@ export function resolveModelPickerGroups(
         id: m.id,
         name: m.name || m.id,
         value: `${alias}/${m.id}`,
-        caps: getModelCaps(m.id),
+        caps: getModelCaps(m.id, m),
         deprecated: isDeprecated(m.id),
       })
     }
 
     for (const [aliasName, fullModel] of aliasEntries) {
-      const modelId = (fullModel as string).replace(`${alias}/`, '')
+      const modelId = (fullModel as string).replace(`${alias}/`, '').replace(`${catItem.id}/`, '')
       if (!modelId || seenModelIds.has(modelId)) continue
       seenModelIds.add(modelId)
       models.push({
         id: modelId,
         name: aliasName,
-        value: fullModel as string,
+        value: `${alias}/${modelId}`,
         caps: getModelCaps(modelId),
         deprecated: isDeprecated(modelId),
       })
     }
 
     // Upstream parity: filter out disabled models per provider
-    // (disabled keyed by storage alias OR providerId).
-    const disabled = new Set([
+    // (disabled keyed by storage alias OR providerId, with or without prefix).
+    const rawDisabled = [
       ...((extras.disabledModels || {})[alias] || []),
       ...((extras.disabledModels || {})[catItem.id] || []),
-    ])
-    const visible = disabled.size > 0 ? models.filter((m) => !disabled.has(m.id)) : models
+    ]
+    const disabled = new Set<string>()
+    for (const d of rawDisabled) {
+      if (typeof d !== 'string') continue
+      const trimmed = d.trim()
+      if (!trimmed) continue
+      disabled.add(trimmed)
+      if (trimmed.startsWith(`${alias}/`)) disabled.add(trimmed.slice(alias.length + 1))
+      if (trimmed.startsWith(`${catItem.id}/`)) disabled.add(trimmed.slice(catItem.id.length + 1))
+    }
+    const visible = disabled.size > 0 ? models.filter((m) => !disabled.has(m.id) && !disabled.has(m.value)) : models
 
     if (visible.length > 0) {
       seenGroupIds.add(catItem.id)
@@ -193,12 +241,12 @@ export function resolveModelPickerGroups(
     const isCompatibleNode = node.type === 'openai-compatible' || node.type === 'anthropic-compatible'
 
     const registeredCustom = (extras.customModels || [])
-      .filter((m) => m.providerAlias === node.id && m.id)
+      .filter((m) => (m.providerAlias === node.id || m.providerAlias === nodePrefix) && m.id)
       .map((m) => ({
         id: m.id,
         name: m.name || m.id,
         value: `${nodePrefix}/${m.id}`,
-        caps: getModelCaps(m.id),
+        caps: getModelCaps(m.id, m),
         deprecated: Boolean(
           extras.deprecations?.[`${node.id.toLowerCase()}/${m.id.toLowerCase()}`]
         ),
@@ -230,7 +278,22 @@ export function resolveModelPickerGroups(
         }
       })
     const seen = new Set(nodeModels.map((m) => m.value))
-    const mergedModels = [...nodeModels, ...registeredCustom.filter((m) => !seen.has(m.value))]
+    const rawNodeDisabled = [
+      ...((extras.disabledModels || {})[node.id] || []),
+      ...((extras.disabledModels || {})[nodePrefix] || []),
+    ]
+    const nodeDisabled = new Set<string>()
+    for (const d of rawNodeDisabled) {
+      if (typeof d !== 'string') continue
+      const trimmed = d.trim()
+      if (!trimmed) continue
+      nodeDisabled.add(trimmed)
+      if (trimmed.startsWith(`${node.id}/`)) nodeDisabled.add(trimmed.slice(node.id.length + 1))
+      if (trimmed.startsWith(`${nodePrefix}/`)) nodeDisabled.add(trimmed.slice(nodePrefix.length + 1))
+    }
+    const mergedModels = [...nodeModels, ...registeredCustom.filter((m) => !seen.has(m.value))].filter(
+      (m) => !nodeDisabled.has(m.id) && !nodeDisabled.has(m.value)
+    )
 
     const modelsToShow =
       mergedModels.length > 0

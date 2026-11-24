@@ -215,6 +215,7 @@ func (h *DashboardHandler) reconcileSmartCombos(ctx context.Context, onlyID stri
 // combo membership is a convenience and must never turn a saved model into a
 // 500 the operator has to retry.
 func (h *DashboardHandler) reconcileSmartCombosBestEffort(ctx context.Context, reason string) {
+	defer h.syncPiCatalogBestEffort(ctx, reason)
 	res, err := h.reconcileSmartCombos(ctx, "")
 	if err != nil {
 		log.Warn("smart-combo", "reconcile failed", "reason", reason, "error", err)
@@ -226,6 +227,17 @@ func (h *DashboardHandler) reconcileSmartCombosBestEffort(ctx context.Context, r
 	log.Info("smart-combo", "membership updated",
 		"reason", reason, "combos", res.Reconciled,
 		"added", len(res.Added), "removed", len(res.Removed))
+}
+
+// syncPiCatalogBestEffort synchronizes the gateway's active model and combo
+// catalogue into Pi and Gentle Shell models.json files when ChatHandler is wired.
+func (h *DashboardHandler) syncPiCatalogBestEffort(ctx context.Context, reason string) {
+	if h == nil || h.ChatHandler == nil {
+		return
+	}
+	if _, err := h.ChatHandler.SyncPiCatalog(ctx); err != nil {
+		log.Warn("pi-sync", "catalog sync failed", "reason", reason, "error", err)
+	}
 }
 
 // smartComboCandidates builds the model set the rules may consider.
@@ -286,14 +298,21 @@ func (h *DashboardHandler) smartComboCandidates(_ context.Context) ([]smart.Cand
 
 	out := make([]smart.Candidate, 0, 256)
 	for providerID := range active {
+		if providers.KnownProviders[providers.ResolveAlias(providerID)].Hidden {
+			continue
+		}
 		alias := providers.GetProviderAlias(providerID)
 		if alias == "" {
 			alias = providerID
 		}
 		off := disabled[alias]
+		offProv := disabled[providerID]
 		for _, modelID := range providers.GetProviderModels(providerID) {
 			live := true
 			if _, isOff := off[modelID]; isOff {
+				live = false
+			}
+			if _, isOff := offProv[modelID]; isOff {
 				live = false
 			}
 			out = append(out, smart.Candidate{
@@ -344,6 +363,12 @@ func (h *DashboardHandler) smartComboCandidates(_ context.Context) ([]smart.Cand
 			// so it is not live and a rule must not keep it in a combo.
 			continue
 		}
+		if providers.KnownProviders[providers.ResolveAlias(alias)].Hidden {
+			continue
+		}
+		if !aliasReachable(alias, active, prefixToNode) {
+			continue
+		}
 		live := true
 		// The dashboard writes disabledModels under the same storage alias the
 		// custom rows use — node id for a node, alias otherwise — and /v1/models
@@ -359,7 +384,7 @@ func (h *DashboardHandler) smartComboCandidates(_ context.Context) ([]smart.Cand
 			Bare:    modelID,
 			AltID:   lo.Ternary(nodeID != alias, nodeID+"/"+modelID, ""),
 			Kind:    customModelKind(mtype),
-			Addable: live && aliasReachable(alias, active, prefixToNode),
+			Addable: live,
 			Live:    live,
 		})
 	}

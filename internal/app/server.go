@@ -128,6 +128,11 @@ func ProvideServer(p ServerParams) *http.Server {
 			startAutoPingScheduler(shutdown.Context(), p.Repo, p.ChatHandler)
 			startModelHealthLoop(shutdown.Context(), p.Repo, p.ChatHandler)
 			startCatalogSweepLoop(shutdown.Context(), p.Repo)
+			if p.ChatHandler != nil {
+				go func() {
+					_, _ = p.ChatHandler.SyncPiCatalog(shutdown.Context())
+				}()
+			}
 			// A tunnel the operator left enabled comes back after a restart.
 			// Without this, settings said "enabled" while nothing was
 			// spawning cloudflared, and the dashboard parked on "Tunnel

@@ -64,6 +64,7 @@ func (h *DashboardHandler) HandleAutoFamilyCombos(w http.ResponseWriter, r *http
 		created = append(created, family)
 	}
 	sort.Strings(created)
+	h.syncPiCatalogBestEffort(r.Context(), "auto family combos updated")
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",

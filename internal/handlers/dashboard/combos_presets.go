@@ -98,6 +98,7 @@ func (h *DashboardHandler) HandleCreateComboPresets(w http.ResponseWriter, r *ht
 		}
 		created = append(created, item.Name)
 	}
+	h.syncPiCatalogBestEffort(r.Context(), "combo presets created")
 
 	handlerutil.WriteJSON(w, http.StatusOK, map[string]any{
 		"source":       req.Source,

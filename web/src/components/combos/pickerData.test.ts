@@ -8,6 +8,28 @@ import {
 } from './pickerData'
 
 describe('pickerData', () => {
+  it('hides hidden providers from combo model picker even when connection is active', () => {
+    const groups = resolveModelPickerGroups(
+      [
+        {
+          id: 'conn-dahl',
+          provider: 'dahl',
+          authType: 'apikey',
+          name: 'Dahl',
+          email: null,
+          priority: 1,
+          isActive: 1,
+          data: '{}',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      []
+    )
+
+    assert.strictEqual(groups.find((group) => group.id === 'dahl'), undefined)
+  })
+
   it('includes connected providers and no-auth providers; inactive connections are hidden', () => {
     const connections: ProviderConnection[] = [
       {
@@ -48,9 +70,81 @@ describe('pickerData', () => {
     // an inactive connection is not selectable in this picker.
     assert.strictEqual(ccGroup, undefined)
 
+    // When active connections exist, unconnected noAuth providers stay hidden
     const ocGroup = groups.find((g) => g.id === 'opencode')
-    assert.ok(ocGroup)
-    assert.ok(ocGroup.models.length > 0)
+    assert.strictEqual(ocGroup, undefined)
+
+    // With 0 active connections and no disabled rows, noAuth providers fall back in
+    const emptyGroups = resolveModelPickerGroups([], [])
+    assert.ok(emptyGroups.find((g) => g.id === 'opencode'))
+
+    // When a noAuth provider has only inactive (isActive === 0) connection rows, it is hidden even with 0 active connections
+    const disabledNoAuthGroups = resolveModelPickerGroups(
+      [
+        {
+          id: 'conn-oc',
+          provider: 'opencode',
+          authType: 'none',
+          name: 'OpenCode',
+          email: null,
+          priority: 1,
+          isActive: 0,
+          data: '{}',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      []
+    )
+    assert.strictEqual(disabledNoAuthGroups.find((g) => g.id === 'opencode'), undefined)
+  })
+
+  it('includes custom models with display names and respects prefix-qualified disabledModels', () => {
+    const connections: ProviderConnection[] = [
+      {
+        id: 'conn-ag',
+        provider: 'antigravity',
+        authType: 'oauth',
+        name: 'My Antigravity',
+        email: null,
+        priority: 1,
+        isActive: 1,
+        data: '{}',
+        createdAt: '',
+        updatedAt: '',
+      },
+    ]
+
+    const groups = resolveModelPickerGroups(connections, [], {
+      customModels: [
+        {
+          providerAlias: 'ag',
+          id: 'gemini-4-carbon-medium',
+          name: 'Gemini 4 Carbon (Medium)',
+          type: 'llm',
+        },
+        {
+          providerAlias: 'antigravity',
+          id: 'gemini-4-hydrogen-medium',
+          name: 'Gemini 4 Hydrogen (Medium)',
+          type: 'llm',
+        },
+      ],
+      disabledModels: {
+        ag: ['ag/gemini-4-hydrogen-medium'],
+      },
+    })
+
+    const agGroup = groups.find((g) => g.id === 'antigravity')
+    assert.ok(agGroup)
+    const carbon = agGroup.models.find((m) => m.id === 'gemini-4-carbon-medium')
+    assert.ok(carbon, 'custom model with display name must be included')
+    assert.strictEqual(carbon.value, 'ag/gemini-4-carbon-medium')
+    assert.strictEqual(
+      agGroup.models.some((m) => m.id === 'gemini-4-hydrogen-medium'),
+      false,
+      'prefix-qualified disabled model must be excluded'
+    )
   })
 
   it('excludes pure media providers and non-llm models from model picker groups', () => {

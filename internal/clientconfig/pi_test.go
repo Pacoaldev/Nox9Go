@@ -249,3 +249,98 @@ func TestPiReset_RemovesOnlyOwnedProvider(t *testing.T) {
 	}
 }
 
+func TestSyncPiCatalog_UpdatesPiAndGentleShellFiles(t *testing.T) {
+	home := t.TempDir()
+	piDir := filepath.Join(home, ".pi", "agent")
+	gsDir := filepath.Join(home, ".gentle-shell", "agent")
+	for _, d := range []string{piDir, gsDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	piFile := filepath.Join(piDir, "models.json")
+	gsFile := filepath.Join(gsDir, "models.json")
+	seed := "{\n" +
+		"  // keep comment\n" +
+		"  \"providers\": {\n" +
+		"    \"nox9go\": {\n" +
+		"      \"name\": \"NOX9GO\",\n" +
+		"      \"baseUrl\": \"https://rv5xehj.abc-tunnel.us/v1\",\n" +
+		"      \"api\": \"openai-completions\",\n" +
+		"      \"modelOverrides\": { \"MinionsPRO\": { \"input\": [\"text\", \"image\"] } },\n" +
+		"      \"models\": [\n" +
+		"        { \"id\": \"stale-model\" }\n" +
+		"      ]\n" +
+		"    },\n" +
+		"    \"other\": { \"baseUrl\": \"https://api.example.com/v1\" }\n" +
+		"  }\n" +
+		"}\n"
+	for _, f := range []string{piFile, gsFile} {
+		if err := os.WriteFile(f, []byte(seed), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	catalog := []PiCatalogModel{
+		{
+			ID:                  "MinionsPRO",
+			Name:                "MinionsPRO",
+			Object:              "model",
+			OwnedBy:             "combo",
+			Reasoning:           true,
+			Input:               []string{"text", "image"},
+			ContextWindow:       128000,
+			MaxTokens:           4096,
+			ContextLength:       128000,
+			MaxCompletionTokens: 4096,
+		},
+		{
+			ID:                  "ag/gemini-4-carbon-medium",
+			Name:                "ag/gemini-4-carbon-medium",
+			Object:              "model",
+			OwnedBy:             "ag",
+			Reasoning:           true,
+			Input:               []string{"text", "image"},
+			ContextWindow:       1048576,
+			MaxTokens:           65536,
+			ContextLength:       1048576,
+			MaxCompletionTokens: 65536,
+		},
+	}
+
+	changed, err := SyncPiCatalog(home, catalog)
+	if err != nil {
+		t.Fatalf("SyncPiCatalog: %v", err)
+	}
+	if !changed {
+		t.Fatal("SyncPiCatalog must report changed on first sync")
+	}
+
+	for _, f := range []string{piFile, gsFile} {
+		got := readFile(t, f)
+		if strings.Contains(got, "stale-model") {
+			t.Fatalf("%s: stale model survived sync:\n%s", f, got)
+		}
+		if !strings.Contains(got, `"ag/gemini-4-carbon-medium"`) {
+			t.Fatalf("%s: new model missing:\n%s", f, got)
+		}
+		if !strings.Contains(got, `"modelOverrides"`) {
+			t.Fatalf("%s: modelOverrides destroyed:\n%s", f, got)
+		}
+		if !strings.Contains(got, "// keep comment") {
+			t.Fatalf("%s: comment destroyed:\n%s", f, got)
+		}
+		if !strings.Contains(got, `"other"`) {
+			t.Fatalf("%s: other provider destroyed:\n%s", f, got)
+		}
+	}
+
+	changed2, err := SyncPiCatalog(home, catalog)
+	if err != nil {
+		t.Fatalf("second SyncPiCatalog: %v", err)
+	}
+	if changed2 {
+		t.Fatal("second identical SyncPiCatalog must be a no-op")
+	}
+}
+

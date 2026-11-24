@@ -14,6 +14,7 @@
     resolveModelPickerGroups,
   } from './pickerData'
   import { EMPTY_PICKER_EXTRAS, loadPickerExtras, type ResolvedPickerExtras } from './pickerExtras'
+  import { subscribeCustomModelsChanged } from '../../lib/customModels'
   import { emailPrivacy, formatEmailLabel } from '../../lib/privacy'
   import { parseSearchQuery } from '../../lib/modelSearchFilter'
 
@@ -56,6 +57,23 @@
   let parsedQuery = $derived(parseSearchQuery(searchQuery))
   let fetchedExtras = $state<ResolvedPickerExtras>(cachedPickerExtras ?? EMPTY_PICKER_EXTRAS)
 
+  function refreshExtras() {
+    void loadPickerExtras(api).then((extras) => {
+      cachedPickerExtras = extras
+      fetchedExtras = extras
+    })
+  }
+
+  $effect(() => {
+    const unsubscribe = subscribeCustomModelsChanged(() => {
+      cachedPickerExtras = null
+      if (isOpen) {
+        refreshExtras()
+      }
+    })
+    return unsubscribe
+  })
+
   $effect(() => {
     if (isOpen) {
       searchQuery = ''
@@ -63,10 +81,7 @@
       // passthrough + custom-node rows; customs/disabled complete the merge.
       // One batch, one write: three chained fetches each published their own
       // $state and rebuilt the whole pill list on every settle (#61).
-      void loadPickerExtras(api).then((extras) => {
-        cachedPickerExtras = extras
-        fetchedExtras = extras
-      })
+      refreshExtras()
     }
   })
 
