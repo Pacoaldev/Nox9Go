@@ -4,9 +4,22 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"syscall"
 	"testing"
 )
+
+func TestTelegramAPITransport_skipsAmbientProxy(t *testing.T) {
+	tr := telegramAPITransport()
+	if tr.Proxy != nil {
+		t.Fatal("telegram API transport must not use http.ProxyFromEnvironment")
+	}
+	client := telegramPollHTTPClient(telegramPollTimeout)
+	ct, ok := client.Transport.(*http.Transport)
+	if !ok || ct.Proxy != nil {
+		t.Fatal("poll client must dial Telegram directly")
+	}
+}
 
 func TestIsTransientTelegramPollError_getUpdatesWSA(t *testing.T) {
 	under := &net.OpError{Op: "read", Err: syscall.ECONNABORTED}

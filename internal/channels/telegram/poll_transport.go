@@ -21,18 +21,26 @@ func telegramPollHTTPClient(pollTimeout time.Duration) *http.Client {
 		// Slightly longer than the Telegram timeout so a healthy long-poll can
 		// finish without the client aborting first.
 		Timeout: pollTimeout + 15*time.Second,
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          4,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
+		Transport: telegramAPITransport(),
+	}
+}
+
+// telegramAPITransport dials Telegram's API directly. An ambient HTTP_PROXY meant
+// for LLM upstreams must not intercept bot getMe/getUpdates or file downloads —
+// a broken or SOCKS-only proxy surfaces as "error sending request for url" on the
+// dashboard while PowerShell still reaches api.telegram.org.
+func telegramAPITransport() *http.Transport {
+	return &http.Transport{
+		Proxy: nil,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          4,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
 }
 

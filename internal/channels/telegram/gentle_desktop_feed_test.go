@@ -42,3 +42,35 @@ func TestReadGentleDesktopBlockedQuestion(t *testing.T) {
 		t.Fatalf("choices = %+v", choices)
 	}
 }
+
+func TestReadGentleDesktopBlockedQuestion_NotFilteredByHerdrExcludeCwd(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "agent", "desktop", "sessions")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cwd := filepath.Join(root, "NOX9GO")
+	body := `{
+  "schema":"gentle-shell.desktop-feed/v1",
+  "updatedAt":"2026-11-23T23:45:47.216Z",
+  "identity":{"cwd":"` + filepath.ToSlash(cwd) + `","agentDir":"` + filepath.ToSlash(filepath.Join(root, "agent")) + `"},
+  "activity":{"state":"blocked"},
+  "pendingQuestion":{"question":"pick one","toolCallId":"tc1","options":[
+    {"label":"A","description":"first"},
+    {"label":"B","description":"second"}
+  ]}
+}`
+	path := filepath.Join(dir, "session.json")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GENTLE_SHELL_HOME", root)
+	t.Setenv("HOME", root)
+	t.Setenv("USERPROFILE", root)
+	t.Setenv("HERDR_AGENT_EXCLUDE_CWD", cwd)
+
+	_, ok := readGentleDesktopBlockedQuestion()
+	if !ok {
+		t.Fatal("desktop feed blocker must not be dropped by HERDR_AGENT_EXCLUDE_CWD")
+	}
+}

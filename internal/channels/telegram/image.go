@@ -71,7 +71,10 @@ func (s *Supervisor) imageFromMessage(ctx context.Context, bot *tgbot.Bot, msg *
 	if err != nil {
 		return nil, fmt.Errorf("telegram: build download: %w", err)
 	}
-	resp, err := gatewayClient.Do(req)
+	resp, err := (&http.Client{
+		Timeout:   2 * time.Minute,
+		Transport: telegramAPITransport(),
+	}).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("telegram: download image: %w", err)
 	}

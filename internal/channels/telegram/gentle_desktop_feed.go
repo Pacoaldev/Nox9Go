@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"nox9go/proxy/internal/config"
 )
 
 type gentleDesktopFeed struct {
@@ -73,7 +71,9 @@ type GentleDesktopBlocker struct {
 // open ask_user_choice / ask_user_question (Herdr agent_status often stays idle).
 func readGentleDesktopBlockedQuestion() (GentleDesktopBlocker, bool) {
 	var empty GentleDesktopBlocker
-	exclude := strings.TrimSpace(config.HerdrAgentExcludeCwd())
+	// HERDR_AGENT_EXCLUDE_CWD only steers Herdr pane/agent resolution for orders;
+	// the desktop feed is the authoritative signal for ask_user_choice blockers
+	// and must not be dropped when the operator works in the excluded checkout.
 	var best *gentleDesktopFeed
 	var bestPath string
 	for _, dir := range gentleDesktopSessionDirs() {
@@ -90,13 +90,10 @@ func readGentleDesktopBlockedQuestion() (GentleDesktopBlocker, bool) {
 			if err != nil || feed.PendingQuestion == nil {
 				continue
 			}
-			if feed.Activity.State != "blocked" && feed.Activity.State != "waiting" {
-				continue
-			}
-			if exclude != "" && gentlePathsEqual(feed.Identity.Cwd, exclude) {
-				continue
-			}
-			if best == nil || feed.UpdatedAt.After(best.UpdatedAt) {
+		if feed.Activity.State != "blocked" && feed.Activity.State != "waiting" {
+			continue
+		}
+		if best == nil || feed.UpdatedAt.After(best.UpdatedAt) {
 				dup := feed
 				best = &dup
 				bestPath = path
