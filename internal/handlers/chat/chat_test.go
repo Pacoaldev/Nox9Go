@@ -1167,6 +1167,20 @@ func TestHandleChatCompletions_ComboTimeoutFailsOver(t *testing.T) {
 	}
 }
 
+func TestComboMemberTimeoutFor_OverridesAndDefaults(t *testing.T) {
+	h := &ChatHandler{}
+
+	// Default fallback when provider has no override
+	if got := h.comboMemberTimeoutFor("deepseek", nil); got != 15*time.Second {
+		t.Errorf("comboMemberTimeoutFor(deepseek) = %v, want 15s default", got)
+	}
+
+	// Fluence declares ComboMemberTimeout: 45s in KnownProviders
+	if got := h.comboMemberTimeoutFor("fluence", nil); got != 45*time.Second {
+		t.Errorf("comboMemberTimeoutFor(fluence) = %v, want 45s override", got)
+	}
+}
+
 func TestHandleChatCompletions_ComboAllFail(t *testing.T) {
 	database, cleanup := setupChatTestDB(t)
 	defer cleanup()

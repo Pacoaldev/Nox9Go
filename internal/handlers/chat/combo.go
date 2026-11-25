@@ -21,6 +21,17 @@ import (
 	"nox9go/proxy/internal/translator"
 )
 
+// comboMemberTimeoutFor returns the timeout duration to wait for the first
+// response token/commit from a combo member. Providers can declare a custom
+// ComboMemberTimeout in their ProviderConfig (e.g. Fluence on decentralized GPU
+// mesh); otherwise it defaults to comboMemberTimeout (15s).
+func (h *ChatHandler) comboMemberTimeoutFor(provider string, connData *ConnectionData) time.Duration {
+	if cfg, err := h.getProviderConfig(provider, connData); err == nil && cfg != nil && cfg.ComboMemberTimeout > 0 {
+		return cfg.ComboMemberTimeout
+	}
+	return comboMemberTimeout
+}
+
 // detectNewTurn reports whether the request body starts a new conversation
 // turn. A turn boundary is the most recent plain-text user message; a request
 // whose last user-type message is a tool result continues the current turn,
@@ -664,7 +675,8 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 					fwdCtx = internalproxy.WithZeroContentProbe(ctx, !isLastModel)
 				}
 				fwdCtx, cancelMember := context.WithCancel(fwdCtx)
-				timeoutTimer := time.AfterFunc(comboMemberTimeout, cancelMember)
+				memberTimeout := h.comboMemberTimeoutFor(modelInfo.Provider, connData)
+				timeoutTimer := time.AfterFunc(memberTimeout, cancelMember)
 				attemptWriter := comboAttemptWriter{ResponseWriter: cw, onCommit: func() { timeoutTimer.Stop() }}
 				var fwdErr error
 				if modelInfo.Provider == "mimo-free" {
@@ -688,8 +700,8 @@ func (h *ChatHandler) handleComboFallback(ctx context.Context, w http.ResponseWr
 				timeoutTimer.Stop()
 				cancelMember()
 				if memberTimedOut {
-					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", comboMemberTimeout)
-					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, comboMemberTimeout))}
+					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", memberTimeout)
+					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, memberTimeout))}
 					h.recordProviderObservation(ctx, modelInfo.Provider, modelInfo.Model, lastErr.StatusCode, lastErr.Body, nil)
 					break
 				}
@@ -1042,7 +1054,8 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 					fwdCtx = internalproxy.WithZeroContentProbe(ctx, !isLastModel)
 				}
 				fwdCtx, cancelMember := context.WithCancel(fwdCtx)
-				timeoutTimer := time.AfterFunc(comboMemberTimeout, cancelMember)
+				memberTimeout := h.comboMemberTimeoutFor(modelInfo.Provider, connData)
+				timeoutTimer := time.AfterFunc(memberTimeout, cancelMember)
 				attemptWriter := comboAttemptWriter{ResponseWriter: cw, onCommit: func() { timeoutTimer.Stop() }}
 				fwdErr := h.tryForwardWithConnection(forwardRequestParams{
 					Ctx: fwdCtx, W: attemptWriter, Provider: modelInfo.Provider, Model: modelInfo.Model,
@@ -1056,8 +1069,8 @@ func (h *ChatHandler) handleMessagesComboFallback(ctx context.Context, w http.Re
 				timeoutTimer.Stop()
 				cancelMember()
 				if memberTimedOut {
-					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", comboMemberTimeout)
-					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, comboMemberTimeout))}
+					log.Warn("combo", "member response timed out; trying next model", "provider", modelInfo.Provider, "model", modelInfo.Model, "timeout", memberTimeout)
+					lastErr = &upstreamError{StatusCode: http.StatusGatewayTimeout, Body: upstreamErrorBody(fmt.Sprintf("combo member %s/%s timed out after %s", modelInfo.Provider, modelInfo.Model, memberTimeout))}
 					h.recordProviderObservation(ctx, modelInfo.Provider, modelInfo.Model, lastErr.StatusCode, lastErr.Body, nil)
 					break
 				}

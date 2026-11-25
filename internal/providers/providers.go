@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // ProviderConfig describes how to reach an upstream provider.
@@ -40,6 +41,11 @@ type ProviderConfig struct {
 	// still resolve it and requests still route to it. The MMF entries use it
 	// because they exist to serve traffic, not to be chosen.
 	Hidden bool
+
+	// ComboMemberTimeout overrides the default comboMemberTimeout (15s) when this
+	// provider is tried as a member of a combo model. Useful for decentralized
+	// or slow cold-start networks (e.g. Fluence) where TTFT can exceed 15s.
+	ComboMemberTimeout time.Duration
 }
 
 // Bedrock protocol constants. Region is substituted per request by the executor, so the
@@ -1316,9 +1322,10 @@ var KnownProviders = map[string]ProviderConfig{
 	// Responses (/v1/responses); this entry is the OpenAI-compatible surface the
 	// dashboard configures, so UpstreamIsAnthropic stays false.
 	"fluence": {
-		BaseURL:    "https://api.fluence.cloud/v1/chat/completions",
-		AuthHeader: "Authorization",
-		AuthScheme: "bearer",
+		BaseURL:            "https://api.fluence.cloud/v1/chat/completions",
+		AuthHeader:         "Authorization",
+		AuthScheme:         "bearer",
+		ComboMemberTimeout: 45 * time.Second,
 	},
 	"sensenova": {
 		// International Token Plan endpoint (platform.sensenova.ai keys).
