@@ -4,25 +4,13 @@
 
 This is a **public** project on GitHub Actions with manually tagged releases. Everything below describes how *this* repo is worked on and is meant to work on a clean clone on any supported platform.
 
+**How this file is organized.** Sections 1–6 are day-to-day rules and commands (ground rules, quick reference, environment, verification gates, build/run/ship workflow, gotchas). Sections 7–10 are engineering standards (providers, Go, tests, frontend). Sections 11–13 are reference material (upstream parity, architecture map, provider model availability).
+
 ---
 
-## 0. Read this first — the environment
+## 1. Ground rules (read this before you touch anything)
 
-| Fact | Value |
-| :--- | :--- |
-| Remote | `https://github.com/Pacoaldev/Nox9Go.git` (public) |
-| Branches | `main` only. No `dev`, no feature branches, no PR flow. |
-| Supported platforms | Windows amd64, Linux amd64/arm64, macOS amd64/arm64 (`make cross`) |
-| Toolchain | `go 1.27`, `bun` 1.4.x, `git`, GNU Make 3.82+ (CI pins a version that has `$(file …)`) |
-| `golangci-lint` | Optional. The lint gate in CI is `go vet` plus `oxlint` on the frontend. |
-| 9router reference | No local clone required. `decolua/9router` is an optional behavioral spec read over the network when porting or auditing parity (§1). |
-| Data dir | Per platform: `%APPDATA%\nox9go` on Windows, `~/.nox9go` elsewhere. Override with `DATA_DIR`. See `internal/config` → `ResolveDataDir`. |
-| Dashboard | `http://localhost:<PORT>/dashboard` (20130 by default; the startup notice prints the real port) — the first start generates the dashboard password and prints it; the first login with it forces a new one. |
-| bun version | `web/bun.lock` is `lockfileVersion: 2`, written by bun 1.4.4. `bun install --frozen-lockfile` with an older or newer major rejects the file and rewrites it, so pin 1.4.x; CI sets `BUN_VERSION` to match. |
-| Version | `VERSION` is the single source of truth. `version.json` is generated from it (see `scripts/gen-version-manifest.mjs`). |
-| CI | `.github/workflows/ci.yml` — frontend (lockfile, ratchet, lint, build), backend (vet, test, clean build), race detector, secret scan, `govulncheck`, update-manifest check, end-to-end (Playwright). |
-
-### 0.1 How the project is worked on (read this before you touch anything)
+### 1.1 How the project is worked on
 
 - **Language.** Code, identifiers, comments, commit messages, and engineer-facing docs are in English. **Public release copy** is English too: `CHANGELOG.md` release sections, `version.json` `releaseNotes`, and GitHub release title/body. The **README** is Spanish (product audience). Dashboard strings are English literals in components, with Spanish via runtime i18n (`web/public/i18n/literals/es.json`).
 - **Minimal change by default.** Smallest change that fixes the real problem. No speculative abstractions, no "while we are here" refactors, no option menus where one path works. Over-thinking has been pushed back on before — a 15-minute detour is a defect, not diligence.
@@ -34,98 +22,226 @@ This is a **public** project on GitHub Actions with manually tagged releases. Ev
 - **Never hand-edit what a generator owns.** `web/dist` is build output. `web/public/i18n/literals/es.json` is the translation source of truth. `internal/providers/registry_models.go` is the model catalog.
 - **Report honestly.** A failed, skipped, or unavailable check is reported as such — never dressed up as a pass.
 
-### 0.2 Things that look true but are not
+### 1.2 Working agreement for AI agents
 
-- **The dashboard is embedded in the binary** (`web/embed.go` → `//go:embed all:dist`). A frontend change is not live until the SPA is rebuilt, the Go binary is rebuilt, and the service restarts (§7.2). A FE-only build changes nothing the browser sees.
+- **Read before you write.** `AGENTS.md` (this file), then `docs/ARCHITECTURE.md` / `docs/DATABASE.md` when the change touches structure, and §5 for the build, run and ship workflow.
+- **Map with the real code.** Use the code graph / `codegraph_explore` before grepping around a structural question.
+- **Delegate the exploration, keep the decision.** A read-only explorer maps the area and returns `path:line` evidence; the parent decides and writes.
+- **One writer per area.** Parallel writers only with disjoint edit surfaces; the parent owns git.
+- **Report with evidence.** Every claim about behavior cites a command that was run and its output.
+- **Leave the tree clean.** No scratch files, no stray `dist` stubs, no leftover build artifacts outside `.gitignore`.
+- **Windows runbook.** Service lifecycle, build order, and release gates live in §5; verification commands in §4.
+
+---
+
+## 2. Quick reference
+
+Commands assume PowerShell on Windows (§5); cross-platform builds go through `make cross`.
+
+| I want to… | Command |
+| :--- | :--- |
+| Run the unit tests | `go test ./...` |
+| Run the integration suite | `go test -tags=integration ./internal/integration/...` |
+| Build the dashboard SPA | `cd web; bun run build` |
+| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go.exe ./cmd/nox9go/` |
+| Build the tray | `go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/` |
+| Start everything | `powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1` |
+| Stop everything | `Stop-Process -Name "nox9go","nox9go-tray" -Force -ErrorAction SilentlyContinue` |
+| Check the service | `Invoke-WebRequest http://127.0.0.1:20130/api/health -UseBasicParsing` |
+| Type-check Svelte | `make vet-svelte` |
+| Cross-compile | `make cross` |
+| See what changed | `git status` · `git diff` · `git log --oneline -10` |
+| Commit and push | `C&P` (chat shorthand) or explicit request |
+| Regenerate the icon font | `cd web; bun run vendor:fonts` |
+
+---
+
+## 3. Environment
+
+When a catalog model does not answer, see §13 before blaming the gateway.
+| Fact | Value |
+| :--- | :--- |
+| Remote | `https://github.com/Pacoaldev/Nox9Go.git` (public) |
+| Branches | `main` only. No `dev`, no feature branches, no PR flow. |
+| Supported platforms | Windows amd64, Linux amd64/arm64, macOS amd64/arm64 (`make cross`) |
+| Toolchain | `go 1.27`, `bun` 1.4.x, `git`, GNU Make 3.82+ (CI pins a version that has `$(file …)`) |
+| `golangci-lint` | Optional. The lint gate in CI is `go vet` plus `oxlint` on the frontend. |
+| 9router reference | No local clone required. `decolua/9router` is an optional behavioral spec read over the network when porting or auditing parity (§11). |
+| Data dir | Per platform: `%APPDATA%\nox9go` on Windows, `~/.nox9go` elsewhere. Override with `DATA_DIR`. See `internal/config` → `ResolveDataDir`. |
+| Dashboard | `http://localhost:<PORT>/dashboard` (20130 by default; the startup notice prints the real port) — the first start generates the dashboard password and prints it; the first login with it forces a new one. |
+| bun version | `web/bun.lock` is `lockfileVersion: 2`, written by bun 1.4.4. `bun install --frozen-lockfile` with an older or newer major rejects the file and rewrites it, so pin 1.4.x; CI sets `BUN_VERSION` to match. |
+| Version | `VERSION` is the single source of truth. `version.json` is generated from it (see `scripts/gen-version-manifest.mjs`). |
+| CI | `.github/workflows/ci.yml` — frontend (lockfile, ratchet, lint, build), backend (vet, test, clean build), race detector, secret scan, `govulncheck`, update-manifest check, end-to-end (Playwright). |
+
+---
+
+## 4. Verification gates (local)
+
+Run what the change touches. Quote the observed result.
+
+```powershell
+# Unit tests
+go test ./...
+go test ./internal/providers/... -v
+
+# Feature integration suite (real router, real DB, fake upstreams)
+go test -tags=integration ./internal/integration/...
+# or: make test-integration   (adds -race, needs a C toolchain on Windows)
+
+# Race detector (needs cgo → a C compiler; skip and say so if absent)
+go test -race -count=1 ./...
+
+# Static analysis
+go vet ./...
+go vet -tags=integration ./internal/integration/...
+
+# Svelte type-check ratchet (blocks unresolved identifiers, pins type debt)
+make vet-svelte
+
+# Linters (not installed as binaries here; run them on demand)
+bunx oxlint --deny-warnings --cwd web
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+# Update-manifest check (what the updater trusts; CI runs the same)
+bun scripts/gen-version-manifest.mjs --check
+
+# Patch-coverage prediction — run BEFORE the push, not after Codecov says so.
+# Answers "would codecov/patch flag this?" against Go's own profile: changed
+# lines that no cover block contains are not counted, because formatting,
+# comments and declarations have no coverage either way. Pass --worktree to
+# include uncommitted changes.
+bun scripts/diff-coverage.mjs                      # base origin/main, target 67.9
+bun scripts/diff-coverage.mjs --worktree --base main
+
+# End-to-end suite (real gateway + Playwright; browsers need `bunx playwright install --with-deps chromium` once)
+cd web; bun run e2e
+
+# Embedded asset contract (compression variants, font origin, icon budget)
+go test ./web/...
+
+# Frontend weight budget after a UI change
+cd web; bun run build; cd ..
+Get-ChildItem web/dist -Recurse -File | Sort-Object Length -Descending | Select-Object -First 8 Name,Length
+
+# Portability gate — required after any go.mod change (§8.F)
+# (see the PowerShell and bash loops in §8.F)
+
+# Cross-compile check
+make cross
+```
+
+`golangci-lint` needs `web/dist` to exist or it reports `pattern dist/*: no matching files found` as a typecheck failure. Write the stub **only when there is no build**:
+```powershell
+if (-not (Test-Path web/dist/index.html)) { New-Item -ItemType Directory -Force web/dist | Out-Null; Set-Content web/dist/index.html '<!doctype html>' }
+```
+
+---
+
+## 5. Daily workflow on Windows (build, run, ship)
+
+### 5.1 Service management
+
+```powershell
+# Stop (a running .exe blocks its own overwrite)
+Stop-Process -Name "nox9go","nox9go-tray" -Force -ErrorAction SilentlyContinue
+
+# Start gateway + tray + dashboard, no console flash
+powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1
+# (or the NOX9GO.lnk shortcut on the Desktop)
+```
+
+`scripts/start-nox9go.ps1` reads `nox9go status --json` (not the human prose), starts the gateway only when `running` is false, polls the `dashboard` field of that same JSON for readiness, replaces any stale tray, and opens that URL. The address comes from the CLI, so `PORT`, `.env` and profile flags are honoured.
+
+### 5.2 Build
+
+```powershell
+# Frontend (required after any change under web/)
+cd web; bun run build; cd ..
+
+# Gateway — embed VERSION via ldflags (same as make build)
+go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go.exe ./cmd/nox9go/
+
+# Tray — -H=windowsgui is mandatory, otherwise a console window flashes
+go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
+```
+
+The version string in the binary is `updater.CurrentVersion`. A plain `go build` leaves the source default;
+`VERSION` is the value to embed; `make build` reads it from the file. If your Make predates 3.82, pass it explicitly with `-ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)"`.
+
+The top-bar update alert watches this app's own release channel only: it compares `CurrentVersion` against `version.json` on `main` (falling back to GitHub Releases for `Pacoaldev/Nox9Go`) and offers to install. `version.json` names one asset and one digest per platform; the updater refuses a platform the manifest does not list instead of falling back to another one's binary.
+
+### 5.3 Verify a change in the live service
+
+```powershell
+Invoke-WebRequest -Uri http://127.0.0.1:20130/api/health -UseBasicParsing | Select-Object StatusCode
+# 200 + {"ok":true} == the gateway is up
+```
+
+For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token` (see §6). A `401` without it and a `404` on an unknown route are the quick proof that routing and auth are wired.
+
+### 5.4 Changelog & version
+
+- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the topmost version heading. Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
+- Bump `VERSION` and regenerate `version.json` (see the release checklist below) when cutting a new release.
+- `GET /api/changelog` serves that file.
+
+#### Public release checklist (MANDATORY — every public release, no exceptions)
+
+A public release publishes binaries that users download and run. A broken or vulnerable release cannot be "un-pushed" from machines that already installed it. The full gate runs **before** tagging or creating the GitHub release.
+
+1. **Bump `VERSION`** to the new version and add a `## [X.Y.Z] - YYYY-MM-DD` entry at the top of `CHANGELOG.md` describing every change in the release.
+2. **Security scan (blocking)**: `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` must report `0 vulnerabilities` in *your code*. Fix every finding before continuing — never ship a release with a known reachable vuln.
+3. **Unit tests and static analysis**: `go test ./...` and `go vet ./...` must pass.
+4. **Portability** (if `go.mod` changed): every target in `CROSS_TARGETS` must build with `CGO_ENABLED=0` (see §8.F). Run `make cross` to produce the release binaries.
+5. **Frontend gates** (if `web/` changed): `make vet-svelte`, `cd web && bun run build`, and the weight budget check. CI also runs the e2e suite; do not ignore a red e2e.
+6. **Rebuild the release binaries** with the new `VERSION` embedded (`make cross` + the tray: `go build -ldflags "-H=windowsgui -X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go-tray.exe ./cmd/nox9go-tray/`). Verify the built binary reports the new version (`./nox9go --version` or the startup banner).
+7. **Generate the manifest and checksums**: `bun scripts/gen-version-manifest.mjs --version $(cat VERSION) --repo Pacoaldev/Nox9Go --notes "<release notes>" nox9go-windows-amd64.exe nox9go-linux-amd64 nox9go-linux-arm64 nox9go-darwin-amd64 nox9go-darwin-arm64` (this writes `version.json` and `SHA256SUMS.txt`). Then append the tray digest to `SHA256SUMS.txt`. **Release notes must be English** — `version.json` `releaseNotes`, the `--notes` string, and the GitHub release body (README Spanish is separate).
+8. **Verify `version.json`**: `bun scripts/gen-version-manifest.mjs --check` must pass. Confirm `latestVersion`, every `downloadUrls` entry, and every `sha256` hash match the assets you are about to publish.
+9. **Commit, tag, push**: commit `VERSION`, `CHANGELOG.md`, `version.json`, `go.mod`/`go.sum` (if changed). Tag `v$(cat VERSION)`. Push the commit to `main` and push the tag.
+10. **Create the GitHub release**: `gh release create "v$(cat VERSION)" <assets> SHA256SUMS.txt --title "v$(cat VERSION) — ..." --notes-file <notes-en.md>`. Use an **English** title and notes file. Attach every platform binary plus `SHA256SUMS.txt`. The asset names must carry OS and arch so the updater selects correctly.
+11. **Post-release sanity**: confirm the release page shows the new assets and digests, and that `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` (after the ~5 min CDN cache) reports the new `latestVersion` and hashes.
+
+Never publish a release from stale binaries. Never skip the `govulncheck` / test / vet gates "because it's a small fix". A "small fix" to a vulnerable dependency is exactly what justifies a release — and exactly what requires a clean, verified one.
+
+The dashboard updater reads `version.json` on `main` (fallback: GitHub Releases), requires per-platform `sha256` digests, and never selects `nox9go-tray.exe` as the gateway binary (`internal/updater/updater.go`). `raw.githubusercontent.com` caches for ~5 minutes after a manifest push.
+
+### 5.5 Git policy
+
+- **Everything lands on `main`.** There is no `dev` branch and no PR flow; changes are committed to `main` directly.
+- **Never commit unless asked** (`C&P` = commit and push, §1.1). When asked, inspect `git status` / `git diff`, stage only the intended files, write a Conventional Commit message, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
+- **Tags**: `v$(cat VERSION)` (§5.4, step 9); `v1.0.0` through `v1.1.6` at the time of writing. Legacy upstream release tags are not used in this repository.
+
+### 5.6 Syncing a feature from upstream
+
+1. **Read upstream** over the network (§11) — the counterpart file and its upstream test.
+2. **Locate the NOX9GO counterpart** using the §12 mapping table and `docs/ARCHITECTURE.md`.
+3. **Design for Go and Svelte 5** — streaming buffers, strong types, mutexes, singleflight on the backend; `$state` / `$derived` / `$effect` on the frontend.
+4. **Implement & test** — `internal/...` + `*_test.go` (table-driven, `testing.T`); `web/src/...` + `bun run build` + `make vet-svelte`.
+5. **Verify** — the gate list in §4.
+6. **Record the upstream reference** in `CHANGELOG.md`.
+
+---
+
+## 6. Things that look true but are not
+
+- **The dashboard is embedded in the binary** (`web/embed.go` → `//go:embed all:dist`). A frontend change is not live until the SPA is rebuilt, the Go binary is rebuilt, and the service restarts (§5.2). A FE-only build changes nothing the browser sees.
 - **A running `nox9go.exe` cannot be overwritten** on Windows. The order is always: stop → build → start.
 - **`nox9go.exe` with no arguments opens an interactive menu**; it does not start the gateway. Use `nox9go start`.
 - **The dashboard API requires auth.** The CLI token travels in the `x-9r-cli-token` header (`sha256(machine-id + "9r-cli-auth" + cli-secret).hex[:16]`, files in the data dir). Without it: `401`. An unknown route: `404`. That pair is the cheap way to prove the wiring is alive.
-- **CI lives in `.github/workflows/ci.yml`.** It builds the frontend from the lockfile, runs the `svelte-check` ratchet and `oxlint`, builds the SPA, then `go vet`, `go test ./...`, a clean-tree build, the race detector, `gitleaks`, `govulncheck`, the update-manifest check and the end-to-end (Playwright) suite. Most gates have a local equivalent in §8; gitleaks, the manifest check and the e2e suite are the exceptions, so for those CI is the only place they run unless the tools are installed locally.
-- **`make` must be 3.82 or newer.** The Makefile reads `VERSION` with `$(file <VERSION)`, and under 3.81 that expands to empty and embeds an empty version. Every target below works under `sh` and `cmd.exe`, but this one needs the newer Make.
+- **CI lives in `.github/workflows/ci.yml`.** It builds the frontend from the lockfile, runs the `svelte-check` ratchet and `oxlint`, builds the SPA, then `go vet`, `go test ./...`, a clean-tree build, the race detector, `gitleaks`, `govulncheck`, the update-manifest check and the end-to-end (Playwright) suite. Most gates have a local equivalent in §4, including the manifest check and the e2e suite; `gitleaks` is the exception, so CI is the only place it runs unless the tool is installed locally.
+- **`make` must be 3.82 or newer.** The Makefile reads `VERSION` with `$(file <VERSION)`, and under 3.81 that expands to empty and embeds an empty version. Every Makefile target works under `sh` and `cmd.exe`, but the version embedding needs the newer Make.
 - **A `bun` script does not run in a clean environment: bun loads the project's `.env` first.** Every key in it — `ROUTER_MASTER_KEY`, `CLOUDFLARE_ACCOUNT_ID`, the OAuth client secrets, `DEV_*` — lands in `process.env` and is inherited by anything the script spawns, so `bun` + `execFileSync("go", ["test", …])` runs the suite with credentials a plain `go test` never sees. That is a leak, and it also changes results: with `CLOUDFLARE_ACCOUNT_ID` present, `TestHandleValidateProvider_CloudflareRequiresAccountID` fails because the handler finds an account id the test just said is missing, which is a red that never appears in CI. A bun script that spawns Go tests must build its own whitelisted `env` (`scripts/diff-coverage.mjs` does).
 - **`make cross` fails on a machine whose Make path has spaces.** The recipe recurses with an unquoted `$(MAKE) -j …`, so `C:/Program Files (x86)/GnuWin32/bin/make` is split by the shell (`syntax error near unexpected token \`('`). The five `CGO_ENABLED=0` builds it would run are the same as `cross-one`; run them directly or quote `"$(MAKE)"`.
 - **`make vet-svelte` needs bun 1.4.x.** It starts with `bun install --frozen-lockfile`, and `web/bun.lock` is `lockfileVersion: 2`, so an older bun refuses the install (`UnknownLockfileVersion`) and the target fails before checking anything. With `web/node_modules` already present, `cd web && bun run ratchet:svelte` is the same check.
-- **ODD task markdown is local.** `odd/` is gitignored; `odd/tasks/*.md` are working notes on disk only. The dashboard **Development** tab reads them when `DEV_REPO_ROOT` points at your clone and `DEV_FEATURE` names a feature slug (`internal/config`, `internal/devstatus`). They are not in git and are unrelated to Engram.
+- **ODD task markdown is local.** `odd/` is gitignored; `odd/tasks/*.md` are working notes on disk only. The dashboard **Development** tab reads them when `DEV_REPO_ROOT` points at your clone and `DEV_FEATURE` names a feature slug (`internal/config`, `internal/devstatus`). They are not in git and are unrelated to Engram (the project's memory, an MCP server where completed work and problems already hit are recorded).
 - **Telegram bot token lives in the dashboard DB**, not as a central `.env` key. Configure the channel under dashboard APIs (`internal/handlers/dashboard/telegram_channel.go`).
 
-### 0.3 Provider model availability (why some models fail)
-
-A provider that "works" does not mean every model in its catalog works. Model availability is decided upstream, per account and per plan, and the gateway cannot make a gated model answer. Check the live catalog before blaming the key.
-
-- **GitHub Copilot (`github`/`gh`).** Which models the account may use is decided by Copilot's own `GET /models` response (`capabilities.type === "chat"` and `policy.state`). The `copilot-integration-id: vscode-chat` header in `internal/providers/providers.go` matches upstream, so it is not the cause. On the current account only `gpt-4.1` answers; the static catalog in `registry_models.go` lists far more (including `gpt-5.4`, which returns `400 model_not_available_for_integrator`) and is stale for this account. Upstream discovers the real set by fetching `https://api.githubcopilot.com/models` live (`open-sse/services/copilotModels.js`); NOX9GO does not port that live fetch yet. Never treat a catalog row as proof the model works.
-- **ClinePass (`clinepass`/`cp`).** The free tier rotates and is published separately at `https://api.cline.bot/api/v1/ai/cline/recommended-models` (`free[]`), not in `/api/v1/models`. The models that answer are the ones Cline serves for that key; other ids in the `/models` dump return `500 {"error":"empty response content"}`. That is upstream availability, not a header problem, and an old working set can stop working when the tier rotates.
-- **Baidu Qianfan (`baidu`/`qianfan`).** The endpoint is reachable from any egress; what looked like a region block is a route that does not exist. Qianfan serves no `GET /v2/models`, and its edge answers `403 {"code":"AccessDenied","message":"Access denied."}` for that path — which `looksEdgeBlocked` used to report as a network/region block without ever testing the credential. The chat route the gateway actually uses, `POST /v2/chat/completions`, does evaluate the key and answers `401 {"error":{"code":"invalid_iam_token"}}` for a missing, malformed or expired one. The probe now confirms a blocked `/models` answer against that chat route before claiming a block (`internal/handlers/dashboard/validate.go`: `validateGeneric` → `validateChatFallback`). A `bce-v3/...` key is time-limited, so a `401` means renew it in the Qianfan Console, not move the egress. The row exposes no metered quota endpoint, so its status comes from that same probe (`internal/handlers/dashboard/usage.go`): `available` when the key answers, `unknown` when it does not.
-- **Devin CLI (`devin-cli`/`dv`).** There is no hosted endpoint: `internal/proxy/executor/devin_cli.go` launches the locally installed `devin` CLI as an ACP (Agent Client Protocol) agent over stdio and folds the OpenAI conversation into one `session/prompt`. The credential is the CLI's own (`devin auth login`), so the provider is `NoAuth` and the router injects the virtual connection; the bridge never stores or forwards a Devin secret. Two modes exist: the default local agent (`devin acp`) and, with `DEVIN_ACP_MODE=cloud`, a Devin Cloud relay (`devin acp --cloud`). Cloud sessions need a paid quota — on a Free org `session/prompt` answers `-32001 billing_restricted out_of_quota`, which is an account limit, not a bridge bug. `--model` is forwarded only when the account's own `devin models` lists the requested id (dot/dash spelling is normalized); otherwise the agent keeps its default, so a stale catalog row (`gpt-5.4-high` on a Free team that only serves `swe-2-flash-*`) does not fail the turn. The catalog carries the CLI's own hyphenated ids (`swe-1-6`, `swe-2-flash-*`, `adaptive`) rather than the retired `swe-1.6-fast`/`swe-1.5*` rows, and only add an id after `devin models` lists it. The agent's tool-permission prompts are always declined (`cancelled`), and the workspace announced to `session/new` is a dedicated empty directory, never the gateway checkout.
+---
+- **Catalog rows are not proof a model works.** Per-account upstream gates are common; see §13.
 
 ---
 
-## 1. Upstream Source of Truth (fetch, don't look for a clone)
-
-Use this section when you need **contract parity** with the original 9router design—not for every change. NOX9GO-only features (Telegram, Development status, etc.) have no upstream counterpart; do not force-map them.
-
-When parity matters, `decolua/9router` remains the **behavioral specification**. A local clone is optional; the commands below read it over the network.
-
-- **Upstream repository**: `https://github.com/decolua/9router`
-- **Read a file**: `https://raw.githubusercontent.com/decolua/9router/main/<path>`
-- **Search upstream**: `https://api.github.com/search/code?q=<term>+repo:decolua/9router` (or `gh api search/code -f q='...' --jq '.items[].path'`)
-- **History / PRs / issues**: `gh api repos/decolua/9router/commits?per_page=20`, `gh pr list -R decolua/9router`, `gh issue list -R decolua/9router`
-- Upstream tests live in `tests/` (Vitest) — they are the fastest way to learn an edge case, a header, or a protocol nuance.
-
-### Parity Protocol
-1. **Inspect upstream before writing.** Find the counterpart of what you are about to change, read it, and read its upstream test. Do not port from memory.
-2. **Behavioral compatibility (100% contract match)**:
-   - Request/response schemas for `/v1/*` (Chat Completions, Messages, Embeddings, Audio, Models).
-   - Dashboard endpoints `/api/*` (Connections, Combos, ProxyPools, Settings, ProviderNodes, Usage, Auth).
-   - Combo expansion, model fallback, account rotation, strike-breaker quota handling.
-   - SQLite database compatibility (same schema, so both apps can share one data dir).
-3. **Record the upstream reference.** When porting a feature or fix, note the upstream commit/issue/PR in [`CHANGELOG.md`](CHANGELOG.md) under the current personal version (§7.4).
-
-### Secondary reference: OmniRoute (source of many feature requests)
-
-Some requests in this repo are **not** parity requests against `decolua/9router` — they are **port requests sourced from OmniRoute**, cited by a file path inside that repo (e.g. issue #38 cites `src/lib/usage/codexResetCredits.ts`).
-
-- **Reference repository**: `https://github.com/diegosouzapw/OmniRoute` — TypeScript/Next.js, MIT, a *sibling* gateway project (not this repo's upstream). It vendors its own `open-sse/` tree under the `@omniroute/open-sse` package alias, so its provider/executor layout is recognizable but **not** the same as upstream's.
-- **When a request cites OmniRoute**, treat the cited file as the *feature specification*. Do not guess its contents and do not port from memory.
-
-**OmniRoute Porting Protocol**
-1. **Fetch the cited file first**, from raw: `https://raw.githubusercontent.com/diegosouzapw/OmniRoute/main/<path>`. Fetch the related UI component too (dashboard modals live under its `src/app/` tree) — the port must match the dashboard *behavior*, not just the API shape.
-2. **Port the contract, not the code**: endpoints, request/response payloads, error status codes, and filter/sort rules. Never transliterate TypeScript into Go (§4.A).
-3. **Map by responsibility** — OmniRoute `src/lib/usage/*.ts` → `internal/handlers/dashboard/` + `web/src/api/client.ts`; `open-sse/executors/` → `internal/proxy/executor/`; `src/app/` components → `web/src/`.
-4. **OmniRoute is secondary.** Where it conflicts with `decolua/9router`, the §1 parity rules win; note the deliberate divergence in `CHANGELOG.md`.
-5. **Provider IDs are not portable verbatim.** OmniRoute has its own catalog. Map to `nox9go` provider IDs and obey §3 (strict provider isolation — no cross-provider aliasing or model hijacking).
-6. **Preserve upstream error semantics.** OmniRoute surfaces typed error classes with explicit status codes (e.g. `409 no_credit`); port that distinction rather than collapsing every upstream failure into one generic error.
-
----
-
-## 2. Architecture & Codebase Mapping
-
-Local docs first — they are this project's map and stay accurate:
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DATABASE.md`](docs/DATABASE.md).
-
-| Upstream path (in `decolua/9router`) | NOX9GO path | Role |
-| :--- | :--- | :--- |
-| `open-sse/translator/` | `internal/translator/` | Protocol converters (OpenAI ↔ Claude Messages ↔ Gemini ↔ Antigravity). |
-| `open-sse/executors/` | `internal/proxy/executor/`, `internal/proxy/` | Provider callers, SSE adapters, tool-ID repair, cloaking. |
-| `open-sse/providers/registry/`, `open-sse/config/providerModels.js` | `internal/providers/` | Provider catalog (`providers.go` → `KnownProviders`, 140+ entries), model catalog (`registry_models.go`), aliases (`aliases.go`), OAuth. |
-| `open-sse/handlers/chatCore.js`, `src/sse/handlers/chat.js` | `internal/handlers/chat/` | Chat routing, combo fallback, fusion, resolution, quota handling. |
-| `open-sse/rtk/` | `internal/tokensaver/` | Prompt compression (RTK), Caveman, Ponytail, ADHD system prompts. |
-| `src/app/api/` (Next.js API routes) | `internal/handlers/dashboard/`, `internal/handlers/` | Dashboard REST & SSE APIs (connections, combos, proxypools, usage, settings, `status.go`). |
-| `src/lib/db/` | `internal/db/` | SQLite layer (pure-Go `modernc.org/sqlite`). |
-| `src/app/` (Next.js React 19) | `web/src/` | Dashboard UI: **Svelte 5 + Vite 8**, embedded via `web/embed.go`. |
-| `cli/` (npm launcher) | `cmd/nox9go/` (gateway), `cmd/nox9go-tray/` (Windows tray) | Single-binary launcher, daemon and system tray. |
-| `tests/` (Vitest) | `*_test.go`, `internal/integration/` | Go unit tests and the tagged integration suite. |
-| — (NOX9GO) | `internal/tunnel/` | Cloudflare quick tunnel: enable/disable/status, state in the data dir. |
-| — (NOX9GO) | `internal/app/` | Uber Fx wiring (`DatabaseModule`, `ServerModule`, `ProvideRouter`). |
-| — (NOX9GO) | `web/src/lib/i18n/`, `web/public/i18n/literals/es.json` | Runtime i18n (en/es). |
-| — (NOX9GO) | `internal/integration/` | Feature-level suite on the real router + real DB + fake upstreams. |
-| — (NOX9GO) | `internal/channels/telegram/` | Telegram bot: Chat/Agent modes, feed, orders via dev inbox / Herdr scripts. |
-| — (NOX9GO) | `internal/devstatus/` | Development dashboard tab: ODD task progress from `DEV_REPO_ROOT` / `DEV_FEATURE`. |
-| — (NOX9GO) | `internal/handlers/dashboard/telegram_channel.go` | Dashboard API to enable/configure the Telegram channel. |
-| — (NOX9GO) | `internal/notify/` | Dev spool / side-channel notifications consumed by Telegram runners. |
-
----
-
-## 3. Provider Independence & Anti-Hardcoding Principles (STRICTLY MANDATORY)
+## 7. Provider independence & anti-hardcoding principles (STRICTLY MANDATORY)
 
 Every provider in this repository (`antigravity`, `opencode`, `claude`, `codex`, `cline`, `freebuff`, `xai`, `gemini-cli`, `qoder`, …) is **strictly distinct, independent, and isolated**. You **MUST NEVER** merge, conflate, cross-alias, or hijack one provider into another.
 
@@ -135,7 +251,7 @@ Every provider in this repository (`antigravity`, `opencode`, `claude`, `codex`,
    - A request targeted at `ag/<model>` or `antigravity/<model>` must **always and only** reach the Antigravity executor.
    - An OpenCode model (`space-bunny-free`, `muse-spark-*`, `big-pickle`, `*-free`) belongs exclusively to `opencode` (`oc/`). It must **never** be injected into, aliased to, or redirected from Antigravity.
 2. **Zero cross-provider aliasing**:
-   - `ResolveProviderProxyPoolID` and connection lookups must only resolve genuine aliases (`ag` ↔ `antigravity`, `oc` ↔ `opencode`, `cline` ↔ `clinepass`). Never fall through from `antigravity` to `opencode` or vice versa.
+   - `ResolveProviderProxyPoolID` and connection lookups must only resolve genuine aliases (`ag` ↔ `antigravity`, `oc` ↔ `opencode`, `cl` ↔ `cline`, `cp` ↔ `clinepass`, and `cline` ↔ `clinepass` for **proxy-pool strategy lookup only** — separate providers, not model hijacking). Never fall through from `antigravity` to `opencode` or vice versa.
 
 ### B. Ban on Hardcoded Model Rewrites
 - **No substring-based provider switching**:
@@ -166,7 +282,7 @@ Every provider in this repository (`antigravity`, `opencode`, `claude`, `codex`,
 
 ---
 
-## 4. Golang Engineering & Optimization Principles
+## 8. Golang engineering & optimization principles
 
 > **CORE MANDATE: Do NOT blindly transliterate JavaScript / TypeScript into Go.**
 > The observable behavior and API contract must match upstream 100%; the internal implementation must exploit Go's performance, strong typing, low memory footprint and idiomatic concurrency.
@@ -239,7 +355,7 @@ The build ships one binary per target from pure Go source. That guarantee is the
 
 ### G. Deployment Target: Small Hardware
 
-The gateway is expected to serve from a **1 vCPU box with a small memory ceiling** — an operator's router, a Raspberry Pi, the cheapest VPS available. That is why §4.A–§4.F read the way they do: stream instead of buffering, bound every cache and goroutine, reuse the pooled `http.Client`. Code can be correct and still be a regression here.
+The gateway is expected to serve from a **1 vCPU box with a small memory ceiling** — an operator's router, a Raspberry Pi, the cheapest VPS available. That is why §8.A–§8.F read the way they do: stream instead of buffering, bound every cache and goroutine, reuse the pooled `http.Client`. Code can be correct and still be a regression here.
 
 - **A change that measurably raises steady RSS or per-request CPU on that box is a regression**, even when every test passes and the wire contract is unchanged. Measure the real binary on a real request path before and after, and put the number in the commit message or PR body.
 - **Bound everything that grows.** A cache needs a size or a TTL; per-connection state needs a lifetime; a goroutine per request needs a reason to exist. An unbounded map keyed by a client-supplied value is a memory leak with a schedule.
@@ -247,11 +363,11 @@ The gateway is expected to serve from a **1 vCPU box with a small memory ceiling
 
 ---
 
-## 5. Idiomatic Go Unit Testing Convention (`testing.T`)
+## 9. Idiomatic Go unit testing convention (`testing.T`)
 
 All unit tests **MUST** use the standard library `testing` package. Do **NOT** introduce heavy external BDD frameworks (Ginkgo/Gomega, testify suite) to keep `go.mod` clean, compilation fast and the suite uniform across packages.
 
-This rule is about test *style*, not about dependencies in general: it forbids adopting a BDD framework as the way tests are written, and says nothing against a new runtime dependency that satisfies §4.F. §4.F governs what may enter `go.mod`; this section governs how tests are shaped once it is.
+This rule is about test *style*, not about dependencies in general: it forbids adopting a BDD framework as the way tests are written, and says nothing against a new runtime dependency that satisfies §8.F. §8.F governs what may enter `go.mod`; this section governs how tests are shaped once it is.
 
 ### A. Table-Driven Tests Pattern
 For functions with multiple inputs, edge cases or status transformations, always structure tests as a table:
@@ -315,7 +431,7 @@ Unit tests call handlers directly or mount a hand-built router, so they cannot s
 
 ---
 
-## 6. Frontend Engineering & Svelte 5 Standards (`web/`)
+## 10. Frontend engineering & Svelte 5 standards (`web/`)
 
 The dashboard is built with **Svelte 5 + Vite 8 + TypeScript + Tailwind CSS**, compiled to `web/dist` and embedded into the Go binary via `web/embed.go` (`//go:embed all:dist`).
 
@@ -408,13 +524,13 @@ Never widen the baseline to make a failure disappear — fix the error, or land 
 
 ### F. Client Weight Budget
 
-The dashboard is embedded in the binary and served by the same small box, usually to a phone. Weight is a review criterion here, not a matter of taste. Note the axis: §4.F governs what may enter `go.mod`; this governs what ships to the browser.
+The dashboard is embedded in the binary and served by the same small box, usually to a phone. Weight is a review criterion here, not a matter of taste. Note the axis: §8.F governs what may enter `go.mod`; this governs what ships to the browser.
 
 Measured on `main` + the first-paint work, 2026-10-21 (`cd web && bun run build`, then `du -sh dist`):
 
 - `dist/` total: **4.6 MB**
 - JS bundle: 1.2 MB raw / **232 KB brotli** · CSS: 115 KB raw / **15 KB brotli** · Material Symbols woff2: **349 KB** · `dist/providers` artwork: 2.2 MB (only the views that render it)
-- The `.br`/`.gz` siblings are pre-compressed build output, not extra weight on the wire — see §6.G
+- The `.br`/`.gz` siblings are pre-compressed build output, not extra weight on the wire — see §10.I
 
 - **Report the numbers for a UI change**: `bun run build`, then `du -sh dist` and the largest files. A few percent of drift is noise; a larger jump needs a reason.
 - **A new runtime dependency has to pay for itself.** Icon packs, chart libraries, date/utility bundles and animation frameworks are the usual offenders. State what it buys and what it adds.
@@ -423,7 +539,7 @@ Measured on `main` + the first-paint work, 2026-10-21 (`cd web && bun run build`
 
 ### G. First-Paint Budget: Origin, Fonts, Compression
 
-§6.F is about what the bundle weighs. This is about what the browser must do to *show* it, and it exists because a dashboard that took 21 seconds to appear on a first visit was shipped and nobody measured it.
+§10.H is about what the bundle weighs. This is about what the browser must do to *show* it, and it exists because a dashboard that took 21 seconds to appear on a first visit was shipped and nobody measured it.
 
 The symptom is the `Connecting to NOX9GO Localhost Gateway (:20130)...` screen hanging on the first dashboard open. **Before blaming the gateway, measure the client side.** The backend is almost never the cause: every boot endpoint answers in under 5 ms. The delay is in the bytes and round trips before the app mounts.
 
@@ -503,178 +619,78 @@ Skipping step 2 or 3 leaves the old dashboard served, no matter what the browser
 
 ---
 
-## 7. Daily Workflow on Windows (build, run, ship)
+## 11. Upstream source of truth (fetch, don't look for a clone)
 
-### 7.1 Service management
+Use this section when you need **contract parity** with the original 9router design—not for every change. NOX9GO-only features (Telegram, Development status, etc.) have no upstream counterpart; do not force-map them.
 
-```powershell
-# Stop (a running .exe blocks its own overwrite)
-Stop-Process -Name "nox9go","nox9go-tray" -Force -ErrorAction SilentlyContinue
+When parity matters, `decolua/9router` remains the **behavioral specification**. A local clone is optional; the commands below read it over the network.
 
-# Start gateway + tray + dashboard, no console flash
-powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1
-# (or the NOX9GO.lnk shortcut on the Desktop)
-```
+- **Upstream repository**: `https://github.com/decolua/9router`
+- **Read a file**: `https://raw.githubusercontent.com/decolua/9router/main/<path>`
+- **Search upstream**: `https://api.github.com/search/code?q=<term>+repo:decolua/9router` (or `gh api search/code -f q='...' --jq '.items[].path'`)
+- **History / PRs / issues**: `gh api repos/decolua/9router/commits?per_page=20`, `gh pr list -R decolua/9router`, `gh issue list -R decolua/9router`
+- Upstream tests live in `tests/` (Vitest) — they are the fastest way to learn an edge case, a header, or a protocol nuance.
 
-`scripts/start-nox9go.ps1` reads `nox9go status --json` (not the human prose), starts the gateway only when `running` is false, polls the `dashboard` field of that same JSON for readiness, replaces any stale tray, and opens that URL. The address comes from the CLI, so `PORT`, `.env` and profile flags are honoured.
+### Parity Protocol
+1. **Inspect upstream before writing.** Find the counterpart of what you are about to change, read it, and read its upstream test. Do not port from memory.
+2. **Behavioral compatibility (100% contract match)**:
+   - Request/response schemas for `/v1/*` (Chat Completions, Messages, Embeddings, Audio, Models).
+   - Dashboard endpoints `/api/*` (Connections, Combos, ProxyPools, Settings, ProviderNodes, Usage, Auth).
+   - Combo expansion, model fallback, account rotation, strike-breaker quota handling.
+   - SQLite database compatibility (same schema, so both apps can share one data dir).
+3. **Record the upstream reference.** When porting a feature or fix, note the upstream commit/issue/PR in [`CHANGELOG.md`](CHANGELOG.md) under the current personal version (§5.4).
 
-### 7.2 Build
+### Secondary reference: OmniRoute (source of many feature requests)
 
-```powershell
-# Frontend (required after any change under web/)
-cd web; bun run build; cd ..
+Some requests in this repo are **not** parity requests against `decolua/9router` — they are **port requests sourced from OmniRoute**, cited by a file path inside that repo (e.g. issue #38 cites `src/lib/usage/codexResetCredits.ts`).
 
-# Gateway — embed VERSION via ldflags (same as make build)
-go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go.exe ./cmd/nox9go/
+- **Reference repository**: `https://github.com/diegosouzapw/OmniRoute` — TypeScript/Next.js, MIT, a *sibling* gateway project (not this repo's upstream). It vendors its own `open-sse/` tree under the `@omniroute/open-sse` package alias, so its provider/executor layout is recognizable but **not** the same as upstream's.
+- **When a request cites OmniRoute**, treat the cited file as the *feature specification*. Do not guess its contents and do not port from memory.
 
-# Tray — -H=windowsgui is mandatory, otherwise a console window flashes
-go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/
-```
-
-The version string in the binary is `updater.CurrentVersion`. A plain `go build` leaves the source default;
-`VERSION` is the value to embed; `make build` reads it from the file. If your Make predates 3.82, pass it explicitly with `-ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)"`.
-
-The top-bar update alert watches this app's own release channel only: it compares `CurrentVersion` against `version.json` on `main` (falling back to GitHub Releases for `Pacoaldev/Nox9Go`) and offers to install. `version.json` names one asset and one digest per platform; the updater refuses a platform the manifest does not list instead of falling back to another one's binary.
-
-### 7.3 Verify a change in the live service
-
-```powershell
-Invoke-WebRequest -Uri http://127.0.0.1:20130/api/health -UseBasicParsing | Select-Object StatusCode
-# 200 + {"ok":true} == the gateway is up
-```
-
-For authenticated dashboard endpoints, send the CLI token header `x-9r-cli-token` (see §0.2). A `401` without it and a `404` on an unknown route are the quick proof that routing and auth are wired.
-
-### 7.4 Changelog & version
-
-- This is a **public** repository. Edit [`CHANGELOG.md`](CHANGELOG.md) directly under the topmost version heading. Do **not** reintroduce a `.changes/` fragment workflow, `make changelog-merge`, or `scripts/bump-version.sh` — those were upstream's multi-contributor release machinery and were removed.
-- Bump `VERSION` and regenerate `version.json` (see the release checklist below) when cutting a new release.
-- `GET /api/changelog` serves that file.
-
-#### Public release checklist (MANDATORY — every public release, no exceptions)
-
-A public release publishes binaries that users download and run. A broken or vulnerable release cannot be "un-pushed" from machines that already installed it. The full gate runs **before** tagging or creating the GitHub release.
-
-1. **Bump `VERSION`** to the new version and add a `## [X.Y.Z] - YYYY-MM-DD` entry at the top of `CHANGELOG.md` describing every change in the release.
-2. **Security scan (blocking)**: `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` must report `0 vulnerabilities` in *your code*. Fix every finding before continuing — never ship a release with a known reachable vuln.
-3. **Unit tests and static analysis**: `go test ./...` and `go vet ./...` must pass.
-4. **Portability** (if `go.mod` changed): every target in `CROSS_TARGETS` must build with `CGO_ENABLED=0` (see §4.F). Run `make cross` to produce the release binaries.
-5. **Frontend gates** (if `web/` changed): `make vet-svelte`, `cd web && bun run build`, and the weight budget check. CI also runs the e2e suite; do not ignore a red e2e.
-6. **Rebuild the release binaries** with the new `VERSION` embedded (`make cross` + the tray: `go build -ldflags "-H=windowsgui -X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go-tray.exe ./cmd/nox9go-tray/`). Verify the built binary reports the new version (`./nox9go --version` or the startup banner).
-7. **Generate the manifest and checksums**: `bun scripts/gen-version-manifest.mjs --version $(cat VERSION) --repo Pacoaldev/Nox9Go --notes "<release notes>" nox9go-windows-amd64.exe nox9go-linux-amd64 nox9go-linux-arm64 nox9go-darwin-amd64 nox9go-darwin-arm64` (this writes `version.json` and `SHA256SUMS.txt`). Then append the tray digest to `SHA256SUMS.txt`. **Release notes must be English** — `version.json` `releaseNotes`, the `--notes` string, and the GitHub release body (README Spanish is separate).
-8. **Verify `version.json`**: `bun scripts/gen-version-manifest.mjs --check` must pass. Confirm `latestVersion`, every `downloadUrls` entry, and every `sha256` hash match the assets you are about to publish.
-9. **Commit, tag, push**: commit `VERSION`, `CHANGELOG.md`, `version.json`, `go.mod`/`go.sum` (if changed). Tag `v$(cat VERSION)`. Push the commit and the tag to `main`.
-10. **Create the GitHub release**: `gh release create "v$(cat VERSION)" <assets> SHA256SUMS.txt --title "v$(cat VERSION) — ..." --notes-file <notes-en.md>`. Use an **English** title and notes file. Attach every platform binary plus `SHA256SUMS.txt`. The asset names must carry OS and arch so the updater selects correctly.
-11. **Post-release sanity**: confirm the release page shows the new assets and digests, and that `https://raw.githubusercontent.com/Pacoaldev/Nox9Go/main/version.json` (after the ~5 min CDN cache) reports the new `latestVersion` and hashes.
-
-Never publish a release from stale binaries. Never skip the `govulncheck` / test / vet gates "because it's a small fix". A "small fix" to a vulnerable dependency is exactly what justifies a release — and exactly what requires a clean, verified one.
-
-The dashboard updater reads `version.json` on `main` (fallback: GitHub Releases), requires per-platform `sha256` digests, and never selects `nox9go-tray.exe` as the gateway binary (`internal/updater/updater.go`). `raw.githubusercontent.com` caches for ~5 minutes after a manifest push.
-
-### 7.5 Git policy
-
-- **Everything lands on `main`.** There is no `dev` branch and no PR flow; changes are committed to `main` directly.
-- **Never commit unless asked.** When asked, inspect `git status` / `git diff`, stage only the intended files, write a Conventional Commit message, no AI attribution, no `--no-verify`. Never blanket `git add -A` when unrelated or sensitive files are present.
-- **Tags**: `v1.0.0` through `v1.1.6` (and forward). Legacy upstream release tags are not used in this repository.
-
-### 7.6 Syncing a feature from upstream
-
-1. **Read upstream** over the network (§1) — the counterpart file and its upstream test.
-2. **Locate the NOX9GO counterpart** using the §2 mapping table and `docs/ARCHITECTURE.md`.
-3. **Design for Go and Svelte 5** — streaming buffers, strong types, mutexes, singleflight on the backend; `$state` / `$derived` / `$effect` on the frontend.
-4. **Implement & test** — `internal/...` + `*_test.go` (table-driven, `testing.T`); `web/src/...` + `bun run build` + `make vet-svelte`.
-5. **Verify** — the gate list in §8.
-6. **Record the upstream reference** in `CHANGELOG.md`.
+**OmniRoute Porting Protocol**
+1. **Fetch the cited file first**, from raw: `https://raw.githubusercontent.com/diegosouzapw/OmniRoute/main/<path>`. Fetch the related UI component too (dashboard modals live under its `src/app/` tree) — the port must match the dashboard *behavior*, not just the API shape.
+2. **Port the contract, not the code**: endpoints, request/response payloads, error status codes, and filter/sort rules. Never transliterate TypeScript into Go (§8.A).
+3. **Map by responsibility** — OmniRoute `src/lib/usage/*.ts` → `internal/handlers/dashboard/` + `web/src/api/client.ts`; `open-sse/executors/` → `internal/proxy/executor/`; `src/app/` components → `web/src/`.
+4. **OmniRoute is secondary.** Where it conflicts with `decolua/9router`, the §11 parity rules win; note the deliberate divergence in `CHANGELOG.md`.
+5. **Provider IDs are not portable verbatim.** OmniRoute has its own catalog. Map to `nox9go` provider IDs and obey §7 (strict provider isolation — no cross-provider aliasing or model hijacking).
+6. **Preserve upstream error semantics.** OmniRoute surfaces typed error classes with explicit status codes (e.g. `409 no_credit`); port that distinction rather than collapsing every upstream failure into one generic error.
 
 ---
 
-## 8. Verification Gates (local)
+## 12. Architecture & codebase mapping
 
-Run what the change touches. Quote the observed result.
+Local docs first — they are this project's map and stay accurate:
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DATABASE.md`](docs/DATABASE.md).
 
-```powershell
-# Unit tests
-go test ./...
-go test ./internal/providers/... -v
-
-# Feature integration suite (real router, real DB, fake upstreams)
-go test -tags=integration ./internal/integration/...
-# or: make test-integration   (adds -race, needs a C toolchain on Windows)
-
-# Race detector (needs cgo → a C compiler; skip and say so if absent)
-go test -race -count=1 ./...
-
-# Static analysis
-go vet ./...
-go vet -tags=integration ./internal/integration/...
-
-# Svelte type-check ratchet (blocks unresolved identifiers, pins type debt)
-make vet-svelte
-
-# Linters (not installed as binaries here; run them on demand)
-bunx oxlint --deny-warnings --cwd web
-go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-
-# Update-manifest check (what the updater trusts; CI runs the same)
-bun scripts/gen-version-manifest.mjs --check
-
-# Patch-coverage prediction — run BEFORE the push, not after Codecov says so.
-# Answers "would codecov/patch flag this?" against Go's own profile: changed
-# lines that no cover block contains are not counted, because formatting,
-# comments and declarations have no coverage either way. Pass --worktree to
-# include uncommitted changes.
-bun scripts/diff-coverage.mjs                      # base origin/main, target 67.9
-bun scripts/diff-coverage.mjs --worktree --base main
-
-# End-to-end suite (real gateway + Playwright; browsers need `bunx playwright install --with-deps chromium` once)
-cd web; bun run e2e
-
-# Embedded asset contract (compression variants, font origin, icon budget)
-go test ./web/...
-
-# Frontend weight budget after a UI change
-cd web; bun run build; cd ..
-Get-ChildItem web/dist -Recurse -File | Sort-Object Length -Descending | Select-Object -First 8 Name,Length
-
-# Portability gate — required after any go.mod change (§4.F)
-# (see the PowerShell and bash loops in §4.F)
-
-# Cross-compile check
-make cross
-```
-
-`golangci-lint` needs `web/dist` to exist or it reports `pattern dist/*: no matching files found` as a typecheck failure. Write the stub **only when there is no build**:
-```powershell
-if (-not (Test-Path web/dist/index.html)) { New-Item -ItemType Directory -Force web/dist | Out-Null; Set-Content web/dist/index.html '<!doctype html>' }
-```
+| Upstream path (in `decolua/9router`) | NOX9GO path | Role |
+| :--- | :--- | :--- |
+| `open-sse/translator/` | `internal/translator/` | Protocol converters (OpenAI ↔ Claude Messages ↔ Gemini ↔ Antigravity). |
+| `open-sse/executors/` | `internal/proxy/executor/`, `internal/proxy/` | Provider callers, SSE adapters, tool-ID repair, cloaking. |
+| `open-sse/providers/registry/`, `open-sse/config/providerModels.js` | `internal/providers/` | Provider catalog (`providers.go` → `KnownProviders`, 140+ entries), model catalog (`registry_models.go`), aliases (`aliases.go`), OAuth. |
+| `open-sse/handlers/chatCore.js`, `src/sse/handlers/chat.js` | `internal/handlers/chat/` | Chat routing, combo fallback, fusion, resolution, quota handling. |
+| `open-sse/rtk/` | `internal/tokensaver/` | Prompt compression (RTK), Caveman, Ponytail, ADHD system prompts. |
+| `src/app/api/` (Next.js API routes) | `internal/handlers/dashboard/`, `internal/handlers/` | Dashboard REST & SSE APIs (connections, combos, proxypools, usage, settings, `status.go`). |
+| `src/lib/db/` | `internal/db/` | SQLite layer (pure-Go `modernc.org/sqlite`). |
+| `src/app/` (Next.js React 19) | `web/src/` | Dashboard UI: **Svelte 5 + Vite 8**, embedded via `web/embed.go`. |
+| `cli/` (npm launcher) | `cmd/nox9go/` (gateway), `cmd/nox9go-tray/` (Windows tray) | Single-binary launcher, daemon and system tray. |
+| `tests/` (Vitest) | `*_test.go`, `internal/integration/` | Go unit tests and the tagged integration suite. |
+| — (NOX9GO) | `internal/tunnel/` | Cloudflare quick tunnel: enable/disable/status, state in the data dir. |
+| — (NOX9GO) | `internal/app/` | Uber Fx wiring (`DatabaseModule`, `ServerModule`, `ProvideRouter`). |
+| — (NOX9GO) | `web/src/lib/i18n/`, `web/public/i18n/literals/es.json` | Runtime i18n (en/es). |
+| — (NOX9GO) | `internal/integration/` | Feature-level suite on the real router + real DB + fake upstreams. |
+| — (NOX9GO) | `internal/channels/telegram/` | Telegram bot: Chat/Agent modes, feed, orders via dev inbox / Herdr scripts. |
+| — (NOX9GO) | `internal/devstatus/` | Development dashboard tab: ODD task progress from `DEV_REPO_ROOT` / `DEV_FEATURE`. |
+| — (NOX9GO) | `internal/handlers/dashboard/telegram_channel.go` | Dashboard API to enable/configure the Telegram channel. |
+| — (NOX9GO) | `internal/notify/` | Dev spool / side-channel notifications consumed by Telegram runners. |
 
 ---
 
-## 9. Working Agreement for AI Agents
+## 13. Provider model availability (why some models fail)
 
-- **Read before you write.** `AGENTS.md` (this file), then `docs/ARCHITECTURE.md` / `docs/DATABASE.md` when the change touches structure. Windows runbook.
-- **Map with the real code.** Use the code graph / `codegraph_explore` before grepping around a structural question.
-- **Delegate the exploration, keep the decision.** A read-only explorer maps the area and returns `path:line` evidence; the parent decides and writes.
-- **One writer per area.** Parallel writers only with disjoint edit surfaces; the parent owns git.
-- **Report with evidence.** Every claim about behavior cites a command that was run and its output.
-- **Leave the tree clean.** No scratch files, no stray `dist` stubs, no leftover build artifacts outside `.gitignore`.
+A provider that "works" does not mean every model in its catalog works. Model availability is decided upstream, per account and per plan, and the gateway cannot make a gated model answer. Check the live catalog before blaming the key.
 
----
+- **GitHub Copilot (`github`/`gh`).** Which models the account may use is decided by Copilot's own `GET /models` response (`capabilities.type === "chat"` and `policy.state`). The `copilot-integration-id: vscode-chat` header in `internal/providers/providers.go` matches upstream, so it is not the cause. On the current account only `gpt-4.1` answers; the static catalog in `registry_models.go` lists far more (including `gpt-5.4`, which returns `400 model_not_available_for_integrator`) and is stale for this account. Upstream discovers the real set by fetching `https://api.githubcopilot.com/models` live (`open-sse/services/copilotModels.js`); NOX9GO does not port that live fetch yet. Never treat a catalog row as proof the model works.
+- **ClinePass (`clinepass`/`cp`).** The free tier rotates and is published separately at `https://api.cline.bot/api/v1/ai/cline/recommended-models` (`free[]`), not in `/api/v1/models`. The models that answer are the ones Cline serves for that key; other ids in the `/models` dump return `500 {"error":"empty response content"}`. That is upstream availability, not a header problem, and an old working set can stop working when the tier rotates.
+- **Baidu Qianfan (`baidu`/`qianfan`).** The endpoint is reachable from any egress; what looked like a region block is a route that does not exist. Qianfan serves no `GET /v2/models`, and its edge answers `403 {"code":"AccessDenied","message":"Access denied."}` for that path — which `looksEdgeBlocked` used to report as a network/region block without ever testing the credential. The chat route the gateway actually uses, `POST /v2/chat/completions`, does evaluate the key and answers `401 {"error":{"code":"invalid_iam_token"}}` for a missing, malformed or expired one. The probe now confirms a blocked `/models` answer against that chat route before claiming a block (`internal/handlers/dashboard/validate.go`: `validateGeneric` → `validateChatFallback`). A `bce-v3/...` key is time-limited, so a `401` means renew it in the Qianfan Console, not move the egress. The row exposes no metered quota endpoint, so its status comes from that same probe (`internal/handlers/dashboard/usage.go`): `available` when the key answers, `unknown` when it does not.
+- **Devin CLI (`devin-cli`/`dv`).** There is no hosted endpoint: `internal/proxy/executor/devin_cli.go` launches the locally installed `devin` CLI as an ACP (Agent Client Protocol) agent over stdio and folds the OpenAI conversation into one `session/prompt`. The credential is the CLI's own (`devin auth login`), so the provider is `NoAuth` and the router injects the virtual connection; the bridge never stores or forwards a Devin secret. Two modes exist: the default local agent (`devin acp`) and, with `DEVIN_ACP_MODE=cloud`, a Devin Cloud relay (`devin acp --cloud`). Cloud sessions need a paid quota — on a Free org `session/prompt` answers `-32001 billing_restricted out_of_quota`, which is an account limit, not a bridge bug. `--model` is forwarded only when the account's own `devin models` lists the requested id (dot/dash spelling is normalized); otherwise the agent keeps its default, so a stale catalog row (`gpt-5.4-high` on a Free team that only serves `swe-2-flash-*`) does not fail the turn. The catalog carries the CLI's own hyphenated ids (`swe-1-6`, `swe-2-flash-*`, `adaptive`) rather than the retired `swe-1.6-fast`/`swe-1.5*` rows, and only add an id after `devin models` lists it. The agent's tool-permission prompts are always declined (`cancelled`), and the workspace announced to `session/new` is a dedicated empty directory, never the gateway checkout.
 
-## 10. Quick Reference
-
-| I want to… | Command |
-| :--- | :--- |
-| Run the unit tests | `go test ./...` |
-| Run the integration suite | `go test -tags=integration ./internal/integration/...` |
-| Build the dashboard SPA | `cd web; bun run build` |
-| Build the gateway | `go build -ldflags "-X nox9go/proxy/internal/updater.CurrentVersion=$(cat VERSION)" -o nox9go.exe ./cmd/nox9go/` |
-| Build the tray | `go build -ldflags "-H=windowsgui" -o nox9go-tray.exe ./cmd/nox9go-tray/` |
-| Start everything | `powershell -ExecutionPolicy Bypass -File .\scripts\start-nox9go.ps1` |
-| Stop everything | `Stop-Process -Name "nox9go","nox9go-tray" -Force -ErrorAction SilentlyContinue` |
-| Check the service | `Invoke-WebRequest http://127.0.0.1:20130/api/health -UseBasicParsing` |
-| Type-check Svelte | `make vet-svelte` |
-| Cross-compile | `make cross` |
-| See what changed | `git status` · `git diff` · `git log --oneline -10` |
-| Commit and push | `C&P` (chat shorthand) or explicit request |
-| Regenerate the icon font | `cd web; bun run vendor:fonts` |
