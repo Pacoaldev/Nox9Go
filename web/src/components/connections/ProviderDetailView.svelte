@@ -2709,6 +2709,7 @@
     'nararouter',
     'onomeo',
     'fluence',
+    'opencode-go',
   ])
 
   // canListLiveModels mirrors the backend's list of providers with a live

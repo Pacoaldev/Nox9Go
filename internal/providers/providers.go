@@ -155,7 +155,9 @@ var modelsListURL = map[string]string{
 	// SumoPod exposes the standard OpenAI /v1/models catalogue (auth required,
 	// same contract as tokenharbor/dahl).
 	"sumopod": "https://ai.sumopod.com/v1/models",
-	"nous":    "https://inference-api.nousresearch.com/v1/models",
+	"nous":        "https://inference-api.nousresearch.com/v1/models",
+	"opencode-go": "https://opencode.ai/zen/go/v1/models",
+	"ocg":         "https://opencode.ai/zen/go/v1/models",
 	// Command Code publishes its whole Provider API catalogue on the standard
 	// OpenAI /v1/models shape, keyless: every id it sells, the free tiers
 	// included (reflection/beam:free, stealth/glyph-cluster:free,
