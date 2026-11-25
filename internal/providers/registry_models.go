@@ -31,6 +31,8 @@ var ProviderModels = map[string][]string{
 	"assemblyai":        {"universal-3-pro", "universal-2", "best", "nano"},
 	"baidu":             {"deepseek-v4-pro", "deepseek-v4-flash", "glm-5.2", "glm-5.1", "kimi-k2.6", "qwen3.5-397b-a17b", "qwen3.5-27b"},
 	"bazaarlink":        {"auto:free", "claude-opus-4.7", "claude-sonnet-4.6", "claude-haiku-4.5", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "grok-4.3", "grok-4.20", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview", "kimi-k2.6", "kimi-k2.5", "glm-5.1", "glm-5", "mimo-v2.5-pro", "mimo-v2.5", "minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.6-plus", "nemotron-3-super-120b-a12b"},
+	"fastrouter":        {"fastrouter/auto"},
+	"fr":                {"fastrouter/auto"},
 	"bedrock":           {"us.anthropic.claude-opus-5", "us.anthropic.claude-sonnet-5", "us.anthropic.claude-fable-5", "us.anthropic.claude-opus-4-8", "us.anthropic.claude-opus-4-7", "us.anthropic.claude-sonnet-4-6", "us.anthropic.claude-opus-4-5-20251101-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0"},
 	"bedrock-xai":       {"us.xai.grok-4.6", "global.xai.grok-4.6"},
 	"br":                {"us.anthropic.claude-opus-5", "us.anthropic.claude-sonnet-5", "us.anthropic.claude-fable-5", "us.anthropic.claude-opus-4-8", "us.anthropic.claude-opus-4-7", "us.anthropic.claude-sonnet-4-6", "us.anthropic.claude-opus-4-5-20251101-v1:0", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.anthropic.claude-opus-4-1-20250805-v1:0", "us.anthropic.claude-sonnet-4-20250514-v1:0", "us.anthropic.claude-3-haiku-20240307-v1:0"},

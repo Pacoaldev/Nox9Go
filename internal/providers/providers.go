@@ -240,6 +240,8 @@ var modelsListURL = map[string]string{
 	// therefore the only source of truth, and the endpoint answers 401 without
 	// a stored credential.
 	"fluence": "https://api.fluence.cloud/v1/models",
+	"fastrouter": "https://api.fastrouter.ai/api/v1/models",
+	"fr":         "https://api.fastrouter.ai/api/v1/models",
 }
 
 // modelsListHeaders carries the extra headers one live-catalogue endpoint
@@ -1245,6 +1247,11 @@ var KnownProviders = map[string]ProviderConfig{
 	},
 	"bazaarlink": {
 		BaseURL:    "https://bazaarlink.ai/api/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	"fastrouter": {
+		BaseURL:    "https://api.fastrouter.ai/api/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},

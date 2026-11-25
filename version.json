@@ -1,19 +1,19 @@
 {
-  "latestVersion": "1.1.6",
-  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-windows-amd64.exe",
+  "latestVersion": "1.1.7",
+  "downloadUrl": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.7/nox9go-windows-amd64.exe",
   "downloadUrls": {
-    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-windows-amd64.exe",
-    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-linux-amd64",
-    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-linux-arm64",
-    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-darwin-amd64",
-    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.6/nox9go-darwin-arm64"
+    "windows_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.7/nox9go-windows-amd64.exe",
+    "linux_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.7/nox9go-linux-amd64",
+    "linux_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.7/nox9go-linux-arm64",
+    "darwin_amd64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.7/nox9go-darwin-amd64",
+    "darwin_arm64": "https://github.com/Pacoaldev/Nox9Go/releases/download/v1.1.7/nox9go-darwin-arm64"
   },
   "sha256": {
-    "windows_amd64": "89057f71ffc592b836e8d9df18fdaef624cc770e26ae1c54d565738dee5417e0",
-    "linux_amd64": "2543b6252b288d1422147339ee544c60c3d109ef7316be99721a99c517148ce9",
-    "linux_arm64": "90431194bd0567f0360ef842941e5be715ddf748683e1976ebb6c9b893ad269d",
-    "darwin_amd64": "887e56f06a7814a78885300859da1dace8b4e22b5485ffb026d744dcb62054fc",
-    "darwin_arm64": "397ba43d5b5f0a8e61a724d34f21cad46a91b011a651e3b47cc250c55afc0eb7"
+    "windows_amd64": "b3ff182da0ff6ce67d745e3e1032d99dfb1b1f5d9cb885691c07de46fed1b179",
+    "linux_amd64": "f5e40535d352d06c5903666149fb19b2f62ab4e2d515381b7e306eabe8bb0b65",
+    "linux_arm64": "80363eaa4305361dc6fb5f9770a56e2f6328c9da2ce09d058541cd10fddc0dad",
+    "darwin_amd64": "a014063304625cfded984527db7f9630f6aab8170dc833e11713015a24896dfb",
+    "darwin_arm64": "7b75aa849bd098217700a7907f4879b3626694e8d285f88f19f33d4645661fac"
   },
-  "releaseNotes": "NOX9GO v1.1.6 — Telegram: Herdr orders, readable agent replies on order_done, bot status badge; Development ODD progress; poolside hidden; diff-coverage and in-memory SQLite test pinning."
+  "releaseNotes": "NOX9GO v1.1.7 — FastRouter recurring free-tier provider; Fluence API-key provider; configurable combo member timeouts and provider capacity rps/tpd; Pi & Gentle Shell full-catalog sync; pausable Telegram channel, Herdr blocker relay, and Zed envelope unwrap."
 }

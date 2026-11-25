@@ -115,6 +115,7 @@ var ProviderAliasMap = map[string]string{
 	"xmtp":           "xiaomi-tokenplan",
 	"af":             "api-airforce",
 	"bzl":            "bazaarlink",
+	"fr":             "fastrouter",
 	"dx":             "daoxe",
 	"oad":            "openadapter",
 	"bm":             "bluesminds",
