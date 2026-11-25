@@ -50,6 +50,7 @@
       dailyTokens: count(limits.dailyTokens),
       tokenQuota: count(limits.tokenQuota),
       queueTimeoutMs: count(limits.queueTimeoutMs),
+      comboTimeoutMs: count(limits.comboTimeoutMs ?? 0),
       contractExpiresAt: expires,
     }
   }
@@ -280,6 +281,15 @@
             bind:value={draft.queueTimeoutMs}
             placeholder="0"
             hint="How long a request waits for a slot before the provider counts as full."
+          />
+          <Input
+            id="provider-capacity-combo-timeout"
+            label="Combo member timeout (ms)"
+            type="number"
+            min="0"
+            bind:value={draft.comboTimeoutMs}
+            placeholder="0"
+            hint="Max time (in ms) to wait for first response token in a combo before failing over. 0 uses catalog or default (15s)."
           />
           <Input
             id="provider-capacity-quota"

@@ -1168,7 +1168,10 @@ func TestHandleChatCompletions_ComboTimeoutFailsOver(t *testing.T) {
 }
 
 func TestComboMemberTimeoutFor_OverridesAndDefaults(t *testing.T) {
-	h := &ChatHandler{}
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	repo := db.NewRepo(database)
+	h := &ChatHandler{Repo: repo}
 
 	// Default fallback when provider has no override
 	if got := h.comboMemberTimeoutFor("deepseek", nil); got != 15*time.Second {
@@ -1178,6 +1181,14 @@ func TestComboMemberTimeoutFor_OverridesAndDefaults(t *testing.T) {
 	// Fluence declares ComboMemberTimeout: 45s in KnownProviders
 	if got := h.comboMemberTimeoutFor("fluence", nil); got != 45*time.Second {
 		t.Errorf("comboMemberTimeoutFor(fluence) = %v, want 45s override", got)
+	}
+
+	// Dashboard capacity policy overrides catalog when set (e.g. 60000ms = 60s)
+	if err := repo.SetProviderCapacity(context.Background(), "fluence", db.ProviderCapacity{ComboTimeoutMs: 60000}); err != nil {
+		t.Fatalf("SetProviderCapacity: %v", err)
+	}
+	if got := h.comboMemberTimeoutFor("fluence", nil); got != 60*time.Second {
+		t.Errorf("comboMemberTimeoutFor(fluence with capacity override) = %v, want 60s", got)
 	}
 }
 

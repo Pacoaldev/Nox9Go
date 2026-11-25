@@ -25,6 +25,7 @@ export interface NodeLimitsDraft {
   dailyTokens: string | number | null
   tokenQuota: string | number | null
   queueTimeoutMs: string | number | null
+  comboTimeoutMs?: string | number | null
   contractExpiresAt: string
 }
 
@@ -38,6 +39,7 @@ export const EMPTY_NODE_LIMITS: NodeLimitsDraft = {
   dailyTokens: '',
   tokenQuota: '',
   queueTimeoutMs: '',
+  comboTimeoutMs: '',
   contractExpiresAt: '',
 }
 
@@ -59,6 +61,7 @@ export function nodeLimitsDraftOf(limits?: ProviderNodeLimits | null): NodeLimit
     dailyTokens: count(limits.dailyTokens),
     tokenQuota: count(limits.tokenQuota),
     queueTimeoutMs: count(limits.queueTimeoutMs),
+    comboTimeoutMs: count((limits as { comboTimeoutMs?: number }).comboTimeoutMs ?? 0),
     contractExpiresAt: expires,
   }
 }
@@ -84,6 +87,7 @@ export function nodeLimitsPatchOf(draft: NodeLimitsDraft): ProviderNodeLimitsPat
     dailyTokens: countOf(draft.dailyTokens),
     tokenQuota: countOf(draft.tokenQuota),
     queueTimeoutMs: countOf(draft.queueTimeoutMs),
+    comboTimeoutMs: countOf(draft.comboTimeoutMs),
     contractExpiresAt: draft.contractExpiresAt ? `${draft.contractExpiresAt}T23:59:59Z` : '',
   }
 }

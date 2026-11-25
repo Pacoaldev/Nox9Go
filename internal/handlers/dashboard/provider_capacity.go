@@ -54,6 +54,7 @@ type ProviderCapacityLimits struct {
 	// of DailyRequests. 0 = unlimited.
 	DailyTokens       int    `json:"dailyTokens"`
 	QueueTimeoutMs    int    `json:"queueTimeoutMs"`
+	ComboTimeoutMs    int    `json:"comboTimeoutMs"`
 	TokenQuota        int    `json:"tokenQuota"`
 	ContractExpiresAt string `json:"contractExpiresAt,omitempty"`
 	UpdatedAt         string `json:"updatedAt,omitempty"`
@@ -80,6 +81,7 @@ func capacityLimitsFrom(c db.ProviderCapacity) ProviderCapacityLimits {
 		DailyRequests:     c.DailyRequests,
 		DailyTokens:       c.DailyTokens,
 		QueueTimeoutMs:    c.QueueTimeoutMs,
+		ComboTimeoutMs:    c.ComboTimeoutMs,
 		TokenQuota:        c.TokenQuota,
 		ContractExpiresAt: c.ContractExpiresAt,
 		UpdatedAt:         c.UpdatedAt,
@@ -206,6 +208,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 		DailyTokens       *int    `json:"dailyTokens"`
 		TokenQuota        *int    `json:"tokenQuota"`
 		QueueTimeoutMs    *int    `json:"queueTimeoutMs"`
+		ComboTimeoutMs    *int    `json:"comboTimeoutMs"`
 		ContractExpiresAt *string `json:"contractExpiresAt"`
 	}
 	if len(body) > 0 {
@@ -234,6 +237,7 @@ func (h *DashboardHandler) HandleUpdateProviderCapacity(w http.ResponseWriter, r
 		{"dailyTokens", patch.DailyTokens, &merged.DailyTokens},
 		{"tokenQuota", patch.TokenQuota, &merged.TokenQuota},
 		{"queueTimeoutMs", patch.QueueTimeoutMs, &merged.QueueTimeoutMs},
+		{"comboTimeoutMs", patch.ComboTimeoutMs, &merged.ComboTimeoutMs},
 	}
 	for _, p := range pairs {
 		v, err := mergeLimit(p.patch, p.target)

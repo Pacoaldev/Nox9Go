@@ -29,6 +29,7 @@ describe('nodeLimitsPatchOf', () => {
       dailyTokens: 0,
       tokenQuota: 5000000,
       queueTimeoutMs: 15000,
+      comboTimeoutMs: 0,
       contractExpiresAt: '',
     })
   })
@@ -53,6 +54,7 @@ describe('nodeLimitsPatchOf', () => {
       dailyTokens: 0,
       tokenQuota: 0,
       queueTimeoutMs: 0,
+      comboTimeoutMs: 0,
       contractExpiresAt: '',
     })
   })
@@ -96,6 +98,7 @@ describe('a draft holding numbers from number inputs', () => {
       dailyTokens: 0,
       tokenQuota: 5000000,
       queueTimeoutMs: 15000,
+      comboTimeoutMs: 0,
       contractExpiresAt: '',
     })
   })

@@ -15,12 +15,6 @@ func openRouterDailyBody(resetEpochMS string) string {
 	return `{"error":{"message":"Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day: https://openrouter.ai/settings/credits?utm_source=api&utm_campaign=free_daily_limit","code":429,"metadata":{"headers":{"X-RateLimit-Limit":"50","X-RateLimit-Remaining":"0","X-RateLimit-Reset":"` + resetEpochMS + `","limit_source":"openrouter_free_tier_daily","remedy_hint":"Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.","provider_name":"OpenRouter"}}}}`
 }
 
-// openCodeDailyBody is the shape the OpenCode free-tier gate answers an
-// exhausted usage window with, sometimes carrying retry-after-ms in headers.
-func openCodeDailyBody() string {
-	return `{"error":{"type":"FreeUsageLimitError","message":"FreeUsageLimitError: rate limit exceeded for today. They reset at 21:00."}}`
-}
-
 // resetsAtClockBody names the reset as a wall-clock time, the form OpenCode's
 // session notice uses ("They reset at 21:00").
 func resetsAtClockBody(hh, mm int) string {

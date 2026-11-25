@@ -673,6 +673,7 @@ export interface ProviderNodeLimitsPatch {
   dailyTokens?: number
   tokenQuota?: number
   queueTimeoutMs?: number
+  comboTimeoutMs?: number
   /** RFC3339 or a date (YYYY-MM-DD); "" clears the expiry. */
   contractExpiresAt?: string
 }
@@ -707,6 +708,7 @@ export interface ProviderCapacityLimits {
   /** Fixed UTC-day token budget (prompt+completion). 0 = unlimited. */
   dailyTokens: number
   queueTimeoutMs: number
+  comboTimeoutMs?: number
   tokenQuota: number
   contractExpiresAt?: string
   updatedAt?: string

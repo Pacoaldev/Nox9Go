@@ -521,6 +521,7 @@ var providerCapacityTables = []tableDef{
 			// refills at midnight, not one minute after its first request.
 			{"dailyTokens", "INTEGER DEFAULT 0"},
 			{"queueTimeoutMs", "INTEGER DEFAULT 0"},
+			{"comboTimeoutMs", "INTEGER DEFAULT 0"},
 			{"tokenQuota", "INTEGER DEFAULT 0"},
 			{"contractExpiresAt", "TEXT DEFAULT ''"},
 			{"updatedAt", "TEXT DEFAULT ''"},

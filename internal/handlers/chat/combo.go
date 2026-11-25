@@ -22,10 +22,17 @@ import (
 )
 
 // comboMemberTimeoutFor returns the timeout duration to wait for the first
-// response token/commit from a combo member. Providers can declare a custom
-// ComboMemberTimeout in their ProviderConfig (e.g. Fluence on decentralized GPU
-// mesh); otherwise it defaults to comboMemberTimeout (15s).
+// response token/commit from a combo member. Priority order:
+// 1. Operator's configured policy in providerCapacity.comboTimeoutMs (dashboard Capacity limits)
+// 2. Custom ComboMemberTimeout declared in ProviderConfig (e.g. Fluence catalog default)
+// 3. Global comboMemberTimeout (15s default)
 func (h *ChatHandler) comboMemberTimeoutFor(provider string, connData *ConnectionData) time.Duration {
+	if h.Repo != nil {
+		canon := providers.ResolveAlias(provider)
+		if cap, err := h.Repo.GetProviderCapacity(context.Background(), canon); err == nil && cap.ComboTimeoutMs > 0 {
+			return time.Duration(cap.ComboTimeoutMs) * time.Millisecond
+		}
+	}
 	if cfg, err := h.getProviderConfig(provider, connData); err == nil && cfg != nil && cfg.ComboMemberTimeout > 0 {
 		return cfg.ComboMemberTimeout
 	}
