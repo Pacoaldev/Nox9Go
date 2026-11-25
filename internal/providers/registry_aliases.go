@@ -101,4 +101,7 @@ var RegistryAliases = map[string]string{
 	"sealion":             "sl",
 	"longcat":             "lc",
 	"hetzner":             "hetzner",
+	// Fluence publishes its model ids with the provider id as the prefix
+	// (fluence/coder, fluence/architect), so the published alias is the id.
+	"fluence": "fluence",
 }

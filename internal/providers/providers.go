@@ -221,14 +221,19 @@ var modelsListURL = map[string]string{
 	"any":          "https://api.anyapi.ai/v1/models",
 	"ovhcloud":     "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models",
 	"ovh":          "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models",
-	"sealion":     "https://api.sea-lion.ai/v1/models",
+	"sealion":      "https://api.sea-lion.ai/v1/models",
 	"sl":           "https://api.sea-lion.ai/v1/models",
 	"longcat":      "https://api.longcat.chat/openai/v1/models",
 	"lc":           "https://api.longcat.chat/openai/v1/models",
 	// Hetzner serves the standard OpenAI /v1/models catalogue but validates
 	// the bearer token (401 with no header), so live discovery needs a stored
 	// key; the static snapshot above stays the pre-key view.
-	"hetzner":      "https://inference.hetzner.com/api/v1/models",
+	"hetzner": "https://inference.hetzner.com/api/v1/models",
+	// Fluence's catalogue is scoped to the key that asks: it lists the key's
+	// routing profiles and the concrete models the key may call. Discovery is
+	// therefore the only source of truth, and the endpoint answers 401 without
+	// a stored credential.
+	"fluence": "https://api.fluence.cloud/v1/models",
 }
 
 // modelsListHeaders carries the extra headers one live-catalogue endpoint
@@ -1293,6 +1298,25 @@ var KnownProviders = map[string]ProviderConfig{
 	},
 	"runcrate": {
 		BaseURL:    "https://api.runcrate.ai/v1/chat/completions",
+		AuthHeader: "Authorization",
+		AuthScheme: "bearer",
+	},
+	// Fluence (https://inference.fluence.cloud/docs): a paid OpenAI-compatible
+	// router over prepaid USD credits or a monthly plan, bearer key carrying the
+	// `inference` permission. Two facts shape this entry:
+	//
+	//   - the catalogue is per key, not global. GET /v1/models lists that key's
+	//     routing profiles (fluence/architect, fluence/coder, fluence/routines,
+	//     fluence/cheapest) plus the concrete models it may call, so there is no
+	//     static snapshot to ship and no static model row to invent.
+	//   - reasoning effort is a routing-profile setting (effort_mode/efforts),
+	//     not a per-model wire shape, so no thinking format is claimed.
+	//
+	// The same host also serves Anthropic Messages (/v1/messages, x-api-key) and
+	// Responses (/v1/responses); this entry is the OpenAI-compatible surface the
+	// dashboard configures, so UpstreamIsAnthropic stays false.
+	"fluence": {
+		BaseURL:    "https://api.fluence.cloud/v1/chat/completions",
 		AuthHeader: "Authorization",
 		AuthScheme: "bearer",
 	},

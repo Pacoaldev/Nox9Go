@@ -232,6 +232,20 @@ describe('providers & media separation', () => {
     expect(models).toEqual(['Qwen/Qwen3.6-35B-A3B-FP8'])
   })
 
+  it('wires the Fluence paid router end-to-end', () => {
+    const p = PROVIDER_CATALOG.find((e) => e.id === 'fluence')
+    expect(p).toBeDefined()
+    if (!p) throw new Error('missing fluence')
+    // Paid router (prepaid credits or a monthly plan), not a free tier: the
+    // category drives the API-key modal, and no `isFree` badge may appear.
+    expect(p.category).toBe('apikey')
+    expect(p.alias).toBe('fluence')
+    expect(isChatProvider(p)).toBe(true)
+    // The catalogue is scoped to the key, so discovery is the only source.
+    expect(p.modelsFetcher?.url).toBe('https://api.fluence.cloud/v1/models')
+    // No static rows: inventing one would claim a model the upstream may refuse.
+    expect(getModelsByProviderId('fluence')).toEqual([])
+  })
   it('files NaN.Builders under the OAuth overview section without changing its auth', () => {
     // The operator wants it listed with the OAuth providers, but the provider
     // authenticates with a bearer API key: `category` must stay freeTier so the

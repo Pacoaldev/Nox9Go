@@ -1524,5 +1524,6 @@
   "files": "archivos",
   "Could not read the development report.": "No pude leer el reporte de desarrollo.",
   "to a repository path in the gateway's environment or its": "a una ruta de repositorio en el entorno del gateway o en su",
-  "file, then restart the gateway to see the development report here.": "archivo, y reiniciá el gateway para ver acá el informe de desarrollo."
+  "file, then restart the gateway to see the development report here.": "archivo, y reiniciá el gateway para ver acá el informe de desarrollo.",
+  "Paid OpenAI-compatible router (prepaid credits or a monthly plan). The catalogue is scoped to your key: /v1/models lists its routing profiles and the models it may call. Reasoning effort is a routing-profile setting, not a per-model one.": "Router pago compatible con OpenAI (créditos prepagos o un plan mensual). El catálogo está limitado a tu clave: /v1/models lista sus perfiles de routing y los modelos que puede llamar. El esfuerzo de razonamiento es un ajuste del perfil de routing, no de cada modelo."
 }

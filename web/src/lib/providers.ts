@@ -2880,6 +2880,22 @@ export const PROVIDER_CATALOG: ProviderCatalogItem[] = [
       "llm"
     ],
     "modelsFetcher": {"url": "https://inference.hetzner.com/api/v1/models", "type": "openai"}
+  },
+  {
+    "id": "fluence",
+    "name": "Fluence",
+    "category": "apikey",
+    "alias": "fluence",
+    "color": "#5B5BD6",
+    "icon": "hub",
+    "website": "https://inference.fluence.cloud",
+    "notice": {"text": "Paid OpenAI-compatible router (prepaid credits or a monthly plan). The catalogue is scoped to your key: /v1/models lists its routing profiles and the models it may call. Reasoning effort is a routing-profile setting, not a per-model one.", "apiKeyUrl": "https://inference.fluence.cloud/app/keys"},
+    "authType": "apikey",
+    "noAuth": false,
+    "serviceKinds": [
+      "llm"
+    ],
+    "modelsFetcher": {"url": "https://api.fluence.cloud/v1/models", "type": "openai"}
   }
 ]
 

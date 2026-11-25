@@ -155,6 +155,10 @@ const ICON_FILES: Record<string, string> = {
   'firecrawl': 'firecrawl.png',
   'fireworks': 'fireworks.png',
   'fish-audio': 'fish-audio.png',
+  // Fluence ships its own mark; the file is the square badge (white disc,
+  // #010616 glyph) rather than the brand's white wordmark, which would be
+  // invisible on the light-theme tile background.
+  'fluence': 'fluence.svg',
   'forge': 'forge.png',
   'freeaiapikey': 'freeaiapikey.svg',
   'freebuff': 'freebuff.png',
@@ -181,6 +185,9 @@ const ICON_FILES: Record<string, string> = {
   'hcnsec': 'hcnsec.png',
   'hermes': 'hermes.png',
   'heroku': 'heroku.svg',
+  // The Hetzner mark shipped as an SVG but had no ICON_FILES entry, so the
+  // dashboard drew the generic glyph for a provider whose artwork was there.
+  'hetzner': 'hetzner.svg',
   'huggingchat': 'huggingchat.svg',
   'huggingface': 'huggingface.png',
   'hyperbolic': 'hyperbolic.png',

@@ -161,6 +161,7 @@ export const PROVIDER_ID_TO_ALIAS: Record<string, string> = {
   "longcat": "lc",
   "lc": "lc",
   "hetzner": "hetzner",
+  "fluence": "fluence",
 };
 
 const FREEBUFF_MODELS: ProviderModel[] = [
