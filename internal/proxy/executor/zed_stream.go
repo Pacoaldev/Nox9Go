@@ -16,6 +16,8 @@ package executor
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 )
 
@@ -41,13 +43,19 @@ func zedJSONLToSSE(r io.Reader) io.Reader {
 				continue
 			}
 			frame := make([]byte, 0, len(line)+8)
-			if bytes.HasPrefix(line, []byte("data:")) || bytes.HasPrefix(line, []byte("event:")) {
+			if bytes.HasPrefix(line, []byte("data:")) {
+				payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+				payload = zedUnwrapEvent(payload)
+				frame = append(frame, "data: "...)
+				frame = append(frame, payload...)
+			} else if bytes.HasPrefix(line, []byte("event:")) {
 				// Already SSE framing: keep the event, and terminate it.
 				frame = append(frame, line...)
 			} else {
 				if line[0] != '{' && line[0] != '[' {
 					continue
 				}
+				line = zedUnwrapEvent(line)
 				frame = append(frame, "data: "...)
 				frame = append(frame, line...)
 			}
@@ -73,6 +81,30 @@ func zedLooksLikeJSONL(body []byte) bool {
 		return false
 	}
 	return trimmed[0] == '{' || trimmed[0] == '['
+}
+
+// zedUnwrapEvent unpacks Zed's event envelope. Zed Cloud wraps each streamed event
+// as {"event": {<provider_event>}} or {"error": <msg>}. If present, extract the
+// inner provider event object so downstream SSE translators receive the native
+// provider event directly.
+func zedUnwrapEvent(line []byte) []byte {
+	if len(line) == 0 || line[0] != '{' {
+		return line
+	}
+	var wrapper struct {
+		Event json.RawMessage `json:"event"`
+		Error json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(line, &wrapper); err != nil {
+		return line
+	}
+	if len(wrapper.Event) > 0 && string(wrapper.Event) != "null" {
+		return wrapper.Event
+	}
+	if len(wrapper.Error) > 0 && string(wrapper.Error) != "null" {
+		return fmt.Appendf(nil, `{"type":"error","error":%s}`, string(wrapper.Error))
+	}
+	return line
 }
 
 // readAllFramed re-frames a complete JSON Lines body as SSE.

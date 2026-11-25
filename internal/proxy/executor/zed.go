@@ -756,6 +756,9 @@ func ForwardZed(w http.ResponseWriter, req *Request) error {
 // Zed frames its stream as JSON Lines, so the events are re-framed as SSE
 // before they reach a bridge that only speaks SSE.
 func zedPipeStream(w http.ResponseWriter, req *Request, wire ZedWireModel, upstream io.Reader) error {
+	rawStream, _ := io.ReadAll(upstream)
+	log.Warn("zed_probe_stream", "len", len(rawStream), "raw", string(rawStream))
+	upstream = bytes.NewReader(rawStream)
 	framed := zedJSONLToSSE(upstream)
 	// Zed's bridges do not set TTFT themselves (the Claude one only does on
 	// its TranslateResp passthrough), so the first frame read off the stream
@@ -781,6 +784,7 @@ func zedPipeStream(w http.ResponseWriter, req *Request, wire ZedWireModel, upstr
 // zedWriteWhole answers from a complete upstream body, which may be a JSON
 // document or a whole stream (Zed streams even for a non-streaming ask).
 func zedWriteWhole(w http.ResponseWriter, req *Request, wire ZedWireModel, data []byte) error {
+	log.Warn("zed_probe_whole", "len", len(data), "raw", string(data))
 	// Zed streams even for a non-streaming ask, so this path reads the whole
 	// body before answering. The metric still belongs to the first upstream
 	// byte: without this the request is logged with no time-to-first-token at

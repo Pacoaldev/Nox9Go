@@ -94,3 +94,46 @@ func TestZedJSONLToSSEKeepsBlankPayloadOut(t *testing.T) {
 		t.Errorf("data: frames = %d, want 2\n%s", n, string(got))
 	}
 }
+
+func TestZedJSONLToSSEUnwrapsEventEnvelope(t *testing.T) {
+	// Zed Cloud wraps stream lines in an `{"event": ...}` envelope.
+	input := strings.Join([]string{
+		`{"event":{"type":"response.output_text.delta","delta":"Hello"}}`,
+		`{"event":{"type":"response.completed","response":{"id":"resp_1"}}}`,
+		"",
+	}, "\n")
+
+	got := readAllFramed([]byte(input))
+	out := string(got)
+
+	if !strings.Contains(out, `data: {"type":"response.output_text.delta","delta":"Hello"}`+"\n\n") {
+		t.Errorf("expected unwrapped output_text.delta frame, got:\n%s", out)
+	}
+	if !strings.Contains(out, `data: {"type":"response.completed","response":{"id":"resp_1"}}`+"\n\n") {
+		t.Errorf("expected unwrapped response.completed frame, got:\n%s", out)
+	}
+}
+
+func TestZedUnwrapEvent(t *testing.T) {
+	t.Run("unwraps event", func(t *testing.T) {
+		in := []byte(`{"event":{"type":"text_delta","text":"hi"}}`)
+		want := `{"type":"text_delta","text":"hi"}`
+		if got := string(zedUnwrapEvent(in)); got != want {
+			t.Errorf("zedUnwrapEvent = %s, want %s", got, want)
+		}
+	})
+	t.Run("unwraps error", func(t *testing.T) {
+		in := []byte(`{"error":"upstream down"}`)
+		want := `{"type":"error","error":"upstream down"}`
+		if got := string(zedUnwrapEvent(in)); got != want {
+			t.Errorf("zedUnwrapEvent = %s, want %s", got, want)
+		}
+	})
+	t.Run("leaves unwrapped alone", func(t *testing.T) {
+		in := []byte(`{"type":"ping"}`)
+		want := `{"type":"ping"}`
+		if got := string(zedUnwrapEvent(in)); got != want {
+			t.Errorf("zedUnwrapEvent = %s, want %s", got, want)
+		}
+	})
+}

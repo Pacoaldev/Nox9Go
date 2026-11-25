@@ -593,3 +593,39 @@ func TestResolveModel_CodexSlugStillResolvesWithoutCombo(t *testing.T) {
 		t.Errorf("ComboModels = %v, want none", info.ComboModels)
 	}
 }
+
+func TestResolveModel_FluenceRoutingProfiles(t *testing.T) {
+	database, cleanup := setupChatTestDB(t)
+	defer cleanup()
+	h := NewChatHandler(db.NewRepo(database))
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"fluence/cheapest", "fluence/cheapest"},
+		{"fluence/architect", "fluence/architect"},
+		{"fluence/coder", "fluence/coder"},
+		{"fluence/routines", "fluence/routines"},
+		{"fluence/fluence/cheapest", "fluence/cheapest"},
+		{"fluence/fluence/coder", "fluence/coder"},
+		{"fluence/deepseek/deepseek-v4-flash-0731", "deepseek/deepseek-v4-flash-0731"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			info, err := h.resolveModel(tt.input)
+			if err != nil {
+				t.Fatalf("resolveModel(%q) error = %v", tt.input, err)
+			}
+			if info.Provider != "fluence" || info.Model != tt.want {
+				t.Errorf("resolveModel(%q) = %s/%s, want fluence/%s", tt.input, info.Provider, info.Model, tt.want)
+			}
+			entry := h.resolveModelEntry(tt.input)
+			if entry == nil || entry.Provider != "fluence" || entry.Model != tt.want {
+				t.Errorf("resolveModelEntry(%q) = %+v, want fluence/%s", tt.input, entry, tt.want)
+			}
+		})
+	}
+}
+

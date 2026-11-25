@@ -2708,6 +2708,7 @@
     'mixlayer',
     'nararouter',
     'onomeo',
+    'fluence',
   ])
 
   // canListLiveModels mirrors the backend's list of providers with a live

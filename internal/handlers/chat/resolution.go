@@ -94,6 +94,16 @@ func normalizeProviderModel(provider, model string) string {
 	if (provider == "nararouter" || provider == "nara" || provider == "bynara" || provider == "nanarouter") && model == "minimax-m3-free" {
 		return "minimax-m3"
 	}
+	// Fluence routing profiles live under the fluence/ namespace upstream
+	// (fluence/architect, fluence/coder, fluence/routines, fluence/cheapest),
+	// while concrete models carry their own vendor prefix (deepseek/...). When
+	// the gateway's provider prefix is fluence/ or the dashboard strips the
+	// leading fluence/ on custom-model add, the inner id loses its vendor
+	// qualifier and Fluence rejects bare "cheapest" with 400
+	// auto_no_eligible_model ("Disabled or removed from the catalog: cheapest").
+	if provider == "fluence" && model != "" && !strings.Contains(model, "/") {
+		return "fluence/" + model
+	}
 	return model
 }
 
