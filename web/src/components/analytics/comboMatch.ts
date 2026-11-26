@@ -10,6 +10,57 @@
  * `oc` / `ocz` pair below is the reason to.
  */
 
+/**
+ * How long a finished combo run stays on screen after it stops being in flight.
+ *
+ * Shared by the combo-flow view (which panels exist) and the card (which combo
+ * it maps), so the two can never disagree on when a panel disappears.
+ */
+export const RECENT_WINDOW_MS = 25000
+
+/** The stream fields a combo name is read from. */
+export interface ComboNamedRow {
+  comboName?: string
+  timestamp?: string
+}
+
+/**
+ * The combos that deserve their own panel right now: first every combo with a
+ * request in flight, then every combo that finished inside the recent window.
+ *
+ * Names are de-duplicated case-insensitively and keep the spelling the stream
+ * reported first, so one combo never opens two panels as "MinionsPRO" and
+ * "minionspro". A timestamp that cannot be parsed counts as live, which is the
+ * rule the card already used.
+ */
+export function liveComboNames(
+  activeRequests: readonly ComboNamedRow[],
+  recentRequests: readonly ComboNamedRow[],
+  nowMs = Date.now()
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const add = (raw: unknown) => {
+    const name = String(raw ?? '').trim()
+    if (!name) return
+    const key = name.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push(name)
+  }
+
+  for (const row of activeRequests) add(row?.comboName)
+
+  const cutoff = nowMs - RECENT_WINDOW_MS
+  for (const row of recentRequests) {
+    if (!String(row?.comboName ?? '').trim()) continue
+    const t = Date.parse(String(row?.timestamp ?? ''))
+    if (Number.isNaN(t) || t >= cutoff) add(row.comboName)
+  }
+
+  return out
+}
+
 export interface MemberRowLike {
   provider?: string
   model?: string

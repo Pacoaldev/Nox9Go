@@ -2,6 +2,7 @@
   import { api, type ProviderConnection } from '../../api/client'
   import ComboFlowCard from './ComboFlowCard.svelte'
   import { connectUsageStream } from './usageStream'
+  import { liveComboNames } from './comboMatch'
   import type { ActiveRequestItem, RecentRequestItem } from './types'
   import Card from '../../lib/ui/Card.svelte'
 
@@ -49,6 +50,21 @@
 
   // Lock stamps change without a usage event, so poll connections while this
   // page is open. 10s keeps the 1 vCPU budget calm and still tracks a 5-min lockdown.
+  /**
+   * The combos that get a panel, one each. A combo appears while it has a
+   * request in flight and stays while its result is inside the recent window.
+   * Ordered by the combo list, so a panel never changes column when a sibling
+   * combo starts or finishes.
+   */
+  let liveCombos = $derived.by(() => {
+    const order = new Map(comboDefs.map((c, i) => [c.name.toLowerCase().trim(), { name: c.name, i }]))
+    return liveComboNames(activeRequests, recentRequests)
+      .map((name) => order.get(name.toLowerCase()))
+      .filter((entry): entry is { name: string; i: number } => Boolean(entry))
+      .sort((a, b) => a.i - b.i)
+      .map((entry) => entry.name)
+  })
+
   $effect(() => {
     let cancelled = false
     async function loadConnections() {
@@ -69,8 +85,10 @@
 </script>
 
 <div class="flex flex-col gap-4">
-  <Card padding="none" class="overflow-hidden border border-border">
-    <div class="flex flex-col gap-3 border-b border-border bg-surface-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+  {#snippet panelHeader()}
+    <div
+      class="flex flex-col gap-3 border-b border-border bg-surface-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between"
+    >
       <div class="flex min-w-0 items-center gap-2">
         <span class="material-symbols-outlined text-[18px] text-text-muted" aria-hidden="true"
           >account_tree</span
@@ -81,19 +99,44 @@
         </div>
       </div>
     </div>
-    <div class="p-5">
-      <ComboFlowCard
-        combos={comboDefs}
-        {activeRequests}
-        {recentRequests}
-        {errorProvider}
-        {connections}
-      />
-      {#if !activeRequests.some((r) => r.comboName) && !recentRequests.some((r) => r.comboName)}
+  {/snippet}
+
+  {#if liveCombos.length === 0}
+    <Card padding="none" class="overflow-hidden border border-border">
+      {@render panelHeader()}
+      <div class="p-5">
         <p class="font-body text-sm text-text-muted">
           Waiting for a combo request. The live map appears while a combo is in use.
         </p>
-      {/if}
+      </div>
+    </Card>
+  {:else}
+    <!--
+      One whole panel per combo in use. A single combo keeps the full width it
+      had before, so the grid reserves a second column only when a second combo
+      is actually live. From md up the two panels split the row equally and the
+      grid stretches both to the same height; `gap-5` keeps them off each other
+      and the page padding keeps them off the frame.
+    -->
+    <div
+      class="grid grid-cols-1 gap-5 {liveCombos.length > 1 ? 'md:grid-cols-2' : ''}"
+      data-testid="combo-flow-panels"
+    >
+      {#each liveCombos as name (name)}
+        <Card padding="none" class="flex min-w-0 flex-col overflow-hidden border border-border">
+          {@render panelHeader()}
+          <div class="flex min-h-0 min-w-0 flex-1 flex-col p-5">
+            <ComboFlowCard
+              comboName={name}
+              combos={comboDefs}
+              {activeRequests}
+              {recentRequests}
+              {errorProvider}
+              {connections}
+            />
+          </div>
+        </Card>
+      {/each}
     </div>
-  </Card>
+  {/if}
 </div>

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test'
 import {
   connectionBlockedForModel,
+  liveComboNames,
   matchMemberRow,
   modelTail,
   parseMember,
   providerFullyLocked,
+  RECENT_WINDOW_MS,
   sameProvider,
   type ConnectionLockLike,
 } from './comboMatch'
@@ -132,6 +134,47 @@ describe('providerFullyLocked', () => {
 
   it('is false when the provider has no connections', () => {
     expect(providerFullyLocked([], 'gemini', 'gemini-1.5-flash')).toBe(false)
+  })
+})
+
+describe('liveComboNames', () => {
+  const now = Date.parse('2026-01-01T12:00:00.000Z')
+  const inside = new Date(now - 1000).toISOString()
+  const outside = new Date(now - RECENT_WINDOW_MS - 1000).toISOString()
+
+  it('names every combo with a request in flight, first-seen order', () => {
+    const got = liveComboNames(
+      [{ comboName: 'MinionsPRO' }, { comboName: 'fast' }, { comboName: 'MinionsPRO' }],
+      [],
+      now
+    )
+    expect(got).toEqual(['MinionsPRO', 'fast'])
+  })
+
+  it('adds a combo that finished inside the window, keeping its own spelling', () => {
+    const got = liveComboNames([{ comboName: 'fast' }], [{ comboName: 'MinionsPRO', timestamp: inside }], now)
+    expect(got).toEqual(['fast', 'MinionsPRO'])
+  })
+
+  it('drops a combo whose last request is older than the window', () => {
+    expect(liveComboNames([], [{ comboName: 'fast', timestamp: outside }], now)).toEqual([])
+  })
+
+  it('keeps a combo whose timestamp cannot be parsed', () => {
+    expect(liveComboNames([], [{ comboName: 'fast', timestamp: 'not-a-date' }], now)).toEqual(['fast'])
+  })
+
+  it('does not repeat a combo already seen as in flight, whatever the case', () => {
+    const got = liveComboNames(
+      [{ comboName: 'MinionsPRO' }],
+      [{ comboName: 'minionspro', timestamp: inside }],
+      now
+    )
+    expect(got).toEqual(['MinionsPRO'])
+  })
+
+  it('ignores blank combo names', () => {
+    expect(liveComboNames([{ comboName: '   ' }, {}], [], now)).toEqual([])
   })
 })
 

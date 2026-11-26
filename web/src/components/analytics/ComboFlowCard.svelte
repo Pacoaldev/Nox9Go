@@ -1,11 +1,17 @@
 <script lang="ts">
-  import { matchMemberRow, parseMember, providerFullyLocked, sameProvider } from './comboMatch'
+  import { matchMemberRow, parseMember, providerFullyLocked, RECENT_WINDOW_MS, sameProvider } from './comboMatch'
   import type { ConnectionLockLike } from './comboMatch'
   import type { ActiveRequestItem, RecentRequestItem } from './types'
 
   interface Props {
     /** Combo definitions: name, member ids ("provider/model"), strategy. */
     combos?: { name: string; members: string[]; strategy?: string }[]
+    /**
+     * The combo this panel must map. The combo-flow view renders one card per
+     * live combo and names it here; without it the card picks the single live
+     * combo itself, which is how it is used standalone.
+     */
+    comboName?: string
     activeRequests?: ActiveRequestItem[]
     recentRequests?: RecentRequestItem[]
     /** Provider that last failed, straight from the usage stream. */
@@ -19,6 +25,7 @@
 
   let {
     combos = [],
+    comboName = '',
     activeRequests = [],
     recentRequests = [],
     errorProvider = '',
@@ -37,9 +44,6 @@
     /** Time the member took, when the stream recorded a completed request. */
     latency: number
   }
-
-  // A finished combo run stays on screen long enough to read the outcome.
-  const RECENT_WINDOW_MS = 25000
 
   const PALETTE = ['#22d3ee', '#a78bfa', '#f472b6', '#facc15', '#34d399', '#fb923c', '#60a5fa', '#f87171']
 
@@ -64,8 +68,13 @@
     return (parts.length > 1 ? parts[0][0] + parts[1][0] : s.slice(0, 2)).toUpperCase()
   }
 
-  /** The combo in use right now, or the one that finished within the window. */
+  /**
+   * The combo to map: the one named by the parent, or — standalone — the combo
+   * in use right now, else the one that finished inside the recent window.
+   */
   let liveCombo = $derived.by(() => {
+    const named = (comboName || '').trim()
+    if (named) return named
     for (const r of activeRequests) {
       if (r.comboName) return r.comboName
     }
@@ -156,8 +165,8 @@
 
 {#if liveCombo && steps.length > 0}
   <section
-    class="cf bg-surface border border-border-subtle rounded-[14px] shadow-[var(--shadow-soft)] min-w-0 overflow-hidden"
-    aria-label="Combo flow"
+    class="cf flex-1 bg-surface border border-border-subtle rounded-[14px] shadow-[var(--shadow-soft)] min-w-0 overflow-hidden"
+    aria-label="Combo flow {liveCombo}"
   >
     <header class="cf-header">
       <div class="cf-heading">
