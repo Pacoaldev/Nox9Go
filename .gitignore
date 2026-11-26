@@ -101,6 +101,8 @@ stitch-screenshots/
 /docs/auditoriaUnificada.md
 /docs/report.md
 /docs/tabla_saldos.md
+/docs/comandos.md
+/docs/plan_enrutamiendo_por_rol.md
 # Telegram+Gentle-shell module notes — local export spec (mirrored in Engram).
 /docs/TELEGRAM_GENTLE_SHELL.md
 /scripts/audit-ci.ps1

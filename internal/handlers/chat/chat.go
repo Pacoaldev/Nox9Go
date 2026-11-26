@@ -45,6 +45,32 @@ func (c *cacheCaptureWriter) Write(b []byte) (int, error) {
 }
 
 // HandleChatCompletions handles POST /v1/chat/completions (OpenAI format requests).
+// roleProfileCombos maps the X-Nox-Role header onto the combo each role
+// drains. light is the read-only profile (explorer subagents, grep/read turns),
+// work is the daily driver, plan is the design/architecture profile.
+var roleProfileCombos = map[string]string{
+	"light": "Combo-Light",
+	"work":  "Combo-Work",
+	"plan":  "Combo-Plan",
+}
+
+// modelForRole returns the model this request must resolve: the role profile's
+// combo when the X-Nox-Role header names one, otherwise the model the client
+// sent. The header is advisory — an unrecognized value is ignored rather than
+// rejected, so it can never turn a working request into a failed one. The
+// per-key model policy is enforced against the combo as well, so the header
+// cannot reach a model the key is denied.
+func (h *ChatHandler) modelForRole(w http.ResponseWriter, r *http.Request, requested string) (string, bool) {
+	comboName, known := roleProfileCombos[strings.ToLower(strings.TrimSpace(r.Header.Get("X-Nox-Role")))]
+	if !known {
+		return requested, true
+	}
+	if !h.enforceModelAccess(w, r, comboName) {
+		return "", false
+	}
+	return comboName, true
+}
+
 func (h *ChatHandler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -124,7 +150,14 @@ func (h *ChatHandler) HandleChatCompletions(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	modelInfo, err := h.resolveModel(reqBody.Model)
+	// X-Nox-Role forces the role profile's combo, so an auxiliary panel or a Pi
+	// subagent can declare its role without changing the model id it sends.
+	dispatchModel, allowed := h.modelForRole(w, r, reqBody.Model)
+	if !allowed {
+		return
+	}
+
+	modelInfo, err := h.resolveModel(dispatchModel)
 	if err != nil {
 		handlerutil.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
@@ -261,9 +294,15 @@ func (h *ChatHandler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	modelInfo, err := h.resolveModel(reqBody.Model)
+	// X-Nox-Role forces the role profile's combo; see HandleChatCompletions.
+	dispatchModel, allowed := h.modelForRole(w, r, reqBody.Model)
+	if !allowed {
+		return
+	}
+
+	modelInfo, err := h.resolveModel(dispatchModel)
 	if err != nil {
-		log.Error("chat", "resolve model failed", "error", err, "model", reqBody.Model)
+		log.Error("chat", "resolve model failed", "error", err, "model", dispatchModel)
 		handlerutil.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}

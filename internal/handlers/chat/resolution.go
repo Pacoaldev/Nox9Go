@@ -318,38 +318,28 @@ func (h *ChatHandler) resolveModel(modelStr string) (*ModelInfo, error) {
 					Model:    model,
 				}, nil
 			}
+
+			// The target may name a combo instead of a provider/model pair
+			// ("pi-work" -> "Combo-Work"). A slash-less target used to be dropped
+			// here, so only the alias name continued and the mapping silently did
+			// nothing.
+			comboInfo, comboErr := h.resolveComboByName(aliasTarget)
+			if comboErr != nil {
+				return nil, comboErr
+			}
+			if comboInfo != nil {
+				return comboInfo, nil
+			}
 		}
 	}
 
 	// 3. Check if it's a combo name
-	if h.Repo != nil {
-		combo, err := h.Repo.GetComboByName(modelStr)
-		if err == nil && combo != nil && combo.Models != "" {
-			var modelStrings []string
-			if err := json.Unmarshal([]byte(combo.Models), &modelStrings); err == nil && len(modelStrings) > 0 {
-				// Flatten nested combos into concrete leaves so rotation covers
-				// every reachable model (a nested combo entry used to collapse to
-				// its first leaf, so combo-wombo -> free-tier never rotated).
-				flattened, flatErr := h.flattenComboModels(modelStrings)
-				if flatErr != nil {
-					return nil, flatErr
-				}
-				if len(flattened) > 0 {
-					firstInfo := h.resolveModelEntry(flattened[0])
-					if firstInfo == nil {
-						firstInfo, _ = h.resolveModel(flattened[0])
-					}
-					if firstInfo != nil {
-						firstInfo.ComboModels = flattened
-						strat, sticky, judge := h.resolveComboRouting(combo.Name, combo.Strategy)
-						firstInfo.Strategy = strat
-						firstInfo.StickyLimit = sticky
-						firstInfo.JudgeModel = judge
-						return firstInfo, nil
-					}
-				}
-			}
-		}
+	comboInfo, comboErr := h.resolveComboByName(modelStr)
+	if comboErr != nil {
+		return nil, comboErr
+	}
+	if comboInfo != nil {
+		return comboInfo, nil
 	}
 
 	// Codex-only GPT model slugs (open-sse/services/model.js MODEL_PREFIX_
@@ -398,6 +388,47 @@ func (h *ChatHandler) resolveModel(modelStr string) (*ModelInfo, error) {
 		}
 	}
 	return nil, fmt.Errorf("could not resolve model: %s", modelStr)
+}
+
+// resolveComboByName resolves a combo name to its first reachable member,
+// carrying the combo's seat list and routing strategy. A nil ModelInfo with a
+// nil error means the name is not a combo — or is one with no usable seat —
+// which callers treat as "keep looking".
+func (h *ChatHandler) resolveComboByName(name string) (*ModelInfo, error) {
+	if h.Repo == nil {
+		return nil, nil
+	}
+	combo, err := h.Repo.GetComboByName(name)
+	if err != nil || combo == nil || combo.Models == "" {
+		return nil, nil
+	}
+	var modelStrings []string
+	if err := json.Unmarshal([]byte(combo.Models), &modelStrings); err != nil || len(modelStrings) == 0 {
+		return nil, nil
+	}
+	// Flatten nested combos into concrete leaves so rotation covers
+	// every reachable model (a nested combo entry used to collapse to
+	// its first leaf, so combo-wombo -> free-tier never rotated).
+	flattened, flatErr := h.flattenComboModels(modelStrings)
+	if flatErr != nil {
+		return nil, flatErr
+	}
+	if len(flattened) == 0 {
+		return nil, nil
+	}
+	firstInfo := h.resolveModelEntry(flattened[0])
+	if firstInfo == nil {
+		firstInfo, _ = h.resolveModel(flattened[0])
+	}
+	if firstInfo == nil {
+		return nil, nil
+	}
+	firstInfo.ComboModels = flattened
+	strat, sticky, judge := h.resolveComboRouting(combo.Name, combo.Strategy)
+	firstInfo.Strategy = strat
+	firstInfo.StickyLimit = sticky
+	firstInfo.JudgeModel = judge
+	return firstInfo, nil
 }
 
 // codexOnlyModelSlug reports whether a bare model id is served only by the

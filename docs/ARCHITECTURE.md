@@ -233,10 +233,13 @@ sequenceDiagram
 ### Combos
 
 - **Fallback:** try candidates in order.
+- **Capacity:** declaration order, never rotated — the same branch as `fallback`, and the default when nothing else is set. The strategy itself has no quota or `:free` awareness: cooldown and learned-ceiling filtering happen in the fallback loop and the quota learner, so "drain the free tier first" is a property of the member order, not of the strategy.
 - **Round-robin:** rotate the starting position per request.
 - **Sticky:** keep the current account/model until its configured consecutive-use limit.
 - **Fusion:** run panel requests, apply quorum/straggler/hard timeouts, and ask a configured judge model to synthesize the result; insufficient panel answers degrade according to the handler contract.
 - **Capability adapter:** scan the request for features such as tools, vision, or reasoning and prefer compatible candidates.
+- **Role profiles:** `Combo-Light` (read-only explorer work), `Combo-Work` (daily driver, free tier first) and `Combo-Plan` (design and architecture) are the three combos of the Herdr → Pi → Nox9Go role split. The optional `X-Nox-Role: light | work | plan` request header selects one before model resolution, with priority over the body's `model`; the three profiles are also reachable as the `pi-light`, `pi-work` and `pi-plan` model aliases, so a client can pick one by model id instead of by header.
+- **Alias targets:** a `modelAliases` entry whose target carries no `/` is resolved as a combo name; a target containing `/` stays a `provider/model` pair. An alias whose slash-less target names no combo changes nothing — the request continues with the alias name itself.
 
 Combo state, provider connection state, health, and some settings are persisted in JSON-backed rows and scopes. Treat those payloads as compatibility surfaces.
 
