@@ -14,6 +14,13 @@
     type ProxyPool,
     type Settings
   } from '../../api/client'
+  import {
+    buildUpstreamQuotaNote,
+    getGatewayCooldownInfo,
+    type ConnectionLockSource,
+    type CooldownInfo,
+    type QuotaLike
+  } from '../../lib/connection-cooldown'
   import { PROVIDER_CATALOG, PROVIDER_CATALOG_MAP, type ProviderCatalogItem } from '../../lib/providers'
   import {
     clearCallback,
@@ -814,113 +821,18 @@
       isSavingFreeProxy = false
     }
   }
-  function getCooldownInfo(conn: ProviderConnection): { label: string; title: string; isExhausted: boolean; isLock?: boolean } | null {
-    // 1. Check modelLock_* and rateLimitedUntil across conn, conn.data, and providerSpecificData (matching upstream ⏱ {timeLeft})
-    const dataObj = conn.providerSpecificData as Record<string, unknown> | undefined
-    const rawData = (conn as unknown as { data?: Record<string, unknown> }).data
-    const allProps = {
-      ...(typeof rawData === 'object' && rawData ? rawData : {}),
-      ...(typeof dataObj === 'object' && dataObj ? dataObj : {}),
-      ...conn
-    }
-    const locks = Object.entries(allProps).filter(
-      ([k, v]) => (k.startsWith('modelLock_') || k === 'rateLimitedUntil') && v && new Date(v as string).getTime() > currentTime
-    )
-    if (locks.length > 0) {
-      let maxLock = 0
-      for (const [_, v] of locks) {
-        const t = new Date(v as string).getTime()
-        if (t > maxLock) maxLock = t
-      }
-      const diff = Math.max(0, Math.floor((maxLock - currentTime) / 1000))
-      const timeLeft =
-        diff < 60
-          ? `${diff}s`
-          : diff < 3600
-            ? `${Math.floor(diff / 60)}m ${diff % 60}s`
-            : `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`
-      return {
-        label: `⏱ ${timeLeft}`,
-        title: `Model rate limit lock active until ${new Date(maxLock).toLocaleTimeString()}`,
-        isExhausted: false,
-        isLock: true
-      }
-    }
+  // Badge verdict for a row. The rules live in lib/connection-cooldown.ts so
+  // the rule "an upstream-declared exhausted model is not a connection lockout"
+  // is pinned by a test instead of by reading this markup.
+  function getCooldownInfo(conn: ProviderConnection, lastErrorText = ''): CooldownInfo | null {
+    return getGatewayCooldownInfo(conn as unknown as ConnectionLockSource, lastErrorText, currentTime)
+  }
 
-    // 2. Check live quota data for exhausted models (remaining <= 0) and resetAt.
-    //    A pool with total <= 0 is not an exhausted pool — it means the account
-    //    has no allocation at all (Qoder credits report total 0, and its
-    //    "expiresAt" is a 9999-12-31 sentinel), so counting it produced
-    //    "Quota Exhausted (0%): Resets in 2912172d 1h" on a perfectly healthy
-    //    connection. Only a pool that was actually granted something can run
-    //    out of it.
+  // Neutral upstream-quota note for the connection detail. Informational only:
+  // it never badges the row and never means the gateway stopped routing.
+  function getUpstreamQuotaNote(conn: ProviderConnection): { text: string; title: string } | null {
     const usage = connectionQuotas[conn.id]
-    if (usage?.quotas) {
-      const quotaEntries = Object.entries(usage.quotas)
-      const exhausted = quotaEntries.filter(([_, q]) => {
-        const total = Number(q.total)
-        if (!Number.isFinite(total) || total <= 0) return false
-        return (
-          (q.remainingPercentage !== undefined && Number(q.remainingPercentage) <= 0) ||
-          (q.remaining !== undefined && Number(q.remaining) <= 0)
-        )
-      })
-      if (exhausted.length > 0) {
-        let earliestReset = 0
-        let resetModel = ''
-        for (const [m, q] of exhausted) {
-          if (q.resetAt) {
-            const t = new Date(q.resetAt).getTime()
-            if (t > currentTime && (earliestReset === 0 || t < earliestReset)) {
-              earliestReset = t
-              resetModel = q.displayName || m
-            }
-          }
-        }
-        if (earliestReset > currentTime) {
-          const diff = earliestReset - currentTime
-          const hours = Math.floor(diff / (1000 * 60 * 60))
-          const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-          const secs = Math.floor((diff % (1000 * 60)) / 1000)
-          const timeStr =
-            hours >= 24
-              ? `${Math.floor(hours / 24)}d ${hours % 24}h`
-              : hours > 0
-                ? `${hours}h ${mins}m`
-                : `${mins}m ${secs}s`
-          return {
-            label: `Quota Exhausted (0%): Resets in ${timeStr}`,
-            title: `Quota exhausted for ${resetModel}. Reset at ${new Date(earliestReset).toLocaleString()}`,
-            isExhausted: true
-          }
-        }
-      }
-    }
-    // 4. Check errorCode 429 or lastError indicating rate limit / quota
-    const errCode = (conn as unknown as { errorCode?: number }).errorCode
-    const lastErr = normalizeLastError(conn.lastError) || ''
-    if (
-      errCode === 429 ||
-      lastErr.includes('429') ||
-      lastErr.toLowerCase().includes('quota') ||
-      lastErr.toLowerCase().includes('exhausted')
-    ) {
-      const match = lastErr.match(/Resets in ([^.]+)/i)
-      if (match) {
-        return {
-          label: `Quota Exhausted (429): Resets in ${match[1].trim()}`,
-          title: lastErr,
-          isExhausted: true
-        }
-      }
-      return {
-        label: 'Quota Exhausted (429)',
-        title: lastErr || 'HTTP 429 Rate Limit / Quota Exhausted',
-        isExhausted: true
-      }
-    }
-
-    return null
+    return buildUpstreamQuotaNote(usage?.quotas as Record<string, QuotaLike> | undefined, currentTime)
   }
 
   let lastLoadedProviderId = ''
@@ -3439,7 +3351,8 @@
           {@const lastErr = normalizeLastError(conn.lastError || status?.error) || ''}
           {@const priorityNum = conn.priority ?? idx + 1}
           {@const isConnActive = conn.isActive === 1}
-          {@const cooldownInfo = getCooldownInfo(conn)}
+          {@const cooldownInfo = getCooldownInfo(conn, lastErr)}
+          {@const upstreamQuotaNote = getUpstreamQuotaNote(conn)}
           <!-- badgeFor owns the precedence between the live probe and the
                connection's persisted testStatus; the markup below only renders
                the verdict it returns. -->
@@ -3651,6 +3564,19 @@
                       >
                         <span class="material-symbols-outlined text-sm shrink-0 mt-0.5">{cooldownInfo.isLock ? 'lock_clock' : 'hourglass_top'}</span>
                         <span class="break-words leading-relaxed">{cooldownInfo.title}</span>
+                      </div>
+                    {/if}
+                    <!-- Upstream quota note: the account's own window at the
+                         provider, not a gateway lockout. Deliberately neutral —
+                         it used to render as a red QUOTA OUT badge and read as
+                         a dead connection while every other model answered. -->
+                    {#if upstreamQuotaNote}
+                      <div
+                        class="mt-1.5 flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-surface-2 text-text-muted max-w-full"
+                        title={upstreamQuotaNote.title}
+                      >
+                        <span class="material-symbols-outlined text-sm shrink-0 mt-0.5">hourglass_top</span>
+                        <span class="break-words leading-relaxed">{upstreamQuotaNote.text}</span>
                       </div>
                     {/if}
                     <!-- Error message block -->
