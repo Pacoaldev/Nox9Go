@@ -1157,6 +1157,10 @@ func comboSeatCapabilities(seat string) providers.CapabilitiesDetail {
 // A seat that is itself a combo name contributes its own leaves' minimum, and
 // cycles are cut: a name already on the walk contributes nothing, which is
 // what bounds a self-referencing combo (upstream's `visiting` set).
+//
+// This is the derived default for the catalogue. A combo may declare its own
+// window instead (models.Combo.ContextWindow), which appendCombos publishes in
+// place of this minimum.
 func comboSeatLimits(index comboIndex, comboName string) (contextWindow, maxOutput int) {
 	visiting := make(map[string]bool, 4)
 	visiting[comboName] = true
@@ -1230,7 +1234,9 @@ func (h *ChatHandler) appendCombos(data []ModelInfoObject, seen map[string]bool)
 			Object:  "model",
 			OwnedBy: "combo",
 		}
+		var comboCapabilities *providers.ComboCapabilities
 		if caps, ok := h.aggregateComboCapabilities(combo); ok {
+			comboCapabilities = caps
 			entry.Capabilities = caps
 		}
 		// Upstream publishes the combo-wide limits at the top level too (any
@@ -1238,6 +1244,18 @@ func (h *ChatHandler) appendCombos(data []ModelInfoObject, seen map[string]bool)
 		// tree). A combo with no LLM seat at all publishes neither key rather
 		// than a guess.
 		contextWindow, maxOutput := comboSeatLimits(index, combo.Name)
+		// A window the operator declared wins over the derived minimum. It is
+		// the only honest number for a combo whose seats disagree: the gateway
+		// picks the seat per request, the client never learns which one answered,
+		// and the smallest seat's window can make a session served by a larger
+		// one read as several times fuller than it is. The capability block
+		// carries the same value so the two numbers cannot disagree.
+		if combo.ContextWindow > 0 {
+			contextWindow = combo.ContextWindow
+			if comboCapabilities != nil {
+				comboCapabilities.ContextWindow = combo.ContextWindow
+			}
+		}
 		entry.ContextLength = optionalTokenLimit(contextWindow)
 		entry.MaxCompletionTokens = optionalTokenLimit(maxOutput)
 		data = append(data, entry)

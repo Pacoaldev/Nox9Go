@@ -186,4 +186,54 @@ func TestEnsureCoreSchema(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("backfills the declared combo window on a legacy combos table", func(t *testing.T) {
+		// A database written before the declared window existed has the upstream
+		// six-column combos table. The column has to arrive additively, read back
+		// as "derive it", and accept a declared value afterwards.
+		conn, err := OpenDatabase(filepath.Join(t.TempDir(), "legacy_combos.sqlite"))
+		if err != nil {
+			t.Fatalf("OpenDatabase failed: %v", err)
+		}
+		defer conn.Close()
+		if _, err := conn.Exec(`CREATE TABLE combos (
+			id TEXT PRIMARY KEY,
+			name TEXT UNIQUE NOT NULL,
+			kind TEXT,
+			models TEXT NOT NULL,
+			createdAt TEXT NOT NULL,
+			updatedAt TEXT NOT NULL
+		)`); err != nil {
+			t.Fatalf("legacy combos table setup failed: %v", err)
+		}
+		if _, err := conn.Exec(`INSERT INTO combos (id, name, kind, models, createdAt, updatedAt)
+			VALUES ('c-legacy', 'legacy-combo', 'llm', '["deepseek/deepseek-chat"]', '2026-07-18T00:00:00Z', '2026-07-18T00:00:00Z')`); err != nil {
+			t.Fatalf("legacy combo seed failed: %v", err)
+		}
+		if err := EnsureCoreSchema(conn); err != nil {
+			t.Fatalf("EnsureCoreSchema failed: %v", err)
+		}
+		if err := EnsureAdditiveColumns(conn); err != nil {
+			t.Fatalf("EnsureAdditiveColumns failed: %v", err)
+		}
+
+		repo := NewRepo(conn)
+		combo, err := repo.GetComboById("c-legacy")
+		if err != nil {
+			t.Fatalf("GetComboById on a migrated database failed: %v", err)
+		}
+		if combo == nil {
+			t.Fatalf("legacy combo missing after the migration")
+		}
+		if combo.ContextWindow != 0 {
+			t.Errorf("legacy combo contextWindow = %d, want 0 (derived)", combo.ContextWindow)
+		}
+
+		if err := repo.SetComboContextWindow("c-legacy", 1000000); err != nil {
+			t.Fatalf("SetComboContextWindow failed: %v", err)
+		}
+		if combo, err = repo.GetComboById("c-legacy"); err != nil || combo == nil || combo.ContextWindow != 1000000 {
+			t.Errorf("declared window did not round-trip: %+v (err %v)", combo, err)
+		}
+	})
 }

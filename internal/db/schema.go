@@ -107,6 +107,7 @@ func coreSchema() []tableDef {
 				{"name", "TEXT UNIQUE NOT NULL"},
 				{"kind", "TEXT"},
 				{"models", "TEXT NOT NULL"},
+				{"contextWindow", "INTEGER DEFAULT 0"},
 				{"createdAt", "TEXT NOT NULL"},
 				{"updatedAt", "TEXT NOT NULL"},
 			},
@@ -380,6 +381,13 @@ var goOnlyColumns = [][3]string{
 	// models column stays the wire contract — so upstream, which declares
 	// neither the column nor the concept, ignores it.
 	{"combos", "matchRules", "TEXT DEFAULT '[]'"},
+	// A declared context window per combo. The catalogue otherwise advertises
+	// the smallest window any seat in the combo can serve, which makes a client
+	// read a session served by a larger seat as far fuller than it is. 0 means
+	// "derive it", so every row written before the field existed keeps the
+	// behaviour it had; upstream declares neither the column nor the concept and
+	// ignores it.
+	{"combos", "contextWindow", "INTEGER DEFAULT 0"},
 }
 
 // keiRouterTables are Go-only tables for KeiRouter port features.

@@ -211,14 +211,26 @@
     comboSaveError = ''
   }
 
-  async function handleSaveCombo(name: string, models: string[], matchRules: SmartRule[]) {
+  async function handleSaveCombo(
+    name: string,
+    models: string[],
+    matchRules: SmartRule[],
+    contextWindow: number
+  ) {
     isSavingCombo = true
     comboSaveError = ''
     try {
       if (editingCombo) {
-        await api.updateCombo(editingCombo.id, { name, models, matchRules })
+        await api.updateCombo(editingCombo.id, { name, models, matchRules, contextWindow })
       } else {
-        await api.createCombo({ name, models, strategy: 'fallback', kind: 'llm', matchRules })
+        await api.createCombo({
+          name,
+          models,
+          strategy: 'fallback',
+          kind: 'llm',
+          matchRules,
+          contextWindow
+        })
       }
       closeModal()
       onRefresh()

@@ -55,6 +55,7 @@ func setupDashboardTestDB(t *testing.T) (*Repo, func()) {
 			name TEXT UNIQUE NOT NULL,
 			kind TEXT,
 			models TEXT NOT NULL,
+			contextWindow INTEGER DEFAULT 0,
 			createdAt TEXT NOT NULL,
 			updatedAt TEXT NOT NULL
 		);`,

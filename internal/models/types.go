@@ -96,6 +96,13 @@ type Combo struct {
 	// MatchRules is the raw JSON of the combo's smart rules. Empty means the
 	// combo has none, which is every combo written before the feature.
 	MatchRules string `json:"matchRules,omitempty"`
+	// ContextWindow is the window this combo advertises in the model catalogue,
+	// declared by the operator. Zero means "derive it", which is the smallest
+	// window any seat in the combo tree can serve — the value every combo
+	// published before this field existed. A combo whose seats are mostly 1M but
+	// include one 200k seat is the case this exists for: the derived minimum
+	// makes a client read a session as far fuller than the seat that answers it.
+	ContextWindow int `json:"contextWindow,omitempty"`
 	// AutoMembers is derived, never stored: the models the rules currently
 	// own. The dashboard badges them so an operator can tell a managed member
 	// from one they pinned by hand.

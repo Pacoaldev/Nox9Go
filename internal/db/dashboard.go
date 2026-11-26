@@ -210,6 +210,23 @@ func (r *Repo) UpdateCombo(id, name, kind, modelsJSON, strategy string) error {
 	return nil
 }
 
+// SetComboContextWindow declares the context window a combo advertises in the
+// model catalogue. Zero restores the derived minimum, the smallest window any
+// seat in the combo can serve. It is a setter instead of another parameter on
+// CreateCombo/UpdateCombo because every other combo writer — presets, the
+// auto-family and auto-free combos — has nothing to declare here, and a
+// trailing zero at each of those call sites invites a wrong edit.
+func (r *Repo) SetComboContextWindow(id string, contextWindow int) error {
+	_, err := r.db.Exec(
+		`UPDATE combos SET contextWindow = ?, updatedAt = ? WHERE id = ?`,
+		contextWindow, time.Now().UTC().Format(time.RFC3339), id,
+	)
+	if err != nil {
+		return fmt.Errorf("set combo context window %s: %w", id, err)
+	}
+	return nil
+}
+
 // DeleteCombo deletes a combo configuration by its ID.
 func (r *Repo) DeleteCombo(id string) error {
 	_, err := r.db.Exec(`DELETE FROM combos WHERE id = ?`, id)

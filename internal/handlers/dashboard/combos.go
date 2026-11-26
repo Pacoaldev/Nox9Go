@@ -18,6 +18,25 @@ import (
 	"nox9go/proxy/internal/providers"
 )
 
+// maxDeclaredComboContextWindow bounds the window an operator may declare for a
+// combo. It is a typo guard, not a product limit: the widest window any
+// provider in the catalogue publishes is an order of magnitude below it.
+const maxDeclaredComboContextWindow = 100_000_000
+
+// validateDeclaredContextWindow checks the optional contextWindow field of a
+// combo payload. A nil pointer means the caller said nothing about it, which is
+// never an error: an update keeps the stored value, and a create keeps the
+// window derived from the combo's seats.
+func validateDeclaredContextWindow(window *int) (int, string) {
+	if window == nil {
+		return 0, ""
+	}
+	if *window < 0 || *window > maxDeclaredComboContextWindow {
+		return http.StatusBadRequest, fmt.Sprintf("contextWindow must be between 0 and %d", maxDeclaredComboContextWindow)
+	}
+	return 0, ""
+}
+
 // HandleGetCombos handles GET /api/combos.
 //
 // Every combo carries its smart rules and the members those rules currently
@@ -68,12 +87,13 @@ func (h *DashboardHandler) HandleCreateCombo(w http.ResponseWriter, r *http.Requ
 	defer r.Body.Close()
 
 	var req struct {
-		ID         string `json:"id"`
-		Name       string `json:"name"`
-		Kind       string `json:"kind"`
-		Models     any    `json:"models"`
-		Strategy   string `json:"strategy"`
-		MatchRules any    `json:"matchRules"`
+		ID            string `json:"id"`
+		Name          string `json:"name"`
+		Kind          string `json:"kind"`
+		Models        any    `json:"models"`
+		Strategy      string `json:"strategy"`
+		MatchRules    any    `json:"matchRules"`
+		ContextWindow *int   `json:"contextWindow"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		handlerutil.WriteJSONError(w, http.StatusBadRequest, "invalid JSON")
@@ -89,6 +109,12 @@ func (h *DashboardHandler) HandleCreateCombo(w http.ResponseWriter, r *http.Requ
 	}
 	if req.Strategy == "" {
 		req.Strategy = "fallback"
+	}
+	// The declared window is validated before anything is written: a 400 must
+	// not leave a combo row behind for the operator to clean up.
+	if code, msg := validateDeclaredContextWindow(req.ContextWindow); code != 0 {
+		handlerutil.WriteJSONError(w, code, msg)
+		return
 	}
 
 	modelsJSON := "[]"
@@ -122,6 +148,16 @@ func (h *DashboardHandler) HandleCreateCombo(w http.ResponseWriter, r *http.Requ
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if req.ContextWindow != nil {
+		if err := h.Repo.SetComboContextWindow(req.ID, *req.ContextWindow); err != nil {
+			handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		// The window reaches a client through the catalogue Pi mirrors to disk,
+		// so the mirror is refreshed here instead of waiting for the next
+		// gateway start.
+		h.syncPiCatalogBestEffort(r.Context(), "combo context window declared")
+	}
 	if rulesJSON != "" {
 		if err := h.Repo.SetComboRules(r.Context(), req.ID, rulesJSON); err != nil {
 			handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
@@ -152,11 +188,12 @@ func (h *DashboardHandler) HandleUpdateCombo(w http.ResponseWriter, r *http.Requ
 	defer r.Body.Close()
 
 	var req struct {
-		Name       string `json:"name"`
-		Kind       string `json:"kind"`
-		Models     any    `json:"models"`
-		Strategy   string `json:"strategy"`
-		MatchRules any    `json:"matchRules"`
+		Name          string `json:"name"`
+		Kind          string `json:"kind"`
+		Models        any    `json:"models"`
+		Strategy      string `json:"strategy"`
+		MatchRules    any    `json:"matchRules"`
+		ContextWindow *int   `json:"contextWindow"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		handlerutil.WriteJSONError(w, http.StatusBadRequest, "invalid JSON")
@@ -170,6 +207,13 @@ func (h *DashboardHandler) HandleUpdateCombo(w http.ResponseWriter, r *http.Requ
 	}
 	if existing == nil {
 		handlerutil.WriteJSONError(w, http.StatusNotFound, "combo not found")
+		return
+	}
+	// The declared window is validated before anything is written, so a refused
+	// value leaves the stored row exactly as it was. An absent field is not a
+	// refusal: it means this edit says nothing about the window.
+	if code, msg := validateDeclaredContextWindow(req.ContextWindow); code != 0 {
+		handlerutil.WriteJSONError(w, code, msg)
 		return
 	}
 
@@ -256,6 +300,16 @@ func (h *DashboardHandler) HandleUpdateCombo(w http.ResponseWriter, r *http.Requ
 	if err := h.Repo.UpdateCombo(id, name, kind, modelsJSON, strategy); err != nil {
 		handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if req.ContextWindow != nil {
+		if err := h.Repo.SetComboContextWindow(id, *req.ContextWindow); err != nil {
+			handlerutil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		// The window reaches a client through the catalogue Pi mirrors to disk,
+		// so the mirror is refreshed here instead of waiting for the next
+		// gateway start.
+		h.syncPiCatalogBestEffort(r.Context(), "combo context window declared")
 	}
 	if hasRules {
 		if err := h.Repo.SetComboRules(r.Context(), id, rulesJSON); err != nil {

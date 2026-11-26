@@ -31,7 +31,12 @@
      * custom model id). Shown inline so a 409 is never a silent no-op. */
     saveError?: string
     onClose: () => void
-    onSave: (name: string, models: string[], matchRules: SmartRule[]) => Promise<void> | void
+    onSave: (
+      name: string,
+      models: string[],
+      matchRules: SmartRule[],
+      contextWindow: number
+    ) => Promise<void> | void
     onOpenModelPicker: () => void
     onUpdateModels: (models: string[]) => void
   }
@@ -60,6 +65,22 @@
   let rules = $state<SmartRule[]>(parseSmartRules(editingCombo?.matchRules))
   let rulePreview = $state<ComboRulesPreview | null>(null)
   let rulePreviewError = $state('')
+
+  // The window this combo advertises to a client, in tokens. 0 keeps the
+  // server-derived minimum of its members; a declared value is published as-is.
+  let declaredWindow = $state(editingCombo?.contextWindow ?? 0)
+  // Mirrors maxDeclaredComboContextWindow in internal/handlers/dashboard.
+  const DECLARED_WINDOW_MAX = 100_000_000
+  let declaredWindowError = $derived(
+    declaredWindow > DECLARED_WINDOW_MAX
+      ? 'Context window must be between 0 and 100000000 tokens'
+      : ''
+  )
+
+  function normalizeDeclaredWindow(raw: string): number {
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0
+  }
 
   function addRule() {
     rules = [
@@ -172,7 +193,8 @@
 
   function handleSave() {
     if (!validateModalName(modalName)) return
-    onSave(modalName.trim(), models, rules)
+    if (declaredWindowError) return
+    onSave(modalName.trim(), models, rules, declaredWindow)
   }
 
   function moveModel(idx: number, delta: number) {
@@ -323,6 +345,28 @@
       </button>
     </div>
 
+    <!-- Declared context window -->
+    <div>
+      <label class="text-sm font-medium mb-1.5 block" for="combo-context-window">
+        Declared context window
+      </label>
+      <input
+        id="combo-context-window"
+        type="number"
+        min="0"
+        max={DECLARED_WINDOW_MAX}
+        value={declaredWindow}
+        oninput={(e) => (declaredWindow = normalizeDeclaredWindow(e.currentTarget.value))}
+        class="w-full rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-sm text-text-main focus:outline-none focus:border-brand-500"
+      />
+      <p class="text-[10px] text-text-muted mt-0.5">
+        The window this combo advertises to clients. 0 derives it from the smallest member.
+      </p>
+      {#if declaredWindowError}
+        <p class="text-[10px] text-red-600 dark:text-red-400 mt-0.5">{declaredWindowError}</p>
+      {/if}
+    </div>
+
     <!-- Smart rules -->
     <div>
       <div class="flex items-center justify-between mb-1.5">
@@ -441,7 +485,7 @@
         onclick={handleSave}
         fullWidth
         size="sm"
-        disabled={!modalName.trim() || !!modalNameError || isSaving}
+        disabled={!modalName.trim() || !!modalNameError || !!declaredWindowError || isSaving}
         loading={isSaving}
       >
         {isSaving ? 'Saving...' : editingCombo ? 'Save' : 'Create'}
