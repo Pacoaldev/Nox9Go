@@ -248,13 +248,15 @@ describe('providers & media separation', () => {
   })
   it('files NaN.Builders under the OAuth overview section without changing its auth', () => {
     // The operator wants it listed with the OAuth providers, but the provider
-    // authenticates with a bearer API key: `category` must stay freeTier so the
-    // detail page keeps opening the API-key modal instead of a nonexistent
-    // OAuth flow. `uiSection` moves only the card.
+    // authenticates with a bearer API key: `authType` stays apikey so the detail
+    // page keeps opening the API-key modal instead of a nonexistent OAuth flow,
+    // and `uiSection` moves only the card. `category` is `apikey` since
+    // 80d8c495 reclassified the paid providers — `category: 'oauth'` is what
+    // would route the detail view into the OAuth flow.
     const nan = PROVIDER_CATALOG.find((p) => p.id === 'nan')
     expect(nan).toBeDefined()
     if (!nan) throw new Error('missing nan')
-    expect(nan.category).toBe('freeTier')
+    expect(nan.category).toBe('apikey')
     expect(nan.uiSection).toBe('oauth')
     expect(nan.authType).toBe('apikey')
 

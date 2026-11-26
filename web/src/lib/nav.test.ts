@@ -228,8 +228,12 @@ describe('sidebar arrangement', () => {
   it('keeps an accordion whole and its children in their own container', () => {
     const moved = moveNavEntry([], 'proxy-pools', -1)
     const system = arrangedNavGroups(moved).find((group) => group.id === 'system')
-    expect(system?.entries[0].id).toBe('proxy-pools')
-    const accordion = system?.entries[1]
+    // The rule is "swap with the predecessor", not "land first": how many rows
+    // the System group keeps above Proxy Pools is a catalog decision, and this
+    // test used to pin that count, so adding Channels and Development rotted it.
+    const ids = system?.entries.map((entry) => entry.id) ?? []
+    expect(ids.indexOf('proxy-pools')).toBe(ids.indexOf('development') - 1)
+    const accordion = system?.entries.find((entry) => entry.kind === 'accordion')
     expect(accordion?.kind).toBe('accordion')
     expect(accordion?.kind === 'accordion' && accordion.children.map((c) => c.id)).toEqual(
       MEDIA_CHILD_IDS
