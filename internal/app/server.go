@@ -129,8 +129,14 @@ func ProvideServer(p ServerParams) *http.Server {
 			startModelHealthLoop(shutdown.Context(), p.Repo, p.ChatHandler)
 			startCatalogSweepLoop(shutdown.Context(), p.Repo)
 			if p.ChatHandler != nil {
+				// Published only once the catalogue reads succeed. The sync used to
+				// run immediately, racing the loops above: a failed read wrote a
+				// short model list over the operator's Pi mirror, and that file has
+				// no way to say it is incomplete.
 				go func() {
-					_, _ = p.ChatHandler.SyncPiCatalog(shutdown.Context())
+					if err := syncPiCatalogWithRetry(shutdown.Context(), piCatalogSyncBudget, piCatalogSyncRetryDelay, p.ChatHandler.SyncPiCatalog); err != nil {
+						log.Printf("[pi-sync] catalogue not published, catalogue reads still failing: %v", err)
+					}
 				}()
 			}
 			// A tunnel the operator left enabled comes back after a restart.

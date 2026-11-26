@@ -2,6 +2,8 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -367,12 +369,35 @@ func (h *ChatHandler) BuildModelsListResult(ctx context.Context, mode ModelsList
 	return ModelsListResult{Models: data, Mode: modelsListModeString(mode), Connections: activeCount}
 }
 
+// piCatalogReadsReady reports whether every read the catalogue is built from
+// succeeds right now.
+//
+// BuildModelsListResult discards its read errors on purpose: an HTTP request
+// still answers with whatever it has. The Pi mirror cannot afford that. When
+// the reads fail, that path publishes the static registry dump or a stub list
+// over a good catalogue, and the file on disk carries no hint that it is short
+// — the gateway looks healthy and every model list behind it is wrong.
+func (h *ChatHandler) piCatalogReadsReady() error {
+	if h == nil || h.Repo == nil {
+		return errors.New("pi catalogue: no repository")
+	}
+	if _, err := h.Repo.GetProviderConnections("", false); err != nil {
+		return fmt.Errorf("pi catalogue: connections: %w", err)
+	}
+	if _, err := h.Repo.GetCombos(); err != nil {
+		return fmt.Errorf("pi catalogue: combos: %w", err)
+	}
+	return nil
+}
 // SyncPiCatalog builds the current ModeListAll model catalogue and synchronizes
 // it into ~/.pi/agent/models.json and ~/.gentle-shell/agent/models.json when
 // those files exist and carry a NOX9GO provider block.
 func (h *ChatHandler) SyncPiCatalog(ctx context.Context) (bool, error) {
 	if h == nil || h.Repo == nil {
 		return false, nil
+	}
+	if err := h.piCatalogReadsReady(); err != nil {
+		return false, err
 	}
 	res := h.BuildModelsListResult(ctx, ModeListAll)
 	entries := make([]clientconfig.PiCatalogModel, 0, len(res.Models))
