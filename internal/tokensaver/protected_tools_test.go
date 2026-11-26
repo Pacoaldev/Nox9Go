@@ -101,3 +101,20 @@ func TestAnthropicStructuredErrorFlagsStillWork(t *testing.T) {
 		t.Error("is_error=false must not be an error")
 	}
 }
+
+func TestSubagentListAgentsNotFilteredByGH(t *testing.T) {
+	if !isProtectedTool("subagent_list_agents") {
+		t.Fatal("subagent_list_agents must be in protectedTools")
+	}
+	roster := "- gentle-ai-explore (global): Read-only local and web exploration.\n" +
+		"- gentle-ai-verify (global): Read-only technical verification.\n" +
+		"- jd-fix-agent (global): Judgment Day surgical fix agent for confirmed findings.\n" +
+		"- jd-judge-a (global): Judgment Day blind adversarial reviewer A; does not fix code.\n" +
+		"- jd-judge-b (global): Judgment Day blind adversarial reviewer B; does not fix code.\n" +
+		"- nox-arch (global): Team architect — designs a small Pi agent team.\n"
+	res := CompressTextDetailedWithCommand(roster, "", DefaultRTKConfig())
+	if res.Text != roster {
+		// Even without protectedTools, gh filter must not match "fix agent" / "fix code".
+		t.Fatalf("CompressTextDetailedWithCommand altered roster: tech=%v\ngot:\n%s", res.TechniquesUsed, res.Text)
+	}
+}

@@ -35,12 +35,18 @@ const (
 // exact-case map protected only the clients that happened to use the
 // capitalised spelling, which is the opposite of what the list is for.
 var protectedTools = map[string]bool{
-	"read":   true,
-	"grep":   true,
-	"edit":   true,
-	"write":  true,
-	"patch":  true,
-	"anchor": true,
+	"read":                  true,
+	"grep":                  true,
+	"edit":                  true,
+	"write":                 true,
+	"patch":                 true,
+	"anchor":                true,
+	"subagent_list_agents":  true,
+	"subagent_list_tasks":   true,
+	"subagent_status":       true,
+	"subagent_result":       true,
+	"subagent_run":          true,
+	"subagent_send_message": true,
 }
 
 func isProtectedTool(name string) bool {

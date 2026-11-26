@@ -14,7 +14,7 @@
       "Created pull request",
       "Created issue",
       "✓\\s+Logged in",
-      "X\\s+\\S+",
+      "^X\\s+\\S+",
       "GraphQL error",
       "HTTP \\d{3}:"
     ]
@@ -29,7 +29,7 @@
       "Closed (?:pull request|issue)",
       "Reopened",
       "✓\\s+",
-      "X\\s+\\S+",
+      "^X\\s+\\S+",
       "FAIL",
       "GraphQL error",
       "HTTP \\d{3}:",
