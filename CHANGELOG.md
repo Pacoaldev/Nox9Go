@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.8] - Unreleased
 
 ### Features
 - **Role-based routing profiles: stable `pi-*` aliases and an `X-Nox-Role` request header.** A `modelAliases` entry whose target carries no `/` is now resolved as a combo name, so `pi-light`/`pi-work`/`pi-plan` can name the role combos while their members stay editable in the dashboard without touching any client configuration; previously a slash-less target was dropped in the alias branch, so such an alias silently did nothing (`internal/handlers/chat/resolution.go`). Chat requests may now declare `X-Nox-Role: light | work | plan` to select `Combo-Light`/`Combo-Work`/`Combo-Plan` ahead of the body's `model`, so an auxiliary panel or a Pi subagent can name its role without changing the model id it sends; the per-key model policy is enforced against the forced combo as well, and an unrecognized value is ignored rather than rejected (`internal/handlers/chat/chat.go`, `internal/handlers/chat/resolution_alias_combo_test.go`, `internal/handlers/chat/role_header_test.go`).
